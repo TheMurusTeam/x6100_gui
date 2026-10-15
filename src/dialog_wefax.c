@@ -143,7 +143,7 @@ static void slant_user_tilt_changed(void);
 static void save_cb(button_data_t *data);
 
 static void audio_cb(
-    unsigned int n,
+    size_t n,
     float *samples
 );
 
@@ -3059,7 +3059,7 @@ static void rx_buttons_sync(bool force)
  * RX audio callback.
  */
 static void audio_cb(
-    unsigned int n,
+    size_t n,
     float *samples)
 {
     if (!decoder) {
