@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # 1KO125: needed to create the release
+    permissions:
+      contents: write
     # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
     defaults:
       run:
@@ -46,6 +49,8 @@ jobs:
       with:
         submodules: true
         repository: gdyuldin/AetherX6100Buildroot
+        # 1KO125: the Buildroot commit the 1KO125 SD cards are built with
+        ref: 07a8d250f420544949887544432dbfc7565b77f0
         path: AetherX6100Buildroot
 
     - name: Patch GUI mk
@@ -53,6 +58,11 @@ jobs:
         sed -i "s,https://github.com/gdyuldin/x6100_gui,${GITHUB_WORKSPACE}/x6100_gui,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
         sed -i "s,^X6100_GUI_SITE_METHOD = git,X6100_GUI_SITE_METHOD = local,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
         sed -i "s,^X6100_GUI_GIT_SUBMODULES,# X6100_GUI_GIT_SUBMODULES,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
+
+    # 1KO125: Buildroot package patches (SSTV page of the web server)
+    - name: Add 1KO125 package patches
+      run: |
+        cp -rv x6100_gui/buildroot/patches/. AetherX6100Buildroot/br2_external/package/
 
     # Ccache
     - name: Ccache cache files
@@ -88,19 +98,22 @@ jobs:
     - name: Compress image
       run: |
         cd AetherX6100Buildroot/build/images
-        mv sdcard.img sdcard.${{ github.ref_name }}.img
-        zip sdcard.${{ github.ref_name }}.img.zip sdcard.${{ github.ref_name }}.img
+        mv sdcard.img sdcard-1KO125-${{ github.ref_name }}.img
+        zip sdcard-1KO125-${{ github.ref_name }}.img.zip sdcard-1KO125-${{ github.ref_name }}.img
 
-    # Upload image
-    # - name: 'Upload image'
-    #   uses: actions/upload-artifact@v4
-    #   with:
-    #     name: sdcard.${{ github.ref_name }}.img
-    #     path: AetherX6100Buildroot/build/images/sdcard.${{ github.ref_name }}.img
+    # 1KO125: a run started by hand keeps the image in the run page (Artifacts)
+    - name: Upload image
+      uses: actions/upload-artifact@v4
+      if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      with:
+        name: sdcard-1KO125-${{ github.ref_name }}
+        path: AetherX6100Buildroot/build/images/sdcard-1KO125-${{ github.ref_name }}.img.zip
+        retention-days: 14
 
     # Create release
     - name: Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: AetherX6100Buildroot/build/images/sdcard.${{ github.ref_name }}.img.zip
+        files: AetherX6100Buildroot/build/images/sdcard-1KO125-${{ github.ref_name }}.img.zip
+        prerelease: ${{ contains(github.ref_name, 'beta') }}
