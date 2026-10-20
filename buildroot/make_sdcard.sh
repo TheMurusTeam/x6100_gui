@@ -19,6 +19,14 @@
 # only the GUI and the image.
 set -euo pipefail
 
+# Buildroot 2023.02 uses the CMake of the PC, and some of its packages ask
+# for a CMake older than 3.5, which CMake 4 refuses. Use a CMake 3 when there
+# is one in /opt, and let CMake 4 accept those packages anyway.
+for d in /opt/cmake-3*/bin; do
+    [ -x "$d/cmake" ] && PATH="$d:$PATH" && break
+done
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
+
 BR_REPO=https://github.com/gdyuldin/AetherX6100Buildroot
 BR_COMMIT=07a8d250f420544949887544432dbfc7565b77f0
 
