@@ -12,6 +12,8 @@
 #include "radio.h"
 
 #include <unistd.h>
+#include <errno.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <pthread.h>
@@ -31,6 +33,7 @@
 #include "cw.h"
 #include "pubsub_ids.h"
 #include "scheduler.h"
+#include "diag_log.h"
 
 /*********************
  *      DEFINES
@@ -121,6 +124,50 @@ static radio_state_t    state = RADIO_RX;
 static uint64_t         now_time;
 static uint64_t         prev_time;
 static uint64_t         idle_time;
+
+/* 1KO125 diagnostics (diag_log.h): what the APP asked the BASE for */
+static volatile bool    diag_cmd_ptt, diag_cmd_modem, diag_cmd_key, diag_cmd_other;
+static const char      *diag_cmd_src = "none";
+static volatile uint64_t diag_cmd_time;
+static uint64_t         diag_tx_start;
+static float            diag_tx_max_pwr;
+static bool             diag_noresp_logged;
+static bool             diag_tx_logged;     /* this TX is in ptt.log (not CW) */
+
+/* 1KO125: lost or corrupted writes to the BASE.  The BASE registers cannot be
+ * read back, so the whole register block (the library's copy, always the
+ * values the APP is using) is sent again: at once after a write error (seen in
+ * stderr or in the kernel log, diag_log.h) until it gets through, once after
+ * every un-key, and when the BASE stays in TX without a command of the APP
+ * shortly after an error.  The 3 s refresh in RX stays as before. */
+#define RESYNC_FAST_MS      50      /* retries in the first second after an error */
+#define RESYNC_SLOW_MS      500     /* retries after that */
+#define RESYNC_UNKEY_MS     150     /* the block once more after an un-key */
+#define TXWATCH_WINDOW_MS   10000   /* after an error: watch for a TX not commanded */
+#define TXWATCH_HOLD_MS     1000    /* ...lasting this long */
+
+static atomic_bool      unkey_req;
+static bool             resync_due;
+static bool             resync_err;         /* the resync is for a write error */
+static uint64_t         resync_at;
+static uint64_t         resync_err_time;
+static unsigned         resync_tries;
+static uint64_t         resync_ok_time;     /* last block through after an error */
+static uint64_t         last_i2c_error;
+static uint64_t         uncmd_tx_since;
+
+static void diag_tx_cmd(const char *what, bool on, volatile bool *flag) {
+    bool was = *flag;
+    *flag = on;
+    if (was && !on && flag != &diag_cmd_key) {
+        atomic_store(&unkey_req, true);     /* real un-keys only; not the CW key: every element */
+    }
+    diag_cmd_src  = diag_source();
+    diag_cmd_time = get_time();
+    diag_noresp_logged = false;
+    diag_ptt_log("CMD  %-10s %-3s  src=%-14s  freq=%d mode=%d pwr=%.1f", what, on ? "ON" : "OFF", diag_cmd_src,
+                 (int)cparam_i_get(cfg.cur.fg_freq()), (int)cparam_i_get(cfg.cur.mode()), param_f_get(cfg.pwr()));
+}
 static bool             mute = false;
 static bool             low_power = false;
 
@@ -143,6 +190,7 @@ SubjectInt *radio_bg_freq_subj = NULL;
  **********************/
 
 void radio_bb_reset() {
+    diag_i2c_log("BASE reset (BB_RESET line)");
     x6100_gpio_set(x6100_pin_bb_reset, 1);
     usleep(100000);
     x6100_gpio_set(x6100_pin_bb_reset, 0);
@@ -191,10 +239,12 @@ void radio_init() {
         return;
     uint8_t cnt = 0;
     while (!x6100_control_init()) {
+        diag_i2c_log("BASE init failed (attempt %d)", cnt + 1);
         usleep(100000 << cnt);
         if (cnt < 8) cnt++;
         if (cnt == 6) {
             LV_LOG_ERROR("Reset BB");
+            diag_i2c_log("BASE reset (BB_RESET line) after failed inits");
             radio_bb_reset();
             usleep(1000000);
         }
@@ -397,6 +447,7 @@ bool radio_start_swrscan() {
     }
 
     cparam_i_set(cfg.cur.mode(), x6100_mode_am);
+    diag_tx_cmd("SWR SCAN", true, &diag_cmd_other);
     radio_lock();
     x6100_control_txpwr_set(5.0f);
     x6100_control_swrscan_set(true);
@@ -409,6 +460,7 @@ bool radio_start_swrscan() {
 void radio_stop_swrscan() {
     if (state == RADIO_SWRSCAN) {
         state = RADIO_RX;
+        diag_tx_cmd("SWR SCAN", false, &diag_cmd_other);
         radio_lock();
         x6100_control_swrscan_set(false);
         x6100_control_txpwr_set(param_f_get(cfg.pwr()));
@@ -454,14 +506,17 @@ void radio_set_charger(bool on) {
 }
 
 void radio_set_ptt(bool tx) {
+    diag_tx_cmd("PTT", tx, &diag_cmd_ptt);
     WITH_RADIO_LOCK(x6100_control_ptt_set(tx));
 }
 
 void radio_set_modem(bool tx) {
+    diag_tx_cmd("MODEM", tx, &diag_cmd_modem);
     WITH_RADIO_LOCK(x6100_control_modem_set(tx));
 }
 
 void radio_set_morse_key(bool on) {
+    diag_cmd_key = on;          /* not logged: one line per dot and dash */
     x6100_gpio_set(x6100_pin_morse_key, on ? 0 : 1);
 }
 
@@ -729,6 +784,7 @@ static void base_control_command(Subject *subj, void *user_data) {
 static void recover_processing_audio_inputs() {
     usleep(10000);
     x6100_vfo_t vfo = param_i_get(cfg.band.current_vfo());
+    diag_ptt_log("CMD  ATU end: MODEM pulse 50 ms at 0.1 W (audio inputs recovery)");
     radio_lock();
     x6100_control_vfo_mode_set(vfo, x6100_mode_usb_dig);
     x6100_control_txpwr_set(0.1f);
@@ -838,6 +894,24 @@ static bool radio_tick() {
         switch (state) {
             case RADIO_RX:
                 if (pack->flag.tx) {
+                    bool cmd = diag_cmd_ptt || diag_cmd_modem || diag_cmd_key || diag_cmd_other;
+                    int  m   = (int)cparam_i_get(cfg.cur.mode());
+                    diag_tx_start   = now_time;
+                    diag_tx_max_pwr = 0.0f;
+                    /* CW is not logged: a TX for every element with QSK, keyer or paddle */
+                    diag_tx_logged  = !(m == x6100_mode_cw || m == x6100_mode_cwr || diag_cmd_key);
+                    if (!diag_tx_logged) {
+                        /* nothing */
+                    } else if (cmd) {
+                        diag_ptt_log("BASE TX ON   commanded by %s (%.1f s before)  freq=%d mode=%d",
+                                     diag_cmd_src, (now_time - diag_cmd_time) / 1000.0f,
+                                     (int)cparam_i_get(cfg.cur.fg_freq()), (int)cparam_i_get(cfg.cur.mode()));
+                    } else {
+                        diag_ptt_log("BASE TX ON   NOT COMMANDED by the APP (mic PTT, PTT jack or BASE)  "
+                                     "freq=%d mode=%d pwr=%.1f  last cmd: %s %.1f s ago",
+                                     (int)cparam_i_get(cfg.cur.fg_freq()), (int)cparam_i_get(cfg.cur.mode()),
+                                     param_f_get(cfg.pwr()), diag_cmd_src, (now_time - diag_cmd_time) / 1000.0f);
+                    }
                     state = RADIO_TX;
                     scheduler_msg_send(MSG_RADIO_TX, NULL);
                     recompute_display_freqs();
@@ -846,16 +920,20 @@ static bool radio_tick() {
 
             case RADIO_TX:
                 if (!pack->flag.tx) {
+                    if (diag_tx_logged) diag_ptt_log("BASE TX OFF  after %.1f s, max power %.1f W", (now_time - diag_tx_start) / 1000.0f,
+                                 diag_tx_max_pwr);
                     state = RADIO_RX;
                     scheduler_msg_send(MSG_RADIO_RX, NULL);
                     recompute_display_freqs();
                 } else {
                     // printf("%d, %d\n", pack->tx_power, pack->alc_level);
+                    if (pack->tx_power * 0.1f > diag_tx_max_pwr) diag_tx_max_pwr = pack->tx_power * 0.1f;
                     tx_info_update(pack->tx_power * 0.1f, pack->vswr * 0.1f, pack->alc_level * 0.1f);
                 }
                 break;
 
             case RADIO_ATU_START:
+                diag_tx_cmd("ATU TUNE", true, &diag_cmd_other);
                 WITH_RADIO_LOCK(x6100_control_atu_tune(true));
                 state = RADIO_ATU_WAIT;
                 break;
@@ -870,6 +948,7 @@ static bool radio_tick() {
             case RADIO_ATU_RUN:
                 if (pack->flag.atu_status && !pack->flag.tx) {
                     cfg_atu_save_network(pack->atu_params);
+                    diag_tx_cmd("ATU TUNE", false, &diag_cmd_other);
                     WITH_RADIO_LOCK(x6100_control_atu_tune(false));
                     param_i_set(cfg.atu_enabled(), true);
                     recover_processing_audio_inputs();
@@ -901,10 +980,35 @@ static bool radio_tick() {
                 break;
         }
 
+        /* TX asked for, but the BASE stays in RX (relay without TX?) */
+        if ((diag_cmd_ptt || diag_cmd_modem) && state == RADIO_RX && !diag_noresp_logged &&
+            now_time - diag_cmd_time > 1500) {
+            diag_ptt_log("BASE did NOT go TX 1.5 s after the command of %s", diag_cmd_src);
+            diag_noresp_logged = true;
+        }
+
+        /* BASE in TX, nothing keying it from the APP, shortly after a write error:
+         * send the block (PTT off) again.  A microphone or VOX TX is not stopped by it */
+        bool app_tx = diag_cmd_ptt || diag_cmd_modem || diag_cmd_key || diag_cmd_other;
+        if (pack->flag.tx && !app_tx && last_i2c_error && now_time - last_i2c_error < TXWATCH_WINDOW_MS) {
+            if (!uncmd_tx_since) {
+                uncmd_tx_since = now_time;
+            } else if (now_time - uncmd_tx_since >= TXWATCH_HOLD_MS) {
+                diag_i2c_log("BASE in TX without a command of the APP %.1f s after a write error: register block sent again",
+                             (now_time - last_i2c_error) / 1000.0f);
+                resync_due = true;
+                resync_at  = now_time;
+                uncmd_tx_since = now_time;          /* again after another second */
+            }
+        } else {
+            uncmd_tx_since = 0;
+        }
+
         hkey_put(pack->hkey);
     } else {
         if (d > FLOW_RESTART_TIMEOUT) {
             LV_LOG_WARN("Flow reset");
+            diag_i2c_log("BASE data flow silent for %d ms: flow restart", (int)d);
             prev_time = now_time;
             x6100_flow_restart();
             dsp_reset();
@@ -914,10 +1018,67 @@ static bool radio_tick() {
     return false;
 }
 
+/* The register block again, see RESYNC_* above.  Radio thread only */
+static void resync_check(void) {
+    if (state == RADIO_OFF || state == RADIO_POWEROFF) {
+        return;
+    }
+    if (diag_i2c_error_take()) {
+        last_i2c_error = now_time;
+        if (!resync_err && now_time - resync_ok_time < 200) {
+            /* most likely the late echo of a failed try of ours: once more, quietly */
+            resync_due = true;
+            resync_at  = now_time;
+        } else if (!resync_err) {
+            diag_i2c_log("write error: register block sent again at once");
+            resync_err      = true;
+            resync_err_time = now_time;
+            resync_tries    = 0;
+            resync_due      = true;
+            resync_at       = now_time;
+        }
+    }
+    if (atomic_exchange(&unkey_req, false) && !resync_due) {
+        resync_due = true;
+        resync_at  = now_time + RESYNC_UNKEY_MS;
+    }
+    if (!resync_due || now_time < resync_at) {
+        return;
+    }
+
+    /* errno: the library reports a failed write only with perror() */
+    radio_lock();
+    errno = 0;
+    x6100_control_idle();
+    bool ok = (errno == 0);
+    radio_unlock();
+    idle_time = now_time;
+
+    if (ok) {
+        if (resync_err) {
+            diag_i2c_log("register block through after %u tries, %d ms after the error",
+                         resync_tries + 1, (int)(now_time - resync_err_time));
+            resync_ok_time = now_time;
+        }
+        resync_due = false;
+        resync_err = false;
+    } else {
+        if (!resync_err) {
+            resync_err      = true;
+            resync_err_time = now_time;
+            resync_tries    = 0;
+            last_i2c_error  = now_time;
+        }
+        resync_tries++;
+        resync_at = now_time + (now_time - resync_err_time < 1000 ? RESYNC_FAST_MS : RESYNC_SLOW_MS);
+    }
+}
+
 static void * radio_thread(void *arg) {
     while (app_is_running) {
         now_time = get_time();
 
+        resync_check();
         radio_tick();
 
         int32_t idle = now_time - idle_time;

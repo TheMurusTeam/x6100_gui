@@ -34,6 +34,7 @@
 #include "app_ports.h"
 #include "cat/cat.h"
 #include "cat/lan/cat_lan.h"
+#include "diag_log.h"
 #include "rtty.h"
 #include "display.h"
 #include "events.h"
@@ -44,6 +45,7 @@
 #include "scheduler.h"
 #include "wifi.h"
 #include "usb_devices.h"
+#include "sstv_resources.h"
 
 rotary_t  *vol;
 encoder_t *mfk;
@@ -65,6 +67,7 @@ static void handle_sigint(int signum) {
 
 
 int main(void) {
+    diag_init();        /* 1KO125: /mnt/ptt.log, /mnt/i2c.log */
 
     // Register signal handler
     struct sigaction sa;
@@ -147,6 +150,7 @@ int main(void) {
     vol->state = VOL_STATE_EDIT;
 
     cfg_init();
+    sstv_resources_init();
     audio_set_play_vol(param_f_get(cfg.audio.play_gain_db()));
     audio_set_rec_vol(param_f_get(cfg.audio.rec_gain_db()));
     mfk_init();

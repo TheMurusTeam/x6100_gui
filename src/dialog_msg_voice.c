@@ -19,6 +19,7 @@
 #include <aether_radio/x6100_control/control.h>
 
 #include "radio.h"
+#include "diag_log.h"   /* 1KO125 diagnostics */
 #include "audio.h"
 #include "dialog.h"
 #include "dialog_msg_voice.h"
@@ -309,6 +310,7 @@ static void * play_thread(void *arg) {
 }
 
 static void * send_thread(void *arg) {
+    diag_set_source("voice message");
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
@@ -323,6 +325,7 @@ static void * send_thread(void *arg) {
 }
 
 static void * beacon_thread(void *arg) {
+    diag_set_source("voice beacon");
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 

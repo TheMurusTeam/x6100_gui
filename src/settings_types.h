@@ -39,6 +39,11 @@ typedef enum {
     ACTION_APP_QTH,
     ACTION_APP_CALLSIGN,
     ACTION_APP_WIFI,
+    ACTION_APP_WEFAX,
+    ACTION_APP_NAVTEX,
+    ACTION_APP_SSTV,
+    ACTION_APP_DSC,
+    ACTION_APP_FT8CB,       /* 1KO125 */
 } press_action_t;
 
 typedef enum {

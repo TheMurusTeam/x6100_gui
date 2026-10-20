@@ -15,6 +15,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE _GNU_SOURCE)
 
 target_sources(${PROJECT_NAME} PUBLIC
     main.c main_screen.c
+    channels.c dialog_channels.c broadcast_db.c cJSON.c
     styles.c spectrum.c radio.c dsp.cpp util.cpp
     app_ports.cpp
     waterfall.c rotary.cpp keyboard.c encoder.c
@@ -23,8 +24,13 @@ target_sources(${PROJECT_NAME} PUBLIC
     meter.c band_info.cpp tx_info.c
     audio.c mfk.cpp cw.cpp panel.cpp
     rtty.c screenshot.c display.cpp gps.c
-    dialog.c dialog_swrscan.c
+    ui_list.c app_info.c diag_log.c
+    dialog.c dialog_swrscan.c dialog_wefax.c wefax/decoder.c wefax/stations.c
+    dialog_navtex.c navtex/decoder.cpp navtex/navtex_rx.cpp navtex/fftfilt.cxx navtex/bulletin.c
+    dialog_sstv.c sstv_resources.c sstv/decoder.c sstv/encoder.c sstv/autodetect.c sstv/vis.c sstv/linesync.c sstv/preview.c sstv/sstv_denoise.c sstv/sstv_dnn.c sstv/syncgrid.c
+    dialog_dsc.c dsc/dsc_decoder.c dsc/dsc_format.c dsc/dsc_mid.c dsc/dsc_coast.c dsc/dsc_ships.c dsc/dsc_qrcodegen.c dsc/dsc_flags.c
     dialog_ft8.c dialog_freq.c dialog_gps.c dialog_msg_cw.c
+    dialog_ft8cb.c ft8cb/cb_msg.c ft8cb/qso_cb.c ft8cb/tx_cb.c ft8cb/cb_store.c ft8cb/cb_div.c ft8cb/table_view_cb.c
     ft8_ui/table_view.c
     dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c
     textarea_window.c cw_encoder.c buttons.cpp vol.cpp recorder.c
