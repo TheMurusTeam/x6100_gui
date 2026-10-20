@@ -892,10 +892,14 @@ static void main_screen_hkey_cb(lv_event_t * e) {
 
         case HKEY_UP:
             if (hkey->state == HKEY_RELEASE) {
-                if (!lm_get_freq() && (dialog_wefax_mic_step(-1) || dialog_dsc_mic_step(-1) || dialog_navtex_mic_step(-1))) {
-                    /* WEFAX / DSC / NAVTEX open: previous/next station or channel */
-                } else if (!lm_get_freq() && dialog_channels_recall_relative(-1)) {
-                    msg_update_text_fmt("%s", dialog_channels_last_recalled_name());
+                if (!lm_get_freq()) {
+                    if (dialog_wefax_mic_step(-1) || dialog_dsc_mic_step(-1) || dialog_navtex_mic_step(-1)) {
+                        /* WEFAX / DSC / NAVTEX open: previous/next station or channel */
+                    } else if (dialog_channels_recall_relative(-1)) {
+                        msg_update_text_fmt("%s", dialog_channels_last_recalled_name());
+                    } else if (dialog_channels_empty()) {
+                        freq_shift(+1, 0);    /* no channels: a step, as R1CBU */
+                    }
                 }
             } else if (hkey->state == HKEY_LONG) {
                 if (!lm_get_band()) {
@@ -907,10 +911,14 @@ static void main_screen_hkey_cb(lv_event_t * e) {
 
         case HKEY_DOWN:
             if (hkey->state == HKEY_RELEASE) {
-                if (!lm_get_freq() && (dialog_wefax_mic_step(+1) || dialog_dsc_mic_step(+1) || dialog_navtex_mic_step(+1))) {
-                    /* WEFAX / DSC / NAVTEX open: previous/next station or channel */
-                } else if (!lm_get_freq() && dialog_channels_recall_relative(+1)) {
-                    msg_update_text_fmt("%s", dialog_channels_last_recalled_name());
+                if (!lm_get_freq()) {
+                    if (dialog_wefax_mic_step(+1) || dialog_dsc_mic_step(+1) || dialog_navtex_mic_step(+1)) {
+                        /* WEFAX / DSC / NAVTEX open: previous/next station or channel */
+                    } else if (dialog_channels_recall_relative(+1)) {
+                        msg_update_text_fmt("%s", dialog_channels_last_recalled_name());
+                    } else if (dialog_channels_empty()) {
+                        freq_shift(-1, 0);    /* no channels: a step, as R1CBU */
+                    }
                 }
             } else if (hkey->state == HKEY_LONG) {
                 if (!lm_get_band()) {
