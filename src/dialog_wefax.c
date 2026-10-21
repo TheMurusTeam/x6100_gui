@@ -23,7 +23,7 @@
 #include "msg.h"
 #include "ui_list.h"
 #include "app_info.h"
-#include "app_zoom.h"
+#include "app_radio.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -1027,7 +1027,7 @@ static bool open_test_wav(void)
  */
 static void construct_cb(lv_obj_t *parent)
 {
-    app_zoom_begin();       /* 1KO125: zoom 4x while the app is open */
+    app_radio_begin();      /* 1KO125: USB-D locked, zoom 4x, DSP off while open */
     zoom_mode = WEFAX_ZOOM_SMALL;
     btn_zoom.label = " View Size\nSmall";
 
@@ -1188,7 +1188,7 @@ static void construct_cb(lv_obj_t *parent)
  */
 static void destruct_cb(void)
 {
-    app_zoom_end();         /* 1KO125: the zoom of before */
+    app_radio_end();        /* 1KO125: mode, zoom and DSP of before */
     app_info_abort();
     dsp_audio_set_active(dsp_audio_sub_id, false);
     stop_wav_test();

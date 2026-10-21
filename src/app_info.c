@@ -44,7 +44,7 @@ static const char *const bodies[] = {
     /* WEFAX */
     H("WEFAX - WEATHER FAX RECEIVER")
     "WEFAX receives the weather charts that meteorological services broadcast on HF as an "
-    "analog fax signal: 120 lines per minute, IOC 576, 1500 Hz audio centre, USB.\n\n"
+    "analog fax signal: 120 lines per minute, IOC 576, 1500 Hz audio centre, USB-D.\n\n"
     H("HOW TO USE IT")
     "Press Freq. to open the list of weather-fax stations with their daily schedules. Tune a "
     "station, then press Start Auto RX: the receiver waits for the start tone, draws the fax "

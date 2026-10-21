@@ -32,7 +32,7 @@
 #include "msg.h"
 #include "ui_list.h"
 #include "app_info.h"
-#include "app_zoom.h"   /* 1KO125: zoom 4x while open */
+#include "app_radio.h"  /* 1KO125: radio set up while open */
 #include "cfg/cfg_api.h"
 
 #include <ctype.h>
@@ -1380,7 +1380,7 @@ static void freq_draw_cb(void *user, int index, lv_draw_ctx_t *ctx, const lv_are
 static void freq_tune_row(int index)
 {
     if (index < 0 || index >= DSC_NFREQS || freq_is_head(index)) return;
-    cparam_i_set(cfg.cur.mode(), x6100_mode_usb);
+    cparam_i_set(cfg.cur.mode(), x6100_mode_usb_dig);
     cparam_i_set(cfg.cur.fg_freq(), dsc_freqs[index].hz - 1000);
     freq_recalled = index;
     update_freq_label();
@@ -1946,7 +1946,7 @@ static void detail_pressed_cb(lv_event_t *e)
 
 static void construct_cb(lv_obj_t *parent)
 {
-    app_zoom_begin();       /* 1KO125: zoom 4x while the app is open */
+    app_radio_begin();      /* 1KO125: USB-D locked, zoom 4x, DSP off while open */
     parent_obj = parent;
     names_load();
     dsc_ships_open();
@@ -2011,7 +2011,7 @@ static void construct_cb(lv_obj_t *parent)
 
 static void destruct_cb(void)
 {
-    app_zoom_end();         /* 1KO125: the zoom of before */
+    app_radio_end();        /* 1KO125: mode, zoom and DSP of before */
     app_info_abort();
     if (dsp_audio_sub_id != AUDIO_SUB_INVALID)
         dsp_audio_set_active(dsp_audio_sub_id, false);

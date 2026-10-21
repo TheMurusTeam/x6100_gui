@@ -24,7 +24,7 @@
 #include "msg.h"
 #include "ui_list.h"
 #include "app_info.h"
-#include "app_zoom.h"   /* 1KO125: zoom 4x while open */
+#include "app_radio.h"  /* 1KO125: radio set up while open */
 
 #include <dirent.h>
 #include <errno.h>
@@ -592,7 +592,7 @@ static void ui_timer_cb(lv_timer_t *timer)
 
 static void construct_cb(lv_obj_t *parent)
 {
-    app_zoom_begin();       /* 1KO125: zoom 4x while the app is open */
+    app_radio_begin();      /* 1KO125: USB-D locked, zoom 4x, DSP off while open */
     pthread_mutex_lock(&text_mutex);
     pending_head = 0;
     pending_tail = 0;
@@ -667,7 +667,7 @@ static void construct_cb(lv_obj_t *parent)
 
 static void destruct_cb(void)
 {
-    app_zoom_end();         /* 1KO125: the zoom of before */
+    app_radio_end();        /* 1KO125: mode, zoom and DSP of before */
     app_info_abort();
     /* The browser panel is not a child of dialog.obj: delete it here. */
     browser_close(false);

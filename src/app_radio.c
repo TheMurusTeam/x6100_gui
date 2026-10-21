@@ -3,7 +3,7 @@
  * Copyright (C) 2026 Hany El Imam - 1KO125 firmware for the Xiegu X6100
  * See NOTICE-1KO125.md.
  */
-#include "app_zoom.h"
+#include "app_radio.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -12,7 +12,10 @@
 #include <aether_radio/x6100_control/control.h>
 
 #include "cfg/cfg_api.h"
+#include "lock_manager.h"
+#include "radio.h"
 
+#define APP_MODE        x6100_mode_usb_dig
 #define APP_ZOOM        4
 #define IF_HALF_WIDTH   40000   /* as update_zoom_on_if_shift_change() in main_screen.c */
 
@@ -22,7 +25,7 @@
  * with subject_i_set(), which shows it without saving it (Parameter::set()
  * would save it for the group).
  */
-static bool             active = false;
+static bool             active = false;     /* zoom held */
 static ObserverDelayed *zoom_obs = NULL;
 static int32_t          saved_zoom;     /* the zoom to put back (the stored one) ... */
 static int              saved_group;    /* ... if the mode group is still this one */
@@ -90,7 +93,7 @@ static void zoom_changed_cb(Subject *subj, void *user_data)
     apply();
 }
 
-void app_zoom_begin(void)
+static void zoom_begin(void)
 {
     if (active) {
         return;
@@ -104,7 +107,7 @@ void app_zoom_begin(void)
             (int)param_i_get(cfg.mode.zoom()), (int)saved_zoom);
 }
 
-void app_zoom_end(void)
+static void zoom_end(void)
 {
     if (!active) {
         return;
@@ -121,4 +124,66 @@ void app_zoom_end(void)
         subject_i_set((SubjectInt *)cfg.mode.zoom(), saved_zoom);
     }
     fprintf(stderr, "APP ZOOM: back to %dx\n", (int)param_i_get(cfg.mode.zoom()));
+}
+
+/* ---- mode -------------------------------------------------------------- */
+
+static bool             mode_active = false;
+static ObserverDelayed *mode_obs = NULL;
+static int              saved_mode;
+static bool             saved_mode_lock;
+
+static void mode_changed_cb(Subject *subj, void *user_data)
+{
+    (void)subj;
+    (void)user_data;
+
+    /* a band change loads the band's own mode: back to USB-D */
+    if (mode_active && cparam_i_get(cfg.cur.mode()) != APP_MODE) {
+        cparam_i_set(cfg.cur.mode(), APP_MODE);
+    }
+}
+
+/* ---- app --------------------------------------------------------------- */
+
+void app_radio_begin(void)
+{
+    if (mode_active) {
+        return;
+    }
+    saved_mode = cparam_i_get(cfg.cur.mode());
+    saved_mode_lock = lm_get_mode();
+    mode_active = true;
+    if (saved_mode != APP_MODE) {
+        cparam_i_set(cfg.cur.mode(), APP_MODE);
+    }
+    lm_set_mode(true);
+    mode_obs = subject_subscribe_delayed((Subject *)cfg.cur.mode(), mode_changed_cb, NULL);
+
+    /* after the mode: the zoom of the USB-D group is the one to keep */
+    zoom_begin();
+    radio_set_rx_dsp_off(true);
+    fprintf(stderr, "APP RADIO: USB-D locked, NR/NB/notch off (mode before: %d)\n", saved_mode);
+}
+
+void app_radio_end(void)
+{
+    if (!mode_active) {
+        return;
+    }
+    radio_set_rx_dsp_off(false);
+    zoom_end();
+
+    mode_active = false;
+    if (mode_obs) {
+        param_unsubscribe((Observer *)mode_obs);
+        mode_obs = NULL;
+    }
+    /* the mode of before loads the zoom stored for its group */
+    if (cparam_i_get(cfg.cur.mode()) != saved_mode) {
+        cparam_i_set(cfg.cur.mode(), saved_mode);
+    }
+    lm_set_mode(saved_mode_lock);
+    fprintf(stderr, "APP RADIO: mode %d, lock %s, DSP settings back\n",
+            saved_mode, saved_mode_lock ? "on" : "off");
 }
