@@ -42,7 +42,7 @@
 #endif
 #define DSC_SURE_ONE      500.0f       /* conf[] of a character with one valid copy */
 #ifndef DSC_SURE_MARGIN
-#define DSC_SURE_MARGIN   1.5f
+#define DSC_SURE_MARGIN   1.0f
 #endif
 #define DSC_EDGE_CONFIRM  0.3f         /* swing past the zero crossing that confirms a bit edge */
 #ifndef DSC_CLOCK_GAIN
@@ -428,13 +428,60 @@ static bool assemble(const channel_t *c, dsc_message_t *m)
     m->unsure = (m->n > 1 && m->sym[0] == m->sym[1] && (conf[0] >= DSC_SURE_ONE || conf[1] >= DSC_SURE_ONE)) ? 0 : 1;
     for (int i = 2; i < m->n; ++i)
         if (conf[i] < DSC_SURE_ONE) m->unsure++;
+    /* the error check character is the anchor of the verification: it must
+     * not be the unsure one */
+    if (m->ecc_ok && m->n > 0 && conf[m->n - 1] < DSC_SURE_ONE) m->unsure++;
     return m->n >= 4;
 }
 
 static int known_count(const dsc_message_t *m);
 
-/* the error check agrees and at most one character was not sure */
-static bool verified(const dsc_message_t *m) { return m->ecc_ok && m->unsure <= 1; }
+/* the fixed fields hold values of the right kind: digits (0..99) in the
+ * MMSIs, a category, a telecommand. Two wrong characters that cancel out
+ * in the error check usually break this. */
+static bool is_category(int v) { return v == 100 || v == 103 || v == 106 || v == 108 || v == 110 || v == 112; }
+
+/* the copy of the format specifier with which the error check agrees */
+static int checked_format(const dsc_message_t *m)
+{
+    for (int k = 1; k >= 0; --k) {
+        int f = m->sym[k];
+        if (!is_format(f) || m->n < 4) continue;
+        int x = f;
+        for (int i = 2; i < m->n - 1; ++i) x ^= m->sym[i] < 0 ? 0x100 : m->sym[i];
+        if (x == m->sym[m->n - 1]) return f;
+    }
+    return -1;
+}
+
+static bool plausible(const dsc_message_t *m)
+{
+    int f = checked_format(m), a;               /* a: the self-identification */
+    if (f == 120 || f == 123 || f == 114 || f == 102) {
+        for (int i = 2; i < 7; ++i) if (i >= m->n || m->sym[i] > 99) return false;
+        if (m->n <= 7 || !is_category(m->sym[7])) return false;
+        a = 8;
+    } else if (f == 116) {
+        if (m->n <= 2 || !is_category(m->sym[2])) return false;
+        a = 3;
+    } else {
+        return true;                            /* distress and others: other layouts */
+    }
+    for (int i = a; i < a + 5; ++i) if (i >= m->n || m->sym[i] > 99) return false;
+    /* two telecommands, then six characters of frequency or position (digits,
+     * or 126 "no information"), then the end of sequence and the check */
+    if (m->n < a + 15 || m->sym[a + 5] < 100 || m->sym[a + 6] < 100) return false;
+    if (f == 120 || f == 123)
+        for (int i = a + 7; i < a + 13; ++i)
+            if (m->sym[i] > 99 && m->sym[i] != 126) return false;
+    for (int i = a + 7; i < m->n - 2; ++i)
+        if (is_eos(m->sym[i]) && i < a + 13) return false;
+    return true;
+}
+
+/* the error check agrees, at most one character was not sure, and the
+ * fields are plausible */
+static bool verified(const dsc_message_t *m) { return m->ecc_ok && m->unsure <= 1 && plausible(m); }
 
 static bool worth_emitting(const dsc_message_t *m)
 {
@@ -494,6 +541,9 @@ static void emit_pending(dsc_decoder_t *d)
         if (d->now - d->hist_t[k] < DSC_HISTORY_SEC && same_call(&d->pending, &d->hist[k]) &&
             (verified(&d->hist[k]) || !better(&d->pending, &d->hist[k])))
             return;
+    d->pending.verified = verified(&d->pending);
+    if (d->pending.verified)                       /* the format counts once: the copy that checks */
+        d->pending.sym[0] = d->pending.sym[1] = checked_format(&d->pending);
     d->hist[d->hist_i] = d->pending;
     d->hist_t[d->hist_i] = d->now;
     d->hist_i = (d->hist_i + 1) % DSC_HISTORY;

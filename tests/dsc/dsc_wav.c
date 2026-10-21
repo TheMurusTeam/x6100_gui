@@ -20,9 +20,9 @@ static void on_call(const dsc_message_t *m, void *user)
     (void)user;
     dsc_info_t in;
     dsc_format_parse(m->sym, m->n, &in);
-    /* verified: the error check agrees and at most one character was not
-     * received twice the same (as the NAVTEX/DSC window shows it) */
-    printf("%.1f %s", m->start_t, m->ecc_ok && m->unsure <= 1 ? "OK " : (m->ecc_ok ? "ECC" : "BAD"));
+    /* OK: verified, as the DSC window shows it; ECC: the error check
+     * agrees but the call is not trusted (see dsc_decoder.h) */
+    printf("%.1f %s", m->start_t, m->verified ? "OK " : (m->ecc_ok ? "ECC" : "BAD"));
     for (int i = 0; i < m->n; i++) printf(" %d", m->sym[i]);
     printf(" | %s from %s to %s | %s | valid %d/%d repaired %d unsure %d\n", in.fmt_name, in.from_id,
            in.to_id, in.line2, m->raw_valid, m->raw_total, m->repaired, m->unsure);

@@ -538,9 +538,9 @@ static void call_from_message(dsc_call_t *c, const dsc_message_t *m, time_t utc,
     memset(c, 0, sizeof(*c));
     c->msg = *m;
     dsc_format_parse(m->sym, m->n, &c->info);
-    /* the error check verifies a call only if at most one character was
-     * not received twice the same: two wrong ones can cancel out */
-    if (m->unsure > 1 && c->info.ecc_ok) {
+    /* the error check verifies a call only if the decoder trusts it: two
+     * wrong characters can cancel out (see dsc_decoder.h) */
+    if (!m->verified && c->info.ecc_ok) {
         c->info.ecc_ok = false;
         c->info.ecc_calc = -1;
     }
@@ -574,9 +574,9 @@ static void save_call(dsc_call_t *c)
     if (!f) { fprintf(stderr, "DSC: cannot write %s\n", path); c->file[0] = '\0'; return; }
     char ts[32];
     strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm);
-    fprintf(f, "DSC call\nutc=%s\nfreq_hz=%ld\ncenter_hz=%.0f\nvalid=%d/%d\nrepaired=%d\nunsure=%d\nsymbols=",
+    fprintf(f, "DSC call\nutc=%s\nfreq_hz=%ld\ncenter_hz=%.0f\nvalid=%d/%d\nrepaired=%d\nunsure=%d\nverified=%d\nsymbols=",
             ts, (long)c->rx_hz, c->msg.center_hz, c->msg.raw_valid, c->msg.raw_total, c->msg.repaired,
-            c->msg.unsure);
+            c->msg.unsure, c->msg.verified ? 1 : 0);
     for (int i = 0; i < c->msg.n; ++i) fprintf(f, "%s%d", i ? " " : "", c->msg.sym[i]);
     fprintf(f, "\n\n%s - %s\nfrom %s (%s)\nto   %s (%s)\n%s\n\n",
             c->info.cat_name, c->info.fmt_name, c->info.from_id, c->info.from_where,
@@ -600,7 +600,7 @@ static bool load_call(const char *name, dsc_call_t *c)
     char line[512], ts[32] = "";
     long hz = 0;
     float ctr = 0;
-    bool have_sym = false;
+    bool have_sym = false, have_verified = false;
     while (fgets(line, sizeof(line), f)) {
         if (!strncmp(line, "utc=", 4)) snprintf(ts, sizeof(ts), "%.19s", line + 4);
         else if (!strncmp(line, "freq_hz=", 8)) hz = atol(line + 8);
@@ -608,6 +608,7 @@ static bool load_call(const char *name, dsc_call_t *c)
         else if (!strncmp(line, "valid=", 6)) sscanf(line + 6, "%d/%d", &m.raw_valid, &m.raw_total);
         else if (!strncmp(line, "repaired=", 9)) m.repaired = atoi(line + 9);
         else if (!strncmp(line, "unsure=", 7)) m.unsure = atoi(line + 7);
+        else if (!strncmp(line, "verified=", 9)) { m.verified = atoi(line + 9) != 0; have_verified = true; }
         else if (!strncmp(line, "symbols=", 8)) {
             char *p = line + 8, *e;
             while (m.n < DSC_MAX_SYMBOLS) {
@@ -622,6 +623,7 @@ static bool load_call(const char *name, dsc_call_t *c)
     fclose(f);
     if (!have_sym) return false;
     m.center_hz = ctr;
+    if (!have_verified) m.verified = true;     /* saved before 1.0.2 beta 6: as it was then */
     struct tm tm;
     memset(&tm, 0, sizeof(tm));
     time_t utc = 0;

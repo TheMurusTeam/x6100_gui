@@ -41,6 +41,8 @@ typedef struct {
     int   unsure;                  /* characters not received twice the same (soft decisions,
                                       filled in): with more than one, two wrong characters can
                                       cancel out in the error check, so it does not verify */
+    bool  verified;                /* the call can be trusted: error check right, at most one
+                                      unsure character, fields of the right kind */
     double start_t;                /* seconds of audio processed when the call began */
 } dsc_message_t;
 
