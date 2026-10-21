@@ -23,6 +23,9 @@
  *
  * If the user touches the Tilt during a fax, the user's value wins for the
  * rest of that fax.
+ *
+ * The same file keeps the Fading button (demodulator for selective fading,
+ * wefax/decoder.c), ON by default.
  */
 
 #include <unistd.h>
@@ -87,6 +90,7 @@ static void slant_load(void)
 {
     slant_nst = 0;
     slant_auto = true;              /* default, the file may say otherwise */
+    fading_on = true;
     slant_last_dial = 0;            /* recall the memory of the current station */
     slant_last_key[0] = '\0';
     FILE *fp = fopen(SLANT_FILE, "r");
@@ -100,6 +104,10 @@ static void slant_load(void)
         if (line[0] == '#' || line[0] == '\0') continue;
         if (strncmp(line, "auto ", 5) == 0) {
             slant_auto = atoi(line + 5) != 0;
+            continue;
+        }
+        if (strncmp(line, "fading ", 7) == 0) {
+            fading_on = atoi(line + 7) != 0;
             continue;
         }
         char *bar = strrchr(line, '|');
@@ -125,8 +133,9 @@ static void slant_save(void)
         fprintf(stderr, "WEFAX SLANT: cannot write %s (%s)\n", SLANT_FILE, strerror(errno));
         return;
     }
-    fprintf(fp, "# 1KO125 WEFAX: Auto Slant and Tilt per station (country|place|tilt)\n");
+    fprintf(fp, "# 1KO125 WEFAX: Auto Slant, Fading and Tilt per station (country|place|tilt)\n");
     fprintf(fp, "auto %d\n", slant_auto ? 1 : 0);
+    fprintf(fp, "fading %d\n", fading_on ? 1 : 0);
     for (int i = 0; i < slant_nst; ++i)
         fprintf(fp, "%s|%d\n", slant_st[i].key, slant_st[i].tilt);
     fflush(fp);
@@ -314,5 +323,20 @@ static void slant_auto_cb(button_data_t *data)
     slant_auto = !slant_auto;
     if (btn_auto_slant.disp_btn) buttons_refresh(&btn_auto_slant);
     msg_update_text_fmt("Auto Slant %s", slant_auto ? "ON" : "OFF");
+    slant_mark_dirty();
+}
+
+static const char *fading_label_getter(void)
+{
+    return fading_on ? "Fading\nON" : "Fading\nOFF";
+}
+
+static void fading_cb(button_data_t *data)
+{
+    (void)data;
+    fading_on = !fading_on;
+    if (decoder) wefax_decoder_set_fading(decoder, fading_on);
+    if (btn_fading.disp_btn) buttons_refresh(&btn_fading);
+    msg_update_text_fmt("Fading %s", fading_on ? "ON" : "OFF");
     slant_mark_dirty();
 }
