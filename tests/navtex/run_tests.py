@@ -85,6 +85,8 @@ def main():
              ("SNR 10, fading 3 s", ["--snr", "10", "--fade", "3"]),
              ("SNR 5, fading 3 s", ["--snr", "5", "--fade", "3"]),
              ("SNR 0, fading 8 s", ["--snr", "0", "--fade", "8"]),
+             ("SNR 10, selective 3 s", ["--snr", "10", "--sfade", "3"]),
+             ("SNR 5, selective 5 s", ["--snr", "5", "--sfade", "5"]),
              ("SNR 10, 11025 Hz", ["--snr", "10", "--rate", "11025"])]
     tmp = tempfile.mkdtemp(prefix="navtex_test_")
     print("%-24s %10s %10s" % ("case", "new", "old"))

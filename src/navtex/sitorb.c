@@ -165,6 +165,7 @@ struct sitorb {
     float ev_rep[7][2], ev_ph[7][2];
     int ev_n[7][2];
     float energy;                   /* mean tone energy at the sampling instants */
+    float pk_h, pk_l, floor_;       /* peak of each tone, floor (fades) */
     int figs;
     int doubt;                      /* a lost or guessed character since the last shift */
 };
@@ -380,8 +381,14 @@ static void decode_pair(sitorb_t *s, int64_t n)
         q = NAVTEX_Q_REP;           /* the RX copy */
     else
         q = margin > s->margin_min ? NAVTEX_Q_GUESS : NAVTEX_Q_LOST;
-    if (IS_SERVICE(c))
-        return;
+    if (IS_SERVICE(c)) {
+        /* a phasing or idle signal: nothing to print when it is clear or
+         * the RX copy is one too; otherwise it is a character lost in a
+         * fade, and a '*' keeps its place in the text */
+        if (!two || margin > 2 * s->margin_min)
+            return;
+        q = NAVTEX_Q_LOST;
+    }
 
     if (!s->fresh)
         s->bad += ((q == NAVTEX_Q_LOST ? 1.0f : 0.0f) - s->bad) * 0.08f;
@@ -649,6 +656,17 @@ static void demod(sitorb_t *s, cpx z)
     float d_raw = (eb - ey) / (eb + ey + 1e-20f);   /* > 0: the higher tone */
     float d = s->reverse ? -d_raw : d_raw;           /* > 0: B */
 
+    /* per-tone level tracking, for fades: the peak of each tone rises
+     * quickly and falls slowly (it remembers the tone through a short
+     * fade), the floor of the two falls quickly and rises slowly (it
+     * follows the noise). Each tone is judged between its floor and its
+     * own peak, so a tone that fades alone does not decide the bit. */
+    float ah = sqrtf(eb), al = sqrtf(ey);
+    s->pk_h += (ah - s->pk_h) * (ah > s->pk_h ? 0.2f : 1.0f / 320);
+    s->pk_l += (al - s->pk_l) * (al > s->pk_l ? 0.2f : 1.0f / 320);
+    float lo = ah < al ? ah : al;
+    s->floor_ += (lo - s->floor_) * (lo < s->floor_ ? 0.2f : 1.0f / 960);
+
     /* bit clock: d changes the least where the one-bit correlators cover
      * exactly one bit, which is the best sampling instant */
     int ph = s->phase;
@@ -713,6 +731,17 @@ static void demod(sitorb_t *s, cpx z)
      * the other copy of the character) */
     float w = s->energy > 0 ? e / s->energy : 1;
     float soft = d * (w < 1 ? w : 1);
+    {
+        float f = s->floor_;
+        float ph = s->pk_h - f, pl = s->pk_l - f;
+        if (ph > 0 && pl > 0) {
+            float ch = fminf(fmaxf(ah - f, 0), ph), cl = fminf(fmaxf(al - f, 0), pl);
+            /* which tone is closer to being on, each against its own peak:
+             * the decision threshold moves with the two peaks */
+            float v = (ch * ph - cl * pl - 0.5f * (ph * ph - pl * pl)) / (0.5f * (ph * ph + pl * pl));
+            soft = s->reverse ? -v : v;
+        }
+    }
     new_bit(s, soft);
 }
 

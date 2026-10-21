@@ -13,6 +13,7 @@
  *     --centre HZ  audio centre (default 1000)
  *     --rev        swap the tones
  *     --fade S     Rayleigh-like fading, period in seconds (default off)
+ *     --sfade S    selective fading: the two tones fade independently
  *     --seed N
  *
  * The message is read from standard input (letters, figures, spaces, new
@@ -115,7 +116,7 @@ int main(int argc, char **argv)
         return 2;
     }
     const char *out = argv[1];
-    double snr = 1e9, off = 0, ppm = 0, rate = 12000, centre = 1000, fade = 0;
+    double snr = 1e9, off = 0, ppm = 0, rate = 12000, centre = 1000, fade = 0, sfade = 0;
     int rev = 0;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--snr") && i + 1 < argc) snr = atof(argv[++i]);
@@ -124,6 +125,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--rate") && i + 1 < argc) rate = atof(argv[++i]);
         else if (!strcmp(argv[i], "--centre") && i + 1 < argc) centre = atof(argv[++i]);
         else if (!strcmp(argv[i], "--fade") && i + 1 < argc) fade = atof(argv[++i]);
+        else if (!strcmp(argv[i], "--sfade") && i + 1 < argc) sfade = atof(argv[++i]);
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) rng = 88172645463325252ull ^ (uint64_t)atoll(argv[++i]) * 0x9E3779B97F4A7C15ull;
         else if (!strcmp(argv[i], "--rev")) rev = 1;
         else { fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
@@ -175,6 +177,13 @@ int main(int argc, char **argv)
                     double a = 2 * M_PI * t / (rate * fade);
                     g = fabs(0.6 * cos(a + fph) + 0.55 * cos(1.7 * a));
                     g = fmax(g, 0.05) * 1.3;
+                }
+                if (sfade > 0) {
+                    /* each tone has its own fading (different phases and
+                     * rates): one can be deep while the other is not */
+                    double a = 2 * M_PI * t / (rate * sfade) * (is_b ? 1.0 : 1.37);
+                    double p0 = is_b ? fph : fph + 2.1;
+                    g *= fmax(fabs(0.6 * cos(a + p0) + 0.55 * cos(1.7 * a + 1.3 * p0)), 0.05) * 1.3;
                 }
                 ph += 2 * M_PI * f / rate;
                 double v = amp * g * sin(ph) + sigma * grand();
