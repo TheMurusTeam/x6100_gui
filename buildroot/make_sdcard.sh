@@ -35,7 +35,8 @@ BR=$(dirname "$GUI")/AetherX6100Buildroot
 OUT=${1:-$(dirname "$GUI")}
 
 # 1. Buildroot at the pinned commit
-if [ ! -d "$BR" ]; then
+if [ ! -d "$BR/.git" ]; then
+    # $BR may exist and be empty (a Docker volume)
     git clone "$BR_REPO" "$BR"
     git -C "$BR" checkout -q "$BR_COMMIT"
     git -C "$BR" submodule update --init
