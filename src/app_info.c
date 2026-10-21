@@ -152,15 +152,14 @@ static const char *const bodies[] = {
 /* third-party parts named in the credits, "" = none */
 static const char *const extras[] = {
     "",
-    "SITOR-B demodulator from fldigi (W1HKJ and contributors, after JNX by Paul Lutus), "
-    "as adapted by Franco Venturi.\n",
+    "",
     "QR code generator by Project Nayuki (MIT License).\n",
     "",
     "FT8 decoder, waterfall and TX chain of R1CBU x6100_gui (R1CBU, R2RFE); ft8_lib by "
     "Karlis Goba YL3JG (MIT License).\n",
 };
 
-/* the Appropriate Legal Notices (GNU GPL v3, section 0 and 5d) */
+/* the legal notices */
 static const char credits_fmt[] =
     H("CREDITS")
     "%s application for the Xiegu X6100 by Hany El Imam\n"
@@ -170,9 +169,9 @@ static const char credits_fmt[] =
     "\n"
     "Copyright (C) 2026 Hany El Imam.\n"
     "Portions Copyright (C) 2022-2023 Belousov Oleg aka R1CBU and contributors.\n"
-    "This program is free software under the GNU General Public License, version 3 or "
-    "later, and comes with ABSOLUTELY NO WARRANTY. You may redistribute it under that "
-    "license. The full text is in /usr/share/x6100/COPYING on the SD card.";
+    "This program is free software under the GNU Lesser General Public License, version "
+    "2.1 or later, and comes with ABSOLUTELY NO WARRANTY. You may redistribute it under "
+    "that license. The full text is in /usr/share/x6100/LICENSE on the SD card.";
 
 /* ---- window --------------------------------------------------------------------- */
 
