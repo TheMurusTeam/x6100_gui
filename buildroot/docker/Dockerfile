@@ -32,7 +32,9 @@ RUN wget -q -O /tmp/cmake.tar.gz \
         https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-$(uname -m).tar.gz \
     && mkdir -p /opt/cmake-${CMAKE_VERSION} \
     && tar -xzf /tmp/cmake.tar.gz -C /opt/cmake-${CMAKE_VERSION} --strip-components=1 \
-    && rm /tmp/cmake.tar.gz
+    && rm /tmp/cmake.tar.gz \
+    && for t in cmake ctest cpack; do ln -s /opt/cmake-${CMAKE_VERSION}/bin/$t /usr/bin/$t; done
+# (the links in /usr/bin are for IDEs such as CLion, which look there)
 ENV PATH=/opt/cmake-${CMAKE_VERSION}/bin:$PATH
 
 # Buildroot must not run as root. The folders that become Docker volumes are
