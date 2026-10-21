@@ -63,7 +63,7 @@ if [ ! -f images/sdcard.img ]; then
     make libsndfile-dirclean
     make
 else
-    make x6100_gui-rebuild x6100_webserver-dirclean all
+    make x6100-gui-rebuild x6100-webserver-dirclean all
 fi
 
 # 4. The R1CBU U-Boot, written at 8 KiB
