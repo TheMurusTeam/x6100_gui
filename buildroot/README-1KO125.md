@@ -4,7 +4,7 @@ The 1KO125 SD card image is made of:
 
 | Part | Where |
 |---|---|
-| Linux, root file system, libraries | [AetherX6100Buildroot](https://github.com/gdyuldin/AetherX6100Buildroot) at commit `07a8d250f420544949887544432dbfc7565b77f0` |
+| Linux, root file system, libraries | [AetherX6100Buildroot](https://github.com/OpenX6100/AetherX6100Buildroot) at commit `273083c94bbfd23325b6cbd2c296746202caf533` |
 | 1KO125 patches to Buildroot packages | `patches/` (the SSTV page of the web server) |
 | The GUI | this repository, built by Buildroot as the `x6100_gui` package |
 | U-Boot | `../u-boot/u-boot-sunxi-with-spl.bin` (R1CBU), written at 8 KiB |

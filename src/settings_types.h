@@ -30,6 +30,10 @@ typedef enum {
     ACTION_NR_TOGGLE,
     ACTION_NB_TOGGLE,
 
+    /* The ACTION_APP_* values are saved on the card (long-press keys), so
+     * each is written out and never reused or changed; a new app takes
+     * the next free number. 109 WeFax, 110 NavTex, 111 SSTV (Murus),
+     * 112 JS8 are taken. */
     ACTION_APP_RTTY = 100,
     ACTION_APP_FT8,
     ACTION_APP_SWRSCAN,
@@ -39,11 +43,23 @@ typedef enum {
     ACTION_APP_QTH,
     ACTION_APP_CALLSIGN,
     ACTION_APP_WIFI,
-    ACTION_APP_WEFAX,
-    ACTION_APP_NAVTEX,
-    ACTION_APP_SSTV,
-    ACTION_APP_DSC,
-    ACTION_APP_FT8CB,       /* 1KO125 */
+    /* The apps on their way in, with their fixed numbers (#283): each one's
+     * line below its name, so they can be merged in any order. */
+    /* WeFax */
+    ACTION_APP_WEFAX = 109,
+    /* SSTV */
+    ACTION_APP_SSTV = 111,
+    /* JS8 */
+    /* WSPR */
+    /* PSK31 */
+    /* Olivia */
+    ACTION_APP_BT = 116,
+
+    /* 1KO125 apps without a place in R1CBU: NAVTEX has the number R1CBU
+     * keeps for it, the others are far from the R1CBU numbers */
+    ACTION_APP_NAVTEX = 110,
+    ACTION_APP_DSC = 200,
+    ACTION_APP_FT8CB = 201,
 } press_action_t;
 
 typedef enum {

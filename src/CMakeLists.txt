@@ -18,13 +18,14 @@ target_sources(${PROJECT_NAME} PUBLIC
     channels.c dialog_channels.c broadcast_db.c cJSON.c
     styles.c spectrum.c radio.c dsp.cpp util.cpp
     app_ports.cpp
-    waterfall.c rotary.cpp keyboard.c encoder.c
+    waterfall.c rotary.cpp keyboard.c kbd_rollover.c encoder.c
     events.c msg.c msg_tiny.c keypad.c
     hkey.c clock.c
-    meter.c band_info.cpp tx_info.c
+    meter.c band_info.cpp tx_info.c tx_level.c tx_player.c
     audio.c mfk.cpp cw.cpp panel.cpp
     rtty.c screenshot.c display.cpp gps.c
     ui_list.c app_info.c diag_log.c
+    dxcc.c
     dialog.c dialog_swrscan.c dialog_wefax.c wefax/decoder.c wefax/stations.c
     dialog_navtex.c navtex/decoder.c navtex/sitorb.c navtex/bulletin.c
     dialog_sstv.c sstv_resources.c sstv/decoder.c sstv/encoder.c sstv/autodetect.c sstv/vis.c sstv/linesync.c sstv/preview.c sstv/sstv_denoise.c sstv/sstv_dnn.c sstv/syncgrid.c
@@ -32,12 +33,22 @@ target_sources(${PROJECT_NAME} PUBLIC
     dialog_ft8.c dialog_freq.c dialog_gps.c dialog_msg_cw.c
     dialog_ft8cb.c ft8cb/cb_msg.c ft8cb/qso_cb.c ft8cb/tx_cb.c ft8cb/cb_store.c ft8cb/cb_div.c ft8cb/table_view_cb.c
     ft8_ui/table_view.c
+    ft8_udp.c
     dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c
     textarea_window.c cw_encoder.c buttons.cpp vol.cpp recorder.c
     voice.cpp cw_tune_ui.c adif.c qso_log.c scheduler.cpp
     format.c msg_cw_store.c
     dialog_wifi.c wifi.cpp controls.cpp usb_devices.cpp
+    bt_audio.c
     knobs.cpp lock_manager.c indicators.cpp freq_info.cpp
+    dialog_bt.c bt_ctl.c bt_dev.c bt_spp.c
+    # The apps on their way in: each one's sources below its name
+    # WSPR
+    # JS8
+    # PSK31
+    # Olivia
+    # WeFax
+    # SSTV
 )
 
 add_subdirectory(fonts)
@@ -48,6 +59,7 @@ add_subdirectory(cfg)
 add_subdirectory(cat)
 add_subdirectory(settings)
 add_subdirectory(cw_decoder)
+add_subdirectory(js8)
 
 include_directories(utf8)
 include_directories(${CMAKE_SYSROOT}/usr/include/RHVoice/)

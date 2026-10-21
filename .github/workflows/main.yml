@@ -48,14 +48,14 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: true
-        repository: gdyuldin/AetherX6100Buildroot
+        repository: OpenX6100/AetherX6100Buildroot
         # 1KO125: the Buildroot commit the 1KO125 SD cards are built with
-        ref: 07a8d250f420544949887544432dbfc7565b77f0
+        ref: 273083c94bbfd23325b6cbd2c296746202caf533
         path: AetherX6100Buildroot
 
     - name: Patch GUI mk
       run: |
-        sed -i "s,https://github.com/gdyuldin/x6100_gui,${GITHUB_WORKSPACE}/x6100_gui,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
+        sed -i "s,https://github.com/OpenX6100/x6100_gui,${GITHUB_WORKSPACE}/x6100_gui,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
         sed -i "s,^X6100_GUI_SITE_METHOD = git,X6100_GUI_SITE_METHOD = local,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
         sed -i "s,^X6100_GUI_GIT_SUBMODULES,# X6100_GUI_GIT_SUBMODULES,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
 

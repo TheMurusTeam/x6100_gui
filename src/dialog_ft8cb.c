@@ -139,7 +139,7 @@ static void construct_cb(lv_obj_t *parent);
 static void key_cb(lv_event_t * e);
 static void destruct_cb();
 static void audio_cb(unsigned int n, float *samples);
-static void rotary_cb(int32_t diff);
+static void rotary_cb(int32_t diff, uint16_t dt);
 
 /* audio_worker callbacks (run on worker thread). UI mutations must go
  * through scheduler_put() to land on the LVGL task. */
@@ -418,10 +418,13 @@ static void set_freq(uint32_t freq) {
     lv_obj_invalidate(finder);
 }
 
-static void rotary_cb(int32_t diff) {
-    uint32_t abs_diff = abs(diff);
-    if (abs_diff > 3) {
-        diff *= (abs_diff < 6) ? 5 : 10;
+static void rotary_cb(int32_t diff, uint16_t dt) {
+    /* As in dialog_ft8.c (R1CBU 1.1.0): dt is the time per click in ms,
+     * 0 when unknown; faster turns move further */
+    if (dt > 0 && dt <= 5) {
+        diff *= 10;
+    } else if (dt > 0 && dt < 8) {
+        diff *= 5;
     }
     uint32_t f = param_i_get(cfg.ft8.tx_freq()) + diff;
     f = limit(f, filter_low, filter_high - (FTX_PROTOCOL_FT8 == FTX_PROTOCOL_FT8 ? FT8_WIDTH_HZ : FT4_WIDTH_HZ));

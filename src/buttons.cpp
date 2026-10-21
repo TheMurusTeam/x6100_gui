@@ -324,11 +324,22 @@ static button_data_t btn_callsign = make_action_btn("Callsign", ACTION_APP_CALLS
 static button_data_t btn_settings = make_app_btn("Settings", ACTION_APP_SETTINGS);
 
 static button_data_t  btn_wifi   = make_app_btn("WiFi", ACTION_APP_WIFI);
+static button_data_t  btn_bt     = make_app_btn("Bluetooth", ACTION_APP_BT);
+/* The apps on their way in declare their button below their own name, one
+ * app per line, so they can be merged in any order without touching each
+ * other's lines. Their places on the pages are fixed below. */
+/* WSPR */
+/* JS8 */
+/* PSK31 */
+/* Olivia */
+/* WeFax */
 static button_data_t  btn_wefax  = make_app_btn("WeFax", ACTION_APP_WEFAX);
-static button_data_t  btn_navtex = make_app_btn("Navtex\nSitorB", ACTION_APP_NAVTEX);
+/* SSTV */
 static button_data_t  btn_sstv   = make_app_btn("SSTV", ACTION_APP_SSTV);
+/* 1KO125 apps, on page 5 */
+static button_data_t  btn_navtex = make_app_btn("Navtex\nSitorB", ACTION_APP_NAVTEX);
 static button_data_t  btn_dsc    = make_app_btn("DSC", ACTION_APP_DSC);
-static button_data_t  btn_ft8cb  = make_app_btn("FT8 CB", ACTION_APP_FT8CB);   /* 1KO125 */
+static button_data_t  btn_ft8cb  = make_app_btn("FT8 CB", ACTION_APP_FT8CB);
 
 /* RTTY */
 static button_data_t btn_rtty_p1 = {
@@ -448,10 +459,12 @@ static buttons_page_t page_dfl_1 = {
 };
 
 /* App pages */
-static button_data_t btn_app_p1 = make_page_btn("(APP 1:4)", "Application|page 1");
-static button_data_t btn_app_p2 = make_page_btn("(APP 2:4)", "Application|page 2");
-static button_data_t btn_app_p3 = make_page_btn("(APP 3:4)", "Application|page 3");
-static button_data_t btn_app_p4 = make_page_btn("(APP 4:4)", "Application|page 4");
+/* 1KO125: 5 pages (page 5 has the 1KO125 apps) */
+static button_data_t btn_app_p1 = make_page_btn("(APP 1:5)", "Application|page 1");
+static button_data_t btn_app_p2 = make_page_btn("(APP 2:5)", "Application|page 2");
+static button_data_t btn_app_p3 = make_page_btn("(APP 3:5)", "Application|page 3");
+static button_data_t btn_app_p4 = make_page_btn("(APP 4:5)", "Application|page 4");
+static button_data_t btn_app_p5 = make_page_btn("(APP 5:5)", "Application|page 5");
 
 static buttons_page_t page_app_1 = {
     {&btn_app_p1, &btn_rtty, &btn_ft8, &btn_swr, &btn_gps}
@@ -459,12 +472,37 @@ static buttons_page_t page_app_1 = {
 static buttons_page_t page_app_2 = {
     {&btn_app_p2, &btn_rec, &btn_qth, &btn_callsign, &btn_settings}
 };
-static buttons_page_t page_app_3 = {
-    {&btn_app_p3, &btn_wifi, &btn_wefax, &btn_navtex, &btn_dsc}
-};
-static buttons_page_t page_app_4 = {
-    {&btn_app_p4, &btn_sstv, &btn_ft8cb, NULL, NULL}
-};
+/* Pages 3 and 4: every app has its fixed place, kept empty (NULL) until the
+ * app comes in. Each app only replaces its own NULL, so the order on the
+ * radio never changes whichever app is merged first. */
+static buttons_page_t page_app_3 = {{
+    &btn_app_p3,
+    &btn_wifi,
+    &btn_bt,
+    /* WSPR */
+    NULL,
+    /* JS8 */
+    NULL,
+}};
+static buttons_page_t page_app_4 = {{
+    &btn_app_p4,
+    /* PSK31 */
+    NULL,
+    /* Olivia */
+    NULL,
+    /* WeFax */
+    &btn_wefax,
+    /* SSTV */
+    &btn_sstv,
+}};
+/* 1KO125 */
+static buttons_page_t page_app_5 = {{
+    &btn_app_p5,
+    &btn_navtex,
+    &btn_dsc,
+    &btn_ft8cb,
+    NULL,
+}};
 
 /* RTTY */
 
@@ -486,6 +524,7 @@ buttons_group_t buttons_group_app = {
     &page_app_2,
     &page_app_3,
     &page_app_4,
+    &page_app_5,    /* 1KO125 */
 };
 
 buttons_group_t buttons_group_key = {

@@ -169,9 +169,11 @@ static const char credits_fmt[] =
     "\n"
     "Copyright (C) 2026 Hany El Imam.\n"
     "Portions Copyright (C) 2022-2023 Belousov Oleg aka R1CBU and contributors.\n"
-    "This program is free software under the GNU Lesser General Public License, version "
-    "2.1 or later, and comes with ABSOLUTELY NO WARRANTY. You may redistribute it under "
-    "that license. The full text is in /usr/share/x6100/LICENSE on the SD card.";
+    "This program is free software and comes with ABSOLUTELY NO WARRANTY. Its own code is "
+    "under the GNU Lesser General Public License, version 2.1 or later. It includes the JS8 "
+    "engine (GNU GPL 3.0), so the program as a whole is distributed under the GNU General "
+    "Public License, version 3. The full texts are in /usr/share/x6100/LICENSE (LGPL) and "
+    "/usr/share/x6100/COPYING-GPL3 (GPL) on the SD card.";
 
 /* ---- window --------------------------------------------------------------------- */
 

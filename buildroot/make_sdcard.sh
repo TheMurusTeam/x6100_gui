@@ -27,8 +27,8 @@ for d in /opt/cmake-3*/bin; do
 done
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 
-BR_REPO=https://github.com/gdyuldin/AetherX6100Buildroot
-BR_COMMIT=07a8d250f420544949887544432dbfc7565b77f0
+BR_REPO=https://github.com/OpenX6100/AetherX6100Buildroot
+BR_COMMIT=273083c94bbfd23325b6cbd2c296746202caf533
 
 GUI=$(cd "$(dirname "$0")/.." && pwd)
 BR=$(dirname "$GUI")/AetherX6100Buildroot

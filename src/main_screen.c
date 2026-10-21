@@ -53,6 +53,14 @@
 #include "dialog_recorder.h"
 #include "dialog_callsign.h"
 #include "dialog_wifi.h"
+#include "dialog_bt.h"
+/* The apps on their way in: each one's include below its name */
+/* WSPR */
+/* JS8 */
+/* PSK31 */
+/* Olivia */
+/* WeFax */
+/* SSTV */
 #include "display.h"
 #include "buttons.h"
 #include "recorder.h"
@@ -486,19 +494,32 @@ void main_screen_start_app(press_action_t app_action) {
             voice_say_text_fmt("Wi-Fi window");
             break;
 
+        case ACTION_APP_BT:
+            dialog_construct(dialog_bt, obj);
+            voice_say_text_fmt("Bluetooth window");
+            break;
+
+        /* The apps on their way in: each one's case below its name */
+        /* WSPR */
+        /* JS8 */
+        /* PSK31 */
+        /* Olivia */
+        /* WeFax */
         case ACTION_APP_WEFAX:
             dialog_construct(dialog_wefax, obj);
             voice_say_text_fmt("WeFax window");
             break;
 
-        case ACTION_APP_NAVTEX:
-            dialog_construct(dialog_navtex, obj);
-            voice_say_text_fmt("NAVTEX window");
-            break;
-
+        /* SSTV */
         case ACTION_APP_SSTV:
             dialog_construct(dialog_sstv, obj);
             voice_say_text_fmt("SSTV window");
+            break;
+
+        /* 1KO125 */
+        case ACTION_APP_NAVTEX:
+            dialog_construct(dialog_navtex, obj);
+            voice_say_text_fmt("NAVTEX window");
             break;
 
         case ACTION_APP_DSC:
@@ -577,9 +598,17 @@ void main_screen_action(press_action_t action) {
         case ACTION_APP_SETTINGS:
         case ACTION_APP_RECORDER:
         case ACTION_APP_WIFI:
+        case ACTION_APP_BT:
+        /* WSPR */
+        /* JS8 */
+        /* PSK31 */
+        /* Olivia */
+        /* WeFax */
         case ACTION_APP_WEFAX:
-        case ACTION_APP_NAVTEX:
+        /* SSTV */
         case ACTION_APP_SSTV:
+        /* 1KO125 */
+        case ACTION_APP_NAVTEX:
         case ACTION_APP_DSC:
         case ACTION_APP_FT8CB:
             main_screen_start_app(action);
@@ -1321,8 +1350,7 @@ static void main_screen_rotary_cb(lv_event_t * e) {
     rotary_data_t *data = (rotary_data_t *) lv_event_get_param(e);
 
     freq_shift(data->diff, data->dt);
-    // TODO: add dt support
-    dialog_rotary(data->diff);
+    dialog_rotary(data->diff, data->dt);
     free(data);
 }
 
