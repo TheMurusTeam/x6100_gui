@@ -166,6 +166,7 @@ struct sitorb {
     int ev_n[7][2];
     float energy;                   /* mean tone energy at the sampling instants */
     int figs;
+    int doubt;                      /* a lost or guessed character since the last shift */
 };
 
 /* code lookup: 7-bit word (bit 0 = first transmitted, 1 = B) -> code or -1 */
@@ -238,15 +239,24 @@ static void set_sync(sitorb_t *s, int on)
 static void put_code(sitorb_t *s, int c, int q)
 {
     if (q == NAVTEX_Q_LOST) {
+        s->doubt = 1;               /* it could have been a shift */
         emit(s, '*', NAVTEX_Q_LOST);
         return;
     }
+    if (q == NAVTEX_Q_GUESS)
+        s->doubt = 1;
     if (c < 26) {
+        /* figures that NAVTEX text almost never has, after a doubtful
+         * character: the letters shift was lost, back to letters */
+        if (s->figs && s->doubt && strchr("$!&#'=+?", figures[c] ? figures[c] : '#'))
+            s->figs = 0;
         int ch = s->figs ? figures[c] : 'A' + c;
         if (ch)
             emit(s, ch, q);
         return;
     }
+    if ((c == C_LTRS || c == C_FIGS) && q != NAVTEX_Q_GUESS)
+        s->doubt = 0;
     switch (c) {
     case C_CR:    emit(s, '\r', q); break;
     case C_LF:    emit(s, '\n', q); break;
