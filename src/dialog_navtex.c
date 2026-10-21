@@ -60,7 +60,7 @@
 
 static void construct_cb(lv_obj_t *parent);
 static void destruct_cb(void);
-static void audio_cb(unsigned int n, float *samples);
+static void audio_cb(size_t n, float *samples);
 static void close_cb(button_data_t *data);
 static void clear_cb(button_data_t *data);
 static void test_cb(button_data_t *data);
@@ -708,7 +708,7 @@ static void destruct_cb(void)
     parent_obj = NULL;
 }
 
-static void audio_cb(unsigned int n, float *samples)
+static void audio_cb(size_t n, float *samples)
 {
     /* Never mix live receiver audio with the WAV test stream. */
     if (test_mode)

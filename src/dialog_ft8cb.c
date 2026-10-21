@@ -138,7 +138,7 @@ static int cb_freq_idx = 0;
 static void construct_cb(lv_obj_t *parent);
 static void key_cb(lv_event_t * e);
 static void destruct_cb();
-static void audio_cb(unsigned int n, float *samples);
+static void audio_cb(size_t n, float *samples);
 static void rotary_cb(int32_t diff, uint16_t dt);
 
 /* audio_worker callbacks (run on worker thread). UI mutations must go
