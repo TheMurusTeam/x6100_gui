@@ -67,7 +67,10 @@ else
 fi
 
 # 4. The R1CBU U-Boot, written at 8 KiB
-VERSION=$(git -C "$GUI" describe --tags --always 2>/dev/null || echo local)
+# the tag when the commit has one, otherwise the branch and the commit
+VERSION=$(git -C "$GUI" describe --tags --exact-match 2>/dev/null) ||
+    VERSION=$(git -C "$GUI" rev-parse --abbrev-ref HEAD 2>/dev/null | tr '/' '-')-$(git -C "$GUI" rev-parse --short HEAD 2>/dev/null) ||
+    VERSION=local
 IMG="$OUT/sdcard-1KO125-$VERSION-$(date +%Y%m%d-%H%M).img"
 cp images/sdcard.img "$IMG"
 dd if="$GUI/u-boot/u-boot-sunxi-with-spl.bin" of="$IMG" bs=1024 seek=8 conv=notrunc
