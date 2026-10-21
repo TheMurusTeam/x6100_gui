@@ -34,7 +34,7 @@
 #define SLANT_KEY_LEN       96
 #define SLANT_SAVE_DELAY_MS 3000
 #define SLANT_MATCH_HZ      1000    /* VFO near a listed frequency */
-#define SLANT_DISAGREE      50      /* Tilt units, minimum to replace the memory */
+#define SLANT_DISAGREE      70      /* Tilt units, minimum to replace the memory */
 
 typedef struct {
     char key[SLANT_KEY_LEN];        /* "country|place" */
