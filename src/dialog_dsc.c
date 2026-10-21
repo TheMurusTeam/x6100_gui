@@ -538,6 +538,12 @@ static void call_from_message(dsc_call_t *c, const dsc_message_t *m, time_t utc,
     memset(c, 0, sizeof(*c));
     c->msg = *m;
     dsc_format_parse(m->sym, m->n, &c->info);
+    /* the error check verifies a call only if at most one character was
+     * not received twice the same: two wrong ones can cancel out */
+    if (m->unsure > 1 && c->info.ecc_ok) {
+        c->info.ecc_ok = false;
+        c->info.ecc_calc = -1;
+    }
     c->utc = utc;
     c->rx_hz = rx_hz;
 }
@@ -568,8 +574,9 @@ static void save_call(dsc_call_t *c)
     if (!f) { fprintf(stderr, "DSC: cannot write %s\n", path); c->file[0] = '\0'; return; }
     char ts[32];
     strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm);
-    fprintf(f, "DSC call\nutc=%s\nfreq_hz=%ld\ncenter_hz=%.0f\nvalid=%d/%d\nrepaired=%d\nsymbols=",
-            ts, (long)c->rx_hz, c->msg.center_hz, c->msg.raw_valid, c->msg.raw_total, c->msg.repaired);
+    fprintf(f, "DSC call\nutc=%s\nfreq_hz=%ld\ncenter_hz=%.0f\nvalid=%d/%d\nrepaired=%d\nunsure=%d\nsymbols=",
+            ts, (long)c->rx_hz, c->msg.center_hz, c->msg.raw_valid, c->msg.raw_total, c->msg.repaired,
+            c->msg.unsure);
     for (int i = 0; i < c->msg.n; ++i) fprintf(f, "%s%d", i ? " " : "", c->msg.sym[i]);
     fprintf(f, "\n\n%s - %s\nfrom %s (%s)\nto   %s (%s)\n%s\n\n",
             c->info.cat_name, c->info.fmt_name, c->info.from_id, c->info.from_where,
@@ -600,6 +607,7 @@ static bool load_call(const char *name, dsc_call_t *c)
         else if (!strncmp(line, "center_hz=", 10)) ctr = (float)atof(line + 10);
         else if (!strncmp(line, "valid=", 6)) sscanf(line + 6, "%d/%d", &m.raw_valid, &m.raw_total);
         else if (!strncmp(line, "repaired=", 9)) m.repaired = atoi(line + 9);
+        else if (!strncmp(line, "unsure=", 7)) m.unsure = atoi(line + 7);
         else if (!strncmp(line, "symbols=", 8)) {
             char *p = line + 8, *e;
             while (m.n < DSC_MAX_SYMBOLS) {

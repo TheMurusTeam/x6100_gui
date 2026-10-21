@@ -28,6 +28,22 @@
 #ifndef DSC_EDGE_WINDOW
 #define DSC_EDGE_WINDOW   0.3f         /* edges farther from the expected boundary are ignored (bits) */
 #endif
+#ifndef DSC_SOFT_MIN2
+#define DSC_SOFT_MIN2     0.6f         /* soft decision on two copies: least margin */
+#endif
+#ifndef DSC_SOFT_MIN1
+#define DSC_SOFT_MIN1     0.4f         /* ... on one copy */
+#endif
+#ifndef DSC_ECC_RANK_MISSING
+#define DSC_ECC_RANK_MISSING 4         /* ECC fill of a missing character: its rank in the soft bits */
+#endif
+#ifndef DSC_ECC_RANK_FIX
+#define DSC_ECC_RANK_FIX  1            /* ECC fix of a doubtful character */
+#endif
+#define DSC_SURE_ONE      500.0f       /* conf[] of a character with one valid copy */
+#ifndef DSC_SURE_MARGIN
+#define DSC_SURE_MARGIN   1.5f
+#endif
 #define DSC_EDGE_CONFIRM  0.3f         /* swing past the zero crossing that confirms a bit edge */
 #ifndef DSC_CLOCK_GAIN
 #define DSC_CLOCK_GAIN    0.25f        /* bit clock correction per edge */
@@ -67,13 +83,18 @@ typedef struct {
     bool  cross;                /* zero crossing seen, not yet confirmed */
     float cross_phase;          /* clock phase at that crossing */
     float acc;                  /* integral of the discriminator over the bit centre */
+    int   acc_n;                /* samples in acc */
+    float soft[64];             /* soft value of the last 64 bits (> 0: "1"), ring */
+    unsigned nbits_total;       /* bits received (index in soft[]) */
     uint64_t bits;              /* last 64 bits, newest in bit 0 */
     int nbits;
     ch_state_t state;
     int bitcnt;                 /* bits since the last character boundary */
     int raw[DSC_RAW_MAX];
+    float rawsoft[DSC_RAW_MAX][10];  /* soft bits of each collected character, time order */
     int nraw;
     int bad_run;
+    int tail;                   /* characters still to collect after a verified call */
     int valid;
     double lock_t;              /* time of the phasing lock */
 } channel_t;
@@ -131,9 +152,67 @@ static int char_from_bits(uint64_t bits)
     return (7 - ones) == chk ? v : -1;
 }
 
+/* ---- soft decisions ----------------------------------------------- */
+
+/* the 10 bits of each of the 128 characters, in time order (1 = Y) */
+static int8_t cw_bits[128][10];
+static bool cw_ready;
+
+static void make_codewords(void)
+{
+    if (cw_ready) return;
+    for (int v = 0; v < 128; ++v) {
+        int ones = 0;
+        for (int k = 0; k < 7; ++k) { cw_bits[v][k] = (int8_t)((v >> k) & 1); ones += (v >> k) & 1; }
+        int chk = 7 - ones;     /* number of "0" (B) bits, MSB first */
+        for (int k = 0; k < 3; ++k) cw_bits[v][7 + k] = (int8_t)((chk >> (2 - k)) & 1);
+    }
+    cw_ready = true;
+}
+
+/* how well character v fits the soft bits */
+static float cw_score(const float *sb, int v)
+{
+    float m = 0.0f;
+    for (int k = 0; k < 10; ++k) m += cw_bits[v][k] ? sb[k] : -sb[k];
+    return m;
+}
+
+/* the character closest to the soft bits; *margin = distance to the next */
+static int soft_char(const float *sb, float *margin)
+{
+    float best = -1e30f, second = -1e30f;
+    int bv = -1;
+    for (int v = 0; v < 128; ++v) {
+        float m = cw_score(sb, v);
+        if (m > best) { second = best; best = m; bv = v; }
+        else if (m > second) second = m;
+    }
+    *margin = best - second;
+    return bv;
+}
+
+/* rank of character v among the 128 for these soft bits (0 = the best) */
+static int soft_rank(const float *sb, int v)
+{
+    float m = cw_score(sb, v);
+    int r = 0;
+    for (int u = 0; u < 128; ++u) if (u != v && cw_score(sb, u) > m) r++;
+    return r;
+}
+
+/* soft bits of the character whose last bit is "back" bits before the
+ * newest one, into raw position i */
+static void keep_soft(channel_t *c, int i, int back)
+{
+    for (int k = 0; k < 10; ++k)
+        c->rawsoft[i][k] = c->soft[(c->nbits_total - 1 - back - 9 + k) & 63];
+}
+
 static void channel_reset(channel_t *c)
 {
     c->state = ST_SEARCH;
+    c->tail = 0;
     c->nraw = 0;
     c->bad_run = 0;
     c->valid = 0;
@@ -154,6 +233,64 @@ static void channel_init(channel_t *c, float fs, float center)
 
 static bool is_rx_phasing(int v) { return v >= 104 && v <= 111; }
 static bool is_format(int v) { return v == 102 || v == 112 || v == 114 || v == 116 || v == 120 || v == 123; }
+
+static bool is_eos(int v) { return v == 117 || v == 122 || v == 127; }
+
+/*
+ * The error check character is the XOR of the format specifier and of all
+ * the characters up to the end of sequence: when exactly one of them is
+ * missing, or one doubtful character is wrong, it says what that character
+ * is. The value is taken only if the soft bits received for that position
+ * agree that it is one of the most likely characters there.
+ *
+ * The end of sequence is sent as EOS ECC EOS EOS: when the first EOS is
+ * unreadable or wrong, the following copies say where it is and what it
+ * is.
+ */
+static bool ecc_try(dsc_message_t *m, float (*svec)[10], const float *conf, int e, int eos)
+{
+    int f = is_format(m->sym[0]) ? m->sym[0] : (is_format(m->sym[1]) ? m->sym[1] : -1);
+    if (f < 0 || e + 1 >= m->n || m->sym[e + 1] < 0) return false;
+    int x = f ^ m->sym[e + 1] ^ eos, missing = -1, nmiss = 0;
+    for (int i = 2; i < e; ++i) {
+        if (m->sym[i] < 0) { missing = i; nmiss++; }
+        else x ^= m->sym[i];
+    }
+    int fix = -1, val = 0;
+    if (nmiss == 0 && x == 0) {
+        /* it checks as it is */
+    } else if (nmiss == 1) {
+        if (soft_rank(svec[missing], x) > DSC_ECC_RANK_MISSING) return false;
+        fix = missing;
+        val = x;
+    } else if (nmiss == 0) {
+        /* one doubtful character */
+        int nfix = 0;
+        for (int i = 2; i < e; ++i) {
+            if (conf[i] >= 1e3f) continue;              /* received twice */
+            int want = x ^ m->sym[i];                    /* the value that makes it check */
+            if (soft_rank(svec[i], want) <= DSC_ECC_RANK_FIX) { fix = i; val = want; nfix++; }
+        }
+        if (nfix != 1) return false;
+    } else {
+        return false;
+    }
+    if (fix >= 0) { m->sym[fix] = val; m->repaired++; }
+    if (m->sym[e] != eos) { m->sym[e] = eos; m->repaired++; }
+    m->ecc_ok = true;
+    m->n = e + 2;
+    return true;
+}
+
+static void ecc_repair(dsc_message_t *m, float (*svec)[10], const float *conf)
+{
+    for (int e = 12; e + 1 < m->n; ++e) {
+        if (is_eos(m->sym[e]) && ecc_try(m, svec, conf, e, m->sym[e])) return;
+        if (!is_eos(m->sym[e]) && e + 2 < m->n && is_eos(m->sym[e + 2]) &&
+            ecc_try(m, svec, conf, e, m->sym[e + 2])) return;
+        if (is_eos(m->sym[e])) return;      /* the first end of sequence: no further */
+    }
+}
 
 static bool assemble(const channel_t *c, dsc_message_t *m)
 {
@@ -193,13 +330,42 @@ static bool assemble(const channel_t *c, dsc_message_t *m)
     }
 
     memset(m, 0, sizeof(*m));
+    /* each character from its DX and RX copies. Two copies that agree, or
+     * a valid DX with nothing better, are taken as they are; otherwise the
+     * character closest to the sum of the soft bits of the two copies,
+     * when it stands out from the others (else unreadable, -1) */
+    static float svec[DSC_MAX_SYMBOLS][10];
+    static float conf[DSC_MAX_SYMBOLS];
     for (int i = 0; i < ndx && m->n < DSC_MAX_SYMBOLS; ++i) {
+        int dri = start + 2 * i, rri = start + 1 + 2 * (i + best_l);
         int v = dx[i];
-        if (v < 0 && i + best_l < nrx && rx[i + best_l] >= 0 && !is_rx_phasing(rx[i + best_l])) {
-            v = rx[i + best_l];
-            m->repaired++;
+        /* (the RX phasing characters 104..111 come before rx[best_l]: here
+         * a value in that range is a character, e.g. the category 108) */
+        int w = i + best_l < nrx ? rx[i + best_l] : -1;
+        bool have_rx = i + best_l < nrx;
+        float *sv = svec[m->n];
+        for (int k = 0; k < 10; ++k)
+            sv[k] = c->rawsoft[dri][k] + (have_rx ? c->rawsoft[rri][k] : 0.0f);
+        float margin;
+        int ml = soft_char(sv, &margin);
+        int out;
+        if (v >= 0 && w == v) {
+            out = v;
+            margin = 1e3f;              /* received twice */
+        } else if (margin > (have_rx ? DSC_SOFT_MIN2 : DSC_SOFT_MIN1)) {
+            out = ml;
+        } else {
+            out = v >= 0 ? v : w;       /* soft too close to call: as before */
+            if (out >= 0) margin = 0.0f;
         }
-        m->sym[m->n++] = v;
+        if (out != v) m->repaired++;
+        /* not received twice the same, but the soft bits of the two copies
+         * clearly in favour of it: sure enough (DSC_SURE_ONE). The others
+         * count as unsure */
+        if (margin < 1e3f && out >= 0 && out == ml && margin >= DSC_SURE_MARGIN)
+            margin = DSC_SURE_ONE;
+        conf[m->n] = margin;
+        m->sym[m->n++] = out;
     }
     while (m->n > 0 && m->sym[m->n - 1] < 0) m->n--;
     /* a wrong start can leave phasing characters (125, 104..111) in front
@@ -209,6 +375,8 @@ static bool assemble(const channel_t *c, dsc_message_t *m)
         if (i + 1 < m->n && is_format(m->sym[i]) && m->sym[i + 1] == m->sym[i] &&
             (m->sym[i - 1] == 125 || is_rx_phasing(m->sym[i - 1]))) {
             memmove(m->sym, m->sym + i, (size_t)(m->n - i) * sizeof(m->sym[0]));
+            memmove(svec, svec + i, (size_t)(m->n - i) * sizeof(svec[0]));
+            memmove(conf, conf + i, (size_t)(m->n - i) * sizeof(conf[0]));
             m->n -= i;
             shift = i;
             break;
@@ -255,10 +423,18 @@ static bool assemble(const channel_t *c, dsc_message_t *m)
         }
         if (m->ecc_ok) break;
     }
+    if (!m->ecc_ok)
+        ecc_repair(m, svec, conf);
+    m->unsure = (m->n > 1 && m->sym[0] == m->sym[1] && (conf[0] >= DSC_SURE_ONE || conf[1] >= DSC_SURE_ONE)) ? 0 : 1;
+    for (int i = 2; i < m->n; ++i)
+        if (conf[i] < DSC_SURE_ONE) m->unsure++;
     return m->n >= 4;
 }
 
 static int known_count(const dsc_message_t *m);
+
+/* the error check agrees and at most one character was not sure */
+static bool verified(const dsc_message_t *m) { return m->ecc_ok && m->unsure <= 1; }
 
 static bool worth_emitting(const dsc_message_t *m)
 {
@@ -290,7 +466,14 @@ static bool same_call(const dsc_message_t *a, const dsc_message_t *b)
 
 static bool better(const dsc_message_t *a, const dsc_message_t *b)
 {
+    if (verified(a) != verified(b)) return verified(a);
     if (a->ecc_ok != b->ecc_ok) return a->ecc_ok;
+    /* the share of characters received with a valid check: soft decisions
+     * fill unreadable positions too, so the known count alone favours a
+     * demodulator that received noise */
+    long qa = a->raw_total ? (long)a->raw_valid * 1000 / a->raw_total : 0;
+    long qb = b->raw_total ? (long)b->raw_valid * 1000 / b->raw_total : 0;
+    if (qa != qb) return qa > qb;
     return known_count(a) > known_count(b);
 }
 
@@ -309,7 +492,7 @@ static void emit_pending(dsc_decoder_t *d)
     /* a late copy of a call already shown (a demodulator that locked late) */
     for (int k = 0; k < d->hist_n; ++k)
         if (d->now - d->hist_t[k] < DSC_HISTORY_SEC && same_call(&d->pending, &d->hist[k]) &&
-            !better(&d->pending, &d->hist[k]))
+            (verified(&d->hist[k]) || !better(&d->pending, &d->hist[k])))
             return;
     d->hist[d->hist_i] = d->pending;
     d->hist_t[d->hist_i] = d->now;
@@ -318,15 +501,49 @@ static void emit_pending(dsc_decoder_t *d)
     if (d->cb) d->cb(&d->pending, d->user);
 }
 
+/* The same call from two demodulators: positions unreadable in one are
+ * taken from the other, when the two are aligned and agree where both are
+ * readable; then the error check is tried again. */
+static void merge_calls(dsc_message_t *dst, const dsc_message_t *src)
+{
+    if (dst->ecc_ok) return;
+    int n = dst->n < src->n ? dst->n : src->n, cmp = 0, diff = 0;
+    for (int i = 0; i < n && i < 13; ++i)
+        if (dst->sym[i] >= 0 && src->sym[i] >= 0) { cmp++; if (dst->sym[i] != src->sym[i]) diff++; }
+    if (cmp < 8 || diff > 0) return;
+    for (int i = 0; i < src->n && i < DSC_MAX_SYMBOLS; ++i) {
+        if (i >= dst->n) { dst->sym[i] = src->sym[i]; dst->n = i + 1; }
+        else if (dst->sym[i] < 0 && src->sym[i] >= 0) { dst->sym[i] = src->sym[i]; dst->repaired++; dst->unsure++; }
+    }
+    int f = is_format(dst->sym[0]) ? dst->sym[0] : (is_format(dst->sym[1]) ? dst->sym[1] : -1);
+    if (f < 0) return;
+    for (int e = 12; e + 1 < dst->n; ++e) {
+        int eos = is_eos(dst->sym[e]) ? dst->sym[e] :
+                  (e + 2 < dst->n && is_eos(dst->sym[e + 2]) ? dst->sym[e + 2] : -1);
+        if (eos < 0 || dst->sym[e + 1] < 0) continue;
+        int x = f ^ eos, ok = 1;
+        for (int i = 2; i < e && ok; ++i) { if (dst->sym[i] < 0) ok = 0; else x ^= dst->sym[i]; }
+        if (ok && x == dst->sym[e + 1]) {
+            if (dst->sym[e] != eos) { dst->sym[e] = eos; dst->repaired++; }
+            dst->ecc_ok = true;
+            dst->n = e + 2;
+            return;
+        }
+        if (is_eos(dst->sym[e])) return;
+    }
+}
+
 static void call_finished(dsc_decoder_t *d, channel_t *c)
 {
     dsc_message_t m;
     if (!assemble(c, &m)) return;
     m.start_t = c->lock_t;
     if (d->has_pending && (fabs(m.start_t - d->pending.start_t) < 1.0 || same_call(&m, &d->pending))) {
-        if (better(&m, &d->pending)) d->pending = m;     /* same call, other demodulator */
+        /* same call, other demodulator: keep the better, fill it from the other */
+        if (better(&m, &d->pending)) { dsc_message_t o = d->pending; d->pending = m; merge_calls(&d->pending, &o); }
+        else merge_calls(&d->pending, &m);
         d->pending_t = d->now;
-        if (d->pending.ecc_ok) emit_pending(d);         /* verified: nothing better can come */
+        if (verified(&d->pending)) emit_pending(d);     /* verified: nothing better can come */
         return;
     }
     emit_pending(d);
@@ -336,7 +553,7 @@ static void call_finished(dsc_decoder_t *d, channel_t *c)
     d->pending_t = d->now;
     /* verified by its error check: nothing better can come from the other
      * demodulators (their copies are then dropped by the history) */
-    if (m.ecc_ok) emit_pending(d);
+    if (verified(&m)) emit_pending(d);
 }
 
 /* end of sequence characters among the last few collected */
@@ -363,9 +580,11 @@ static int new_phasing(uint64_t bits, int *a, int *b, int *c2, int *d2)
     return 0;
 }
 
-static void channel_bit(dsc_decoder_t *d, channel_t *c, int bit)
+static void channel_bit(dsc_decoder_t *d, channel_t *c, int bit, float sv)
 {
     c->bits = (c->bits << 1) | (uint64_t)(bit & 1);
+    c->soft[c->nbits_total & 63] = sv;
+    c->nbits_total++;
     if (c->nbits < 64) c->nbits++;
 
     /* A new call starting while the previous one is still being collected
@@ -377,10 +596,10 @@ static void channel_bit(dsc_decoder_t *d, channel_t *c, int bit)
             call_finished(d, c);
             c->state = ST_COLLECT;
             c->nraw = 0;
-            c->raw[c->nraw++] = a;
-            c->raw[c->nraw++] = b;
-            c->raw[c->nraw++] = c2;
-            c->raw[c->nraw++] = d2;
+            keep_soft(c, c->nraw, 30); c->raw[c->nraw++] = a;
+            keep_soft(c, c->nraw, 20); c->raw[c->nraw++] = b;
+            keep_soft(c, c->nraw, 10); c->raw[c->nraw++] = c2;
+            keep_soft(c, c->nraw, 0);  c->raw[c->nraw++] = d2;
             c->valid = 4;
             c->bad_run = 0;
             c->bitcnt = 0;
@@ -395,8 +614,8 @@ static void channel_bit(dsc_decoder_t *d, channel_t *c, int bit)
         if ((a == 125 && is_rx_phasing(b)) || (is_rx_phasing(a) && (b == 125 || is_format(b)))) {
             c->state = ST_COLLECT;
             c->nraw = 0;
-            c->raw[c->nraw++] = a;
-            c->raw[c->nraw++] = b;
+            keep_soft(c, c->nraw, 10); c->raw[c->nraw++] = a;
+            keep_soft(c, c->nraw, 0);  c->raw[c->nraw++] = b;
             c->valid = 2;
             c->bad_run = 0;
             c->bitcnt = 0;
@@ -408,13 +627,15 @@ static void channel_bit(dsc_decoder_t *d, channel_t *c, int bit)
     if (++c->bitcnt < 10) return;
     c->bitcnt = 0;
     int v = char_from_bits(c->bits);
-    if (c->nraw < DSC_RAW_MAX) c->raw[c->nraw++] = v;
+    if (c->nraw < DSC_RAW_MAX) { keep_soft(c, c->nraw, 0); c->raw[c->nraw++] = v; }
     if (v >= 0) { c->valid++; c->bad_run = 0; } else c->bad_run++;
     bool done = c->bad_run >= DSC_END_INVALID || c->nraw >= DSC_RAW_MAX;
-    /* a call whose error check is already verified ends here */
-    if (!done && v >= 0 && c->nraw >= 30 && eos_seen(c)) {
+    /* a call whose error check is already verified ends a few characters
+     * later, once the RX copies of its last characters are in */
+    if (c->tail > 0 && --c->tail == 0) done = true;
+    if (!done && !c->tail && v >= 0 && c->nraw >= 30 && eos_seen(c)) {
         dsc_message_t m;
-        if (assemble(c, &m) && m.ecc_ok) done = true;
+        if (assemble(c, &m) && m.ecc_ok) c->tail = 8;
     }
     if (done) {
         call_finished(d, c);
@@ -426,6 +647,7 @@ static void channel_bit(dsc_decoder_t *d, channel_t *c, int bit)
 dsc_decoder_t *dsc_decoder_create(int sample_rate, dsc_message_cb_t cb, void *user)
 {
     if (sample_rate < 8000) return NULL;
+    make_codewords();
     dsc_decoder_t *d = calloc(1, sizeof(*d));
     if (!d) return NULL;
     d->fs = (float)sample_rate;
@@ -488,10 +710,11 @@ void dsc_decoder_process(dsc_decoder_t *d, const float *x, int n)
             float before = c->phase;
             c->phase += step;
             /* integrate over the central 60% of the bit, decide at 0.8 */
-            if (c->phase > 0.2f && c->phase <= 0.8f) c->acc += dv;
+            if (c->phase > 0.2f && c->phase <= 0.8f) { c->acc += dv; c->acc_n++; }
             if (before < 0.8f && c->phase >= 0.8f) {
-                channel_bit(d, c, c->acc > 0.0f ? 1 : 0);
+                channel_bit(d, c, c->acc > 0.0f ? 1 : 0, c->acc_n ? c->acc / (float)c->acc_n : 0.0f);
                 c->acc = 0.0f;
+                c->acc_n = 0;
             }
             if (c->phase >= 1.0f) c->phase -= 1.0f;
             if (c->phase < 0.0f) c->phase += 1.0f;

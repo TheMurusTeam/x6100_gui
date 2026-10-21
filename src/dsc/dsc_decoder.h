@@ -38,6 +38,9 @@ typedef struct {
     int   repaired;                /* characters recovered from the RX copy */
     float center_hz;               /* audio centre of the demodulator that decoded it */
     bool  ecc_ok;                  /* error check character verified (n trimmed after it) */
+    int   unsure;                  /* characters not received twice the same (soft decisions,
+                                      filled in): with more than one, two wrong characters can
+                                      cancel out in the error check, so it does not verify */
     double start_t;                /* seconds of audio processed when the call began */
 } dsc_message_t;
 
