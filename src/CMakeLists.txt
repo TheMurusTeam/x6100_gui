@@ -24,7 +24,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     meter.c band_info.cpp tx_info.c tx_level.c tx_player.c
     audio.c mfk.cpp cw.cpp panel.cpp
     rtty.c screenshot.c display.cpp gps.c
-    ui_list.c app_info.c diag_log.c
+    ui_list.c app_info.c diag_log.c app_zoom.c
     dxcc.c
     dialog.c dialog_swrscan.c dialog_wefax.c wefax/decoder.c wefax/stations.c
     dialog_navtex.c navtex/decoder.c navtex/sitorb.c navtex/bulletin.c

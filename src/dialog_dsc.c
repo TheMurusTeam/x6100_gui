@@ -32,6 +32,7 @@
 #include "msg.h"
 #include "ui_list.h"
 #include "app_info.h"
+#include "app_zoom.h"   /* 1KO125: zoom 4x while open */
 #include "cfg/cfg_api.h"
 
 #include <ctype.h>
@@ -1945,6 +1946,7 @@ static void detail_pressed_cb(lv_event_t *e)
 
 static void construct_cb(lv_obj_t *parent)
 {
+    app_zoom_begin();       /* 1KO125: zoom 4x while the app is open */
     parent_obj = parent;
     names_load();
     dsc_ships_open();
@@ -2009,6 +2011,7 @@ static void construct_cb(lv_obj_t *parent)
 
 static void destruct_cb(void)
 {
+    app_zoom_end();         /* 1KO125: the zoom of before */
     app_info_abort();
     if (dsp_audio_sub_id != AUDIO_SUB_INVALID)
         dsp_audio_set_active(dsp_audio_sub_id, false);
