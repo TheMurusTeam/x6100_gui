@@ -8,7 +8,7 @@
 # Ubuntu 22.04, as the GitHub workflow. CMake must be 3.23 or newer
 # (aether-x6100-control) but older than 4 (old Buildroot packages such as
 # libical): Ubuntu has 3.22, so a CMake 3.31 from Kitware goes in /opt,
-# as on the GitHub runner.
+# as on the GitHub runner. sqlite3 makes params.default.db (sql/).
 FROM ubuntu:22.04
 
 ARG CMAKE_VERSION=3.31.8
@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         bc cpio file patch perl unzip bzip2 xz-utils gzip \
         python3 python3-distutils python3-setuptools \
         libncurses-dev libssl-dev \
+        sqlite3 \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system --add safe.directory '*'
 
