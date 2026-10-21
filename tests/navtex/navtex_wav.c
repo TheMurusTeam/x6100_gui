@@ -151,6 +151,11 @@ int main(int argc, char **argv)
     long n;
     float *x = read_wav(argv[1], &rate, &n);
     if (!x) return 1;
+    /* 2 s of silence at the end: the decoder prints a character 1.5 s
+     * after it is decided */
+    x = realloc(x, sizeof(float) * (size_t)(n + 24000));
+    memset(x + n, 0, sizeof(float) * 24000);
+    n += 24000;
     if (rate != 12000) {
         long m;
         float *y = resample(x, n, rate, 12000, &m);
