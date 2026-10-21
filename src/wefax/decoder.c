@@ -41,7 +41,8 @@
 
 
 /*
- * 1KO125 "Fading" demodulator (wefax_decoder_set_fading()).
+ * 1KO125 Denoise (wefax_decoder_set_denoise()): a demodulator made for
+ * selective fading, then a light sharpening of each row.
  *
  * Selective fading makes one of the two tones fade for a moment while the
  * other does not: the phase discriminator then follows the stronger tone
@@ -55,13 +56,22 @@
  * absent for a long time (a white chart has little black) does not make the
  * noise at its frequency look like signal.
  *
+ * The moving sums span about 4 pixels, so lines and text 1-2 pixels thick
+ * come out lighter: each row is then sharpened along the line, by
+ * WEFAX_SHARPEN times its difference from the mean of WEFAX_SHARPEN_W
+ * pixels, which gives them back their contrast.
+ *
  * It is used only for the picture; the APT START/STOP detector keeps the
- * phase discriminator.  The picture moves WEFAX_TONE_LEN / 2 samples (about
- * 2 pixels) to the right, the same on every row.
+ * phase discriminator, and the decoder's own measures (black rows, phasing
+ * and slant) see the row before the sharpening.  The picture moves
+ * WEFAX_TONE_LEN / 2 samples (about 2 pixels) to the right, the same on
+ * every row.
  */
 #define WEFAX_TONE_LEN      14
 #define WEFAX_TONE_TAU_S    0.3f
 #define WEFAX_TONE_RATIO    6.0f
+#define WEFAX_SHARPEN       0.7f
+#define WEFAX_SHARPEN_W     5
 
 
 /*
@@ -258,9 +268,10 @@ struct wefax_decoder {
 
 
     /*
-     * 1KO125 "Fading" demodulator, see WEFAX_TONE_LEN.
+     * 1KO125 Denoise, see WEFAX_TONE_LEN.
      */
-    bool fading;
+    bool denoise;
+    uint8_t row_sharp[WEFAX_WIDTH];
 
     float tone_phase;
     float tone_w_i[WEFAX_TONE_LEN], tone_w_q[WEFAX_TONE_LEN];
@@ -356,7 +367,37 @@ struct wefax_decoder {
 };
 
 /*
- * 1KO125 "Fading" demodulator: gray level (0 black .. 255 white) of one
+ * 1KO125 Denoise: the row sharpened along the line, see WEFAX_SHARPEN.
+ * The mean of WEFAX_SHARPEN_W pixels is mirrored at the two ends.
+ */
+static void sharpen_row(
+    const uint8_t *in,
+    uint8_t *out)
+{
+    const int half = WEFAX_SHARPEN_W / 2;
+
+    for (int x = 0; x < WEFAX_WIDTH; x++) {
+        int sum = 0;
+
+        for (int k = -half; k <= half; k++) {
+            int i = x + k;
+            if (i < 0) i = -i - 1;
+            if (i >= WEFAX_WIDTH) i = 2 * WEFAX_WIDTH - i - 1;
+            sum += in[i];
+        }
+
+        const float mean = (float)sum / WEFAX_SHARPEN_W;
+        float v = in[x] + WEFAX_SHARPEN * (in[x] - mean);
+
+        if (v < 0.0f) v = 0.0f;
+        if (v > 255.0f) v = 255.0f;
+        out[x] = (uint8_t)(v + 0.5f);
+    }
+}
+
+
+/*
+ * 1KO125 Denoise demodulator: gray level (0 black .. 255 white) of one
  * sample of the low-passed baseband, see WEFAX_TONE_LEN.
  */
 static float tone_gray(
@@ -679,20 +720,20 @@ void wefax_decoder_reset(
 }
 
 
-void wefax_decoder_set_fading(
+void wefax_decoder_set_denoise(
     wefax_decoder_t *decoder,
     bool on)
 {
     if (decoder) {
-        decoder->fading = on;
+        decoder->denoise = on;
     }
 }
 
 
-bool wefax_decoder_get_fading(
+bool wefax_decoder_get_denoise(
     const wefax_decoder_t *decoder)
 {
-    return decoder && decoder->fading;
+    return decoder && decoder->denoise;
 }
 
 
@@ -1855,7 +1896,7 @@ void wefax_decoder_process(
             /* 1KO125: the gray of the picture (the APT detector below
              * keeps the discriminator) */
             const uint8_t pix_gray =
-                decoder->fading ?
+                decoder->denoise ?
                 (uint8_t)(tone_gray(decoder, filtered_i, filtered_q) + 0.5f) :
                 gray;
 
@@ -2507,8 +2548,15 @@ void wefax_decoder_process(
                     decoder->row_callback
                 ) {
 
+                    const uint8_t *out_row = decoder->row;
+
+                    if (decoder->denoise) {
+                        sharpen_row(decoder->row, decoder->row_sharp);
+                        out_row = decoder->row_sharp;
+                    }
+
                     decoder->row_callback(
-                        decoder->row,
+                        out_row,
                         WEFAX_WIDTH,
                         decoder->row_count,
                         decoder->row_callback_data

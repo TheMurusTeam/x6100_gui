@@ -53,11 +53,12 @@ static const char *const bodies[] = {
     H("CORRECTIONS")
     "Align moves the picture sideways, Tilt straightens a slanted picture. The Tilt is "
     "remembered for each station; Auto Slant measures it on the phasing signal of each fax.\n\n"
-    H("FADING")
-    "With Fading ON (default) the receiver measures the white and the black tone separately "
-    "and follows the level of each one: when one tone fades, white areas no longer turn into "
-    "black streaks. With a strong, steady signal, Fading OFF gives slightly sharper thin "
-    "lines and text.\n\n"
+    H("DENOISE")
+    "With Denoise ON (default) the receiver measures the white and the black tone separately "
+    "and follows the level of each one, so that when one tone fades white areas do not turn "
+    "into black streaks; each line is then lightly sharpened. Denoise OFF is the classic "
+    "receiver: try it if a picture with real shades of gray (a satellite picture) looks "
+    "wrong.\n\n"
     H("FILES")
     "Saved faxes: /mnt/wefax (PNG). Open them with Fax Browser.\n\n"
     H("MICROPHONE")

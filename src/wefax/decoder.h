@@ -95,16 +95,16 @@ bool wefax_decoder_auto_stop_detected(
 
 
 /*
- * 1KO125: "Fading" demodulator for the picture (ON) or the phase
- * discriminator (OFF, the default of a new decoder), see decoder.c.
- * Can be changed while receiving.
+ * 1KO125 Denoise: the demodulator made for selective fading and a light
+ * sharpening (ON), or the phase discriminator (OFF, the default of a new
+ * decoder), see decoder.c.  Can be changed while receiving.
  */
-void wefax_decoder_set_fading(
+void wefax_decoder_set_denoise(
     wefax_decoder_t *decoder,
     bool on
 );
 
-bool wefax_decoder_get_fading(
+bool wefax_decoder_get_denoise(
     const wefax_decoder_t *decoder
 );
 

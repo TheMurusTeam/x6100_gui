@@ -5,9 +5,9 @@
  * WEFAX decoder test tool: a recording through src/wefax/decoder.c, the
  * picture as PGM (1809 pixels wide, one row per line, no slant correction).
  *
- *   wefax_wav IN.wav OUT.pgm [--cont] [--fading]
+ *   wefax_wav IN.wav OUT.pgm [--cont] [--denoise]
  *     --cont     Manual RX (default: Auto RX, waits for the start tone)
- *     --fading   the Fading demodulator (default: the phase discriminator)
+ *     --denoise  Denoise ON (default: OFF, the phase discriminator)
  *
  * IN.wav: 12000 Hz mono, 16-bit PCM (the recordings of the radio).
  */
@@ -32,15 +32,15 @@ static void row_cb(const uint8_t *row, unsigned int width, unsigned int n, void 
 int main(int argc, char **argv)
 {
     const char *in = NULL, *out = NULL;
-    bool cont = false, fading = false;
+    bool cont = false, denoise = false;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--cont")) cont = true;
-        else if (!strcmp(argv[i], "--fading")) fading = true;
+        else if (!strcmp(argv[i], "--denoise")) denoise = true;
         else if (!in) in = argv[i];
         else if (!out) out = argv[i];
     }
     if (!in || !out) {
-        fprintf(stderr, "usage: wefax_wav IN.wav OUT.pgm [--cont] [--fading]\n");
+        fprintf(stderr, "usage: wefax_wav IN.wav OUT.pgm [--cont] [--denoise]\n");
         return 2;
     }
     FILE *f = fopen(in, "rb");
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
     wefax_decoder_t *d = wefax_decoder_create();
     wefax_decoder_set_mode(d, cont ? WEFAX_MODE_CONT : WEFAX_MODE_AUTO);
     wefax_decoder_set_row_callback(d, row_cb, NULL);
-    wefax_decoder_set_fading(d, fading);
+    wefax_decoder_set_denoise(d, denoise);
 
     int16_t b[1200];
     float fb[1200];

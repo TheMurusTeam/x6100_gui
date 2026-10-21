@@ -133,9 +133,9 @@ static void tilt_cb(button_data_t *data);
 /* Auto Slant, see dialog_wefax_slant.inc */
 static const char *slant_label_getter(void);
 static void slant_auto_cb(button_data_t *data);
-static const char *fading_label_getter(void);
-static void fading_cb(button_data_t *data);
-static bool fading_on = true;   /* Fading demodulator ON/OFF, saved in slant.txt */
+static const char *denoise_label_getter(void);
+static void denoise_cb(button_data_t *data);
+static bool denoise_on = true;  /* Denoise ON/OFF, saved in slant.txt */
 static void slant_load(void);
 static void slant_flush(void);
 static void slant_poll(void);
@@ -493,11 +493,11 @@ static button_data_t btn_auto_slant = {
     .press = slant_auto_cb
 };
 
-/* 1KO125: Fading demodulator ON/OFF, see wefax/decoder.c */
-static button_data_t btn_fading = {
+/* 1KO125: Denoise ON/OFF, see wefax/decoder.c */
+static button_data_t btn_denoise = {
     .type = BTN_TEXT_FN,
-    .label_fn = fading_label_getter,
-    .press = fading_cb
+    .label_fn = denoise_label_getter,
+    .press = denoise_cb
 };
 
 
@@ -540,7 +540,7 @@ static buttons_page_t btn_page_4 = {
     .items = {
         &btn_fax_page_4,
         &btn_auto_slant,
-        &btn_fading,
+        &btn_denoise,
         &btn_info,
         &btn_close
     }
@@ -1052,7 +1052,7 @@ static void construct_cb(lv_obj_t *parent)
             NULL
         );
 
-        wefax_decoder_set_fading(decoder, fading_on);
+        wefax_decoder_set_denoise(decoder, denoise_on);
     }
 
     if (dsp_audio_sub_id == AUDIO_SUB_INVALID) {
