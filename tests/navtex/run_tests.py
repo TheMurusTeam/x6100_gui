@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Copyright (C) 2026 Hany El Imam - 1KO125 firmware for the Xiegu X6100
 """
-Synthetic test of the NAVTEX decoders: the same messages at several signal
-to noise ratios (and with frequency offset, clock error, fading), decoded by
-the new decoder (navtex_wav) and the previous one (navtex_wav_old).
+Synthetic test of the NAVTEX decoder: messages at several signal to noise
+ratios (and with frequency offset, clock error, fading), decoded by the
+firmware decoder (navtex_wav).
 
     ./run_tests.py [--quick]
 
@@ -89,17 +89,16 @@ def main():
              ("SNR 5, selective 5 s", ["--snr", "5", "--sfade", "5"]),
              ("SNR 10, 11025 Hz", ["--snr", "10", "--rate", "11025"])]
     tmp = tempfile.mkdtemp(prefix="navtex_test_")
-    print("%-24s %10s %10s" % ("case", "new", "old"))
+    print("%-24s %10s" % ("case", "errors"))
     for name, args in cases:
-        tot_new = tot_old = 0.0
+        tot_new = 0.0
         for seed in seeds:
             msg = message(seed)
             wav = os.path.join(tmp, "t.wav")
             subprocess.run([os.path.join(HERE, "sitorb_gen"), wav, "--seed", str(seed)] + args,
                            input=msg, text=True, check=True)
             tot_new += cer(msg, decode("navtex_wav", wav))
-            tot_old += cer(msg, decode("navtex_wav_old", wav))
-        print("%-24s %9.1f%% %9.1f%%" % (name, 100 * tot_new / len(seeds), 100 * tot_old / len(seeds)))
+        print("%-24s %9.1f%%" % (name, 100 * tot_new / len(seeds)))
 
 
 if __name__ == "__main__":

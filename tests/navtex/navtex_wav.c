@@ -11,9 +11,6 @@
  * standard output; with --quality each character is followed by its
  * quality (0 clean, 1 from the repetition, 2 guessed, 3 lost). Statistics
  * go to standard error.
- *
- * Built twice by the Makefile: navtex_wav (the new SITOR-B decoder,
- * sitorb.c) and navtex_wav_old (the previous decoder, through decoder.h).
  */
 #include <math.h>
 #include <stdint.h>
@@ -22,9 +19,7 @@
 #include <string.h>
 
 #include "decoder.h"
-#ifndef OLD_DECODER
 #include "sitorb.h"
-#endif
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -164,21 +159,12 @@ int main(int argc, char **argv)
         n = m;
     }
 
-#ifdef OLD_DECODER
-    if (centre != 1000) fprintf(stderr, "the old decoder has a fixed centre\n");
-    navtex_decoder_t *d = navtex_decoder_create(rev);
-    navtex_decoder_set_char_q_callback(d, on_char, NULL);
-    for (long i = 0; i < n; i += 512)
-        navtex_decoder_process(d, x + i, (unsigned)(n - i < 512 ? n - i : 512));
-    navtex_decoder_destroy(d);
-#else
     sitorb_t *d = sitorb_create(12000, (float)centre, rev);
     sitorb_set_callback(d, on_char, NULL);
     for (long i = 0; i < n; i += 512)
         sitorb_process(d, x + i, (unsigned)(n - i < 512 ? n - i : 512));
     fprintf(stderr, "afc %.1f Hz, ", sitorb_freq_offset(d));
     sitorb_destroy(d);
-#endif
     fflush(stdout);
     fprintf(stderr, "clean %ld rep %ld guess %ld lost %ld, sync on %ld off %ld\n",
             count_q[0], count_q[1], count_q[2], count_q[3], syncs_on, syncs_off);

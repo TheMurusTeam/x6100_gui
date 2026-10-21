@@ -7,10 +7,9 @@
 | Part | Author | License |
 |---|---|---|
 | R1CBU x6100_gui (the base firmware), including the R1CBU files changed by 1KO125 | Belousov Oleg aka R1CBU and contributors | LGPL 2.1 or later (see `LICENSE`) |
-| WEFAX, NAVTEX/SITOR-B, DSC, SSTV and FT8 CB applications, channel list, Info window, shared widgets, the build scripts and the test tools (`src/dialog_wefax*`, `src/wefax/`, `src/dialog_navtex*`, `src/navtex/`, `src/dialog_dsc*`, `src/dsc/` except `dsc_qrcodegen.*`, `src/dialog_sstv*`, `src/sstv/`, `src/sstv_resources.*`, `src/dialog_ft8cb.*`, `src/ft8cb/`, `src/channels.*`, `src/dialog_channels.*`, `src/broadcast_db.*`, `src/ui_list.*`, `src/diag_log.*`, `src/app_info.*`, `buildroot/make_sdcard.sh`, `buildroot/docker/`, `tests/navtex/` except `tests/navtex/old/`), and the SSTV denoiser model `rootfs/usr/share/x6100/sstv_dnn*.bin` | Hany El Imam (`dialog_ft8cb.*` is based on R1CBU `dialog_ft8.*`) | LGPL 2.1 or later (see `LICENSE`) |
+| WEFAX, NAVTEX/SITOR-B, DSC, SSTV and FT8 CB applications, channel list, Info window, shared widgets, the build scripts and the test tools (`src/dialog_wefax*`, `src/wefax/`, `src/dialog_navtex*`, `src/navtex/`, `src/dialog_dsc*`, `src/dsc/` except `dsc_qrcodegen.*`, `src/dialog_sstv*`, `src/sstv/`, `src/sstv_resources.*`, `src/dialog_ft8cb.*`, `src/ft8cb/`, `src/channels.*`, `src/dialog_channels.*`, `src/broadcast_db.*`, `src/ui_list.*`, `src/diag_log.*`, `src/app_info.*`, `buildroot/make_sdcard.sh`, `buildroot/docker/`, `tests/navtex/`), and the SSTV denoiser model `rootfs/usr/share/x6100/sstv_dnn*.bin` | Hany El Imam (`dialog_ft8cb.*` is based on R1CBU `dialog_ft8.*`) | LGPL 2.1 or later (see `LICENSE`) |
 | QR code generator (`src/dsc/dsc_qrcodegen.*`) | Project Nayuki | MIT |
 | JSON parser (`src/cJSON.*`) | Dave Gamble and cJSON contributors | MIT |
-| Previous SITOR-B demodulator, kept only to compare it with the new one in the NAVTEX test tools (`tests/navtex/old/`); it is not part of the firmware | fldigi (W1HKJ and contributors, after JNX by Paul Lutus), adapted by Franco Venturi | GPL 3.0 or later (`tests/navtex/old/COPYING`; `gfft.h`: LGPL 3.0 or later) |
 
 ## The firmware as a whole
 
