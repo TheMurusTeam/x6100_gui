@@ -1946,11 +1946,12 @@ static bool save_fax_png_async(void)
         );
     }
 
+    /* 1KO125: file name in UTC, the time of the broadcast schedules */
     time_t now = time(NULL);
     struct tm tm_now;
 
-    if (!localtime_r(&now, &tm_now)) {
-        printf("WEFAX SAVE: localtime failed\n");
+    if (!gmtime_r(&now, &tm_now)) {
+        printf("WEFAX SAVE: gmtime failed\n");
         free(job->image);
         free(job);
         return false;
