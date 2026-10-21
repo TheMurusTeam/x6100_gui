@@ -46,8 +46,9 @@ With [OrbStack](https://orbstack.dev) or Docker Desktop:
 
 It builds a small Ubuntu 22.04 image (`docker/Dockerfile`) and runs
 `make_sdcard.sh` in it. The code stays in your `x6100_gui` folder, where
-you edit it; Buildroot and its outputs (about 20 GB) stay in two Docker
-volumes, `x6100-1ko125-buildroot` and `x6100-1ko125-ccache`. The image is
+you edit it; Buildroot and its outputs (about 20 GB) stay in a Docker
+volume for each Buildroot commit, `x6100-1ko125-buildroot-<commit>`, and
+the compiler cache in `x6100-1ko125-ccache`. The image is
 written next to `x6100_gui` (or in the folder given as argument).
 
 `build.sh` (R1CBU) is still here: it builds only the GUI binary against an

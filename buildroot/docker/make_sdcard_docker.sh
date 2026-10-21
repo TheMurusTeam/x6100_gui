@@ -16,8 +16,12 @@
 # The build runs in the background: Ctrl+C closes only the log view.
 #   docker logs -f x6100-1ko125-build     shows the log again
 #   docker stop x6100-1ko125-build        stops the build
-#   docker volume rm x6100-1ko125-buildroot x6100-1ko125-ccache
+#   docker volume rm x6100-1ko125-buildroot-XXXXXXX
 #                                         deletes Buildroot and its outputs
+#
+# Each Buildroot commit has its own volume (XXXXXXX = the first 7 digits of
+# BR_COMMIT in make_sdcard.sh), so branches on different Buildroots do not
+# spoil each other's builds. The ccache volume is shared.
 set -euo pipefail
 
 NAME=x6100-1ko125-build
@@ -25,6 +29,8 @@ GUI=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=${1:-$(dirname "$GUI")}
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
+BR_COMMIT=$(sed -n 's/^BR_COMMIT=//p' "$GUI/buildroot/make_sdcard.sh")
+BR_VOL=x6100-1ko125-buildroot-${BR_COMMIT:0:7}
 
 if [ -n "$(docker ps -q -f "name=^${NAME}$")" ]; then
     echo "A build is already running. Its log: docker logs -f $NAME"
@@ -36,11 +42,12 @@ docker build -q -t "$NAME" "$GUI/buildroot/docker" >/dev/null
 
 docker run -d --name "$NAME" \
     -v "$GUI":/work/x6100_gui \
-    -v x6100-1ko125-buildroot:/work/AetherX6100Buildroot \
+    -v "$BR_VOL":/work/AetherX6100Buildroot \
     -v x6100-1ko125-ccache:/home/builder/.buildroot-ccache \
     -v "$OUT":/work/out \
     "$NAME" /work/x6100_gui/buildroot/make_sdcard.sh /work/out >/dev/null
 
+echo "Buildroot volume: $BR_VOL"
 echo "Build started; the image will be written to $OUT"
 echo "Ctrl+C closes this view, the build goes on (docker logs -f $NAME shows it again)"
 docker logs -f "$NAME"
