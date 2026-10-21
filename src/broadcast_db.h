@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 2026 Hany El Imam - 1KO125 firmware for the Xiegu X6100
+ * See NOTICE-1KO125.md.
+ */
 #ifndef BROADCAST_DB_H
 #define BROADCAST_DB_H
 

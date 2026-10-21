@@ -1,9 +1,11 @@
 /*
  * Xiegu X6100 Channel List manager
  *
- * (c) 2026 Hany El Imam
+ * Copyright (C) 2026 Hany El Imam
  * www.hanynet.com - www.murusfirewall.com - https://github.com/TheMurusTeam
  *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * See NOTICE-1KO125.md.
  */
 
 /*

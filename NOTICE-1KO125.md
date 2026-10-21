@@ -6,32 +6,31 @@
 
 | Part | Author | License |
 |---|---|---|
-| R1CBU x6100_gui (the base firmware) | Belousov Oleg aka R1CBU and contributors | LGPL 2.1 or later (see `LICENSE`) |
-| WEFAX, NAVTEX/SITOR-B, DSC and SSTV applications, Info window (`src/dialog_wefax*`, `src/wefax/`, `src/dialog_navtex*`, `src/navtex/decoder.*`, `src/navtex/bulletin.*`, `src/dialog_dsc*`, `src/dsc/`, `src/dialog_sstv*`, `src/sstv/`, `src/sstv_resources.*`, `src/app_info.*`) | Hany El Imam | GPL 3.0 or later, with the additional term below (see `COPYING`) |
+| R1CBU x6100_gui (the base firmware), including the R1CBU files changed by 1KO125 | Belousov Oleg aka R1CBU and contributors | LGPL 2.1 or later (see `LICENSE`) |
+| WEFAX, NAVTEX/SITOR-B, DSC, SSTV and FT8 CB applications, channel list, Info window, shared widgets and the build scripts (`src/dialog_wefax*`, `src/wefax/`, `src/dialog_navtex*`, `src/navtex/decoder.*`, `src/navtex/bulletin.*`, `src/dialog_dsc*`, `src/dsc/` except `dsc_qrcodegen.*`, `src/dialog_sstv*`, `src/sstv/`, `src/sstv_resources.*`, `src/dialog_ft8cb.*`, `src/ft8cb/`, `src/channels.*`, `src/dialog_channels.*`, `src/broadcast_db.*`, `src/ui_list.*`, `src/diag_log.*`, `src/app_info.*`, `buildroot/make_sdcard.sh`, `buildroot/docker/`), and the SSTV denoiser model `rootfs/usr/share/x6100/sstv_dnn*.bin` | Hany El Imam (`dialog_ft8cb.*` is based on R1CBU `dialog_ft8.*`) | LGPL 2.1 or later (see `LICENSE`) |
 | SITOR-B demodulator (`src/navtex/navtex_rx.*`, `fftfilt.*`, `complex.h`, `misc.h`, `gfft.h`) | fldigi (W1HKJ and contributors, after JNX by Paul Lutus), adapted by Franco Venturi | GPL 3.0 or later (`gfft.h`: LGPL 3.0 or later) |
 | QR code generator (`src/dsc/dsc_qrcodegen.*`) | Project Nayuki | MIT |
+| JSON parser (`src/cJSON.*`) | Dave Gamble and cJSON contributors | MIT |
 
-Because it contains code under the GPL 3.0, the firmware as a whole (the
-compiled program and the SD card image) is distributed under the terms of the
-**GNU General Public License, version 3 or later**. The LGPL 2.1 of the R1CBU
-files allows this (LGPL 2.1, section 3). Each source file keeps the license
-written in its header.
+## The firmware as a whole
 
-## Additional term (GNU GPL v3, section 7(b))
+The 1KO125 files are under the LGPL 2.1 or later, like R1CBU x6100_gui.
 
-The following additional term applies to the files written by Hany El Imam
-listed above:
+The SITOR-B demodulator taken from fldigi is under the GPL 3.0 or later.
+**While it is part of the program, the firmware as a whole (the compiled
+program and the SD card image) is distributed under the terms of the GNU
+General Public License, version 3 or later** (see `COPYING`); the LGPL 2.1 of
+the other files allows this (LGPL 2.1, section 3). It is going to be
+replaced by a new demodulator under the LGPL 2.1; from then on the whole
+firmware is under the LGPL 2.1 or later.
 
-> Any work that contains these files, or a work based on them, must preserve
-> the author attribution "Hany El Imam" and the credits of the WEFAX,
-> NAVTEX/SITOR-B, DSC and SSTV applications in the Appropriate Legal Notices
-> displayed by its user interface. In 1KO125 these notices are shown in the
-> Info window of each application.
+Each source file keeps the license written in its header.
 
 ## Warranty
 
 This program comes with ABSOLUTELY NO WARRANTY, to the extent permitted by
-applicable law. See `COPYING`, sections 15 and 16.
+applicable law. See `LICENSE`, sections 15 and 16, and `COPYING`, sections
+15 and 16.
 
 ## On the radio
 
