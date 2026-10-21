@@ -33,6 +33,7 @@
 #include "ui_list.h"
 #include "app_info.h"
 #include "app_radio.h"  /* 1KO125: radio set up while open */
+#include "spectrum.h"
 #include "cfg/cfg_api.h"
 
 #include <ctype.h>
@@ -1947,6 +1948,7 @@ static void detail_pressed_cb(lv_event_t *e)
 static void construct_cb(lv_obj_t *parent)
 {
     app_radio_begin();      /* 1KO125: USB-D locked, zoom 4x, DSP off while open */
+    spectrum_set_markers(915, 1085);   /* tuning markers: 1000 Hz -/+ 85 Hz */
     parent_obj = parent;
     names_load();
     dsc_ships_open();
@@ -2012,6 +2014,7 @@ static void construct_cb(lv_obj_t *parent)
 static void destruct_cb(void)
 {
     app_radio_end();        /* 1KO125: mode, zoom and DSP of before */
+    spectrum_clear_markers();
     app_info_abort();
     if (dsp_audio_sub_id != AUDIO_SUB_INVALID)
         dsp_audio_set_active(dsp_audio_sub_id, false);
