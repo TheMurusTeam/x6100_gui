@@ -6,7 +6,7 @@
  *
  *   navtex_wav IN.wav [--rev] [--centre HZ] [--quality]
  *
- * Any sample rate and 16-bit PCM, mono or stereo (the left channel): the
+ * Any sample rate, 16-bit PCM or 32-bit float, mono or stereo (the left channel): the
  * audio is resampled to 12000 Hz, the rate of the X6100. The text goes to
  * standard output; with --quality each character is followed by its
  * quality (0 clean, 1 from the repetition, 2 guessed, 3 lost). Statistics
@@ -60,7 +60,7 @@ static float *read_wav(const char *path, unsigned *rate, long *frames)
         fclose(f);
         return NULL;
     }
-    unsigned ch = 0, bits = 0;
+    unsigned ch = 0, bits = 0, fmt = 0;
     *rate = 0;
     for (;;) {
         uint8_t c[8];
@@ -70,19 +70,33 @@ static float *read_wav(const char *path, unsigned *rate, long *frames)
             uint8_t fm[40] = {0};
             if (fread(fm, 1, len < 40 ? len : 40, f) == 0) break;
             if (len > 40) fseek(f, len - 40, SEEK_CUR);
+            fmt = fm[0] | fm[1] << 8;
+            if (fmt == 0xFFFE && len >= 26)
+                fmt = fm[24] | fm[25] << 8;    /* WAVE_FORMAT_EXTENSIBLE */
             ch = fm[2] | fm[3] << 8;
             *rate = fm[4] | fm[5] << 8 | fm[6] << 16 | (uint32_t)fm[7] << 24;
             bits = fm[14] | fm[15] << 8;
         } else if (!memcmp(c, "data", 4)) {
-            if (bits != 16 || ch < 1) {
-                fprintf(stderr, "%s: only 16-bit PCM\n", path);
+            int pcm16 = fmt == 1 && bits == 16, flt32 = fmt == 3 && bits == 32;
+            if (!(pcm16 || flt32) || ch < 1) {
+                fprintf(stderr, "%s: only 16-bit PCM or 32-bit float\n", path);
                 break;
             }
-            long n = len / (2 * ch);
-            int16_t *raw = malloc((size_t)len);
+            unsigned bps = bits / 8;
+            long n = len / (bps * ch);
+            uint8_t *raw = malloc((size_t)len);
             float *x = malloc(sizeof(float) * (size_t)n);
-            n = (long)fread(raw, 2 * ch, (size_t)n, f);
-            for (long i = 0; i < n; i++) x[i] = raw[i * ch] / 32768.0f;
+            n = (long)fread(raw, bps * ch, (size_t)n, f);
+            for (long i = 0; i < n; i++) {
+                const uint8_t *q = raw + (size_t)i * bps * ch;
+                if (pcm16) {
+                    int16_t v;
+                    memcpy(&v, q, 2);
+                    x[i] = v / 32768.0f;
+                } else {
+                    memcpy(&x[i], q, 4);
+                }
+            }
             free(raw);
             fclose(f);
             *frames = n;

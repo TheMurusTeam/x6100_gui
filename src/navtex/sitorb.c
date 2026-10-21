@@ -39,7 +39,18 @@
 #define SPB         20              /* samples per bit (100 Bd) */
 #define TONE_HZ     85.0f           /* half of the 170 Hz shift */
 #define AFC_MAX_HZ  80.0f
+#ifndef LPF_CUT_HZ
 #define LPF_CUT_HZ  260.0f
+#endif
+#ifndef AFC_GAIN
+#define AFC_GAIN    0.003f
+#endif
+#ifndef CLK_LEVEL
+#define CLK_LEVEL   0.65f           /* below it the bit clock holds */
+#endif
+#ifndef CLK_DECAY
+#define CLK_DECAY   0.995f
+#endif
 
 /* ---- the 7-unit code (ITU-R M.625, tables 1 and 2) ------------------------------
  * In order of transmission, B = 1 (the higher tone), Y = 0. All 35 patterns
@@ -79,6 +90,15 @@ static const char figures[26] = {
 #define SLOT_HIST   32              /* characters kept per bit phase */
 #define HUNT_SLOTS  20              /* window of the FEC search */
 #define HUNT_PAIRS  4               /* DX/RX repetitions needed to lock */
+#define OUT_DELAY   150             /* bits a character waits before it is
+                                       printed: a slip found in this time is
+                                       corrected without printing garbage */
+#define PENDING     64
+
+typedef struct {
+    int64_t end;                    /* last bit of the RX copy */
+    int8_t code, q, agreed;         /* agreed: DX and RX were the same */
+} pending_t;
 
 typedef struct { float re, im; } cpx;
 
@@ -115,6 +135,11 @@ struct sitorb {
     int phase;                      /* FS sample index modulo SPB */
     int countdown;                  /* FS samples to the next bit */
     float level;                    /* mean |d| at the sampling instants */
+    unsigned clk_bits;
+    int clk_far;                    /* bits with the clock far from the target */
+    pending_t pend[PENDING];        /* decided characters not printed yet */
+    int npend;
+    int64_t last_flushed;           /* end of the last printed character */
 
     /* soft bits */
     float bits[BIT_RING];
@@ -190,11 +215,22 @@ static void emit(sitorb_t *s, int c, int q)
         s->cb(c, q, s->user);
 }
 
+static void flush(sitorb_t *s, int all);
+
 static void set_sync(sitorb_t *s, int on)
 {
     if (s->locked == on)
         return;
+    if (!on)
+        flush(s, 1);
     s->locked = on;
+    if (!on) {
+        /* start the search from scratch: the evidence of the transmission
+         * that has just ended must not lock on its idle signals */
+        memset(s->ev_rep, 0, sizeof(s->ev_rep));
+        memset(s->ev_ph, 0, sizeof(s->ev_ph));
+        memset(s->ev_n, 0, sizeof(s->ev_n));
+    }
     emit(s, on ? NAVTEX_EV_SYNC_ON : NAVTEX_EV_SYNC_OFF, NAVTEX_Q_EVENT);
 }
 
@@ -219,6 +255,33 @@ static void put_code(sitorb_t *s, int c, int q)
     case C_FIGS:  s->figs = 1; break;
     default:      break;            /* no information, service signals */
     }
+}
+
+/* print the decided characters older than OUT_DELAY bits (all if all) */
+static void flush(sitorb_t *s, int all)
+{
+    int k = 0;
+    while (k < s->npend && (all || s->pend[k].end < s->nbits - OUT_DELAY)) {
+        put_code(s, s->pend[k].code, s->pend[k].q);
+        s->last_flushed = s->pend[k].end;
+        k++;
+    }
+    if (k) {
+        memmove(s->pend, s->pend + k, sizeof(pending_t) * (size_t)(s->npend - k));
+        s->npend -= k;
+    }
+}
+
+/* a decided character, printed OUT_DELAY bits later */
+static void queue_code(sitorb_t *s, int64_t end, int c, int q, int agreed)
+{
+    if (s->npend == PENDING)
+        flush(s, 1);
+    pending_t *p = &s->pend[s->npend++];
+    p->end = end;
+    p->code = (int8_t)c;
+    p->q = (int8_t)q;
+    p->agreed = (int8_t)agreed;
 }
 
 /* ---- characters ---------------------------------------------------------------- */
@@ -279,8 +342,9 @@ static void decode_pair(sitorb_t *s, int64_t n)
     if (hd == C_RQ || hd == C_BETA)
         return;
     if (hd == C_ALPHA) {
-        /* end of the transmission: idle alpha in two DX positions */
-        if (++s->alpha_dx >= 2) {
+        /* end of the transmission: idle alpha in two DX positions (not in
+         * the old pairs decoded at the lock, which can be from before) */
+        if (!s->fresh && ++s->alpha_dx >= 2) {
             set_sync(s, 0);
             return;
         }
@@ -309,7 +373,8 @@ static void decode_pair(sitorb_t *s, int64_t n)
     if (IS_SERVICE(c))
         return;
 
-    s->bad += ((q == NAVTEX_Q_LOST ? 1.0f : 0.0f) - s->bad) * 0.08f;
+    if (!s->fresh)
+        s->bad += ((q == NAVTEX_Q_LOST ? 1.0f : 0.0f) - s->bad) * 0.08f;
     /* the oldest pairs, decoded at the lock, can be from before the signal:
      * nothing is printed until the first character received twice */
     if (s->fresh) {
@@ -317,7 +382,7 @@ static void decode_pair(sitorb_t *s, int64_t n)
             return;                 /* starts with two copies that agree */
         s->fresh = 0;
     }
-    put_code(s, c, q);
+    queue_code(s, br + 6, c, q, dv && hr == hd);
 }
 
 /* soft evidence of the alignment (p, dx) */
@@ -385,7 +450,7 @@ static void decode_locked(sitorb_t *s)
         if (end >= s->nbits)
             break;
         s->next_rx_slot += 2;
-        if (end <= s->last_out_bit)
+        if (end <= s->last_out_bit + 7)
             continue;               /* already decoded before a relock */
         s->last_out_bit = end;
         decode_pair(s, n);
@@ -393,7 +458,8 @@ static void decode_locked(sitorb_t *s)
             return;
         /* the signal is gone: nearly every character lost, or the copies
          * do not look alike any more */
-        if (s->bad > 0.85f || evidence(s, s->lock_phase, s->lock_dx) < 0.12f) {
+        if (s->bad > 0.85f || (s->ev_n[s->lock_phase][s->lock_dx] >= 16 &&
+                                evidence(s, s->lock_phase, s->lock_dx) < 0.12f)) {
             set_sync(s, 0);
             return;
         }
@@ -412,11 +478,23 @@ static void lock_on(sitorb_t *s, int p, int dx, int64_t n)
     while (first - 5 < 0)
         first += 2;
     s->next_rx_slot = first;
-    s->bad = 0;
     s->alpha_dx = 0;
+    s->lock_score = HUNT_PAIRS;
+    if (s->locked) {
+        /* a slip: the characters decided since the last one received twice
+         * are probably wrong; they are decided again at the new alignment */
+        int k = s->npend;
+        while (k > 0 && !s->pend[k - 1].agreed)
+            k--;
+        if (k < s->npend) {
+            s->last_out_bit = k ? s->pend[k - 1].end : s->last_flushed;
+            s->npend = k;
+        }
+        return;
+    }
+    s->bad = 0;
     s->figs = 0;
     s->fresh = 1;
-    s->lock_score = HUNT_PAIRS;
     set_sync(s, 1);
 }
 
@@ -522,6 +600,7 @@ static void new_bit(sitorb_t *s, float d)
             lock_on(s, bp, bdx, n);
         }
         decode_locked(s);
+        flush(s, 0);
     } else {
         hunt(s, p, n);
         /* soft: a weak signal that the hard search does not catch */
@@ -563,7 +642,11 @@ static void demod(sitorb_t *s, cpx z)
     /* bit clock: d changes the least where the one-bit correlators cover
      * exactly one bit, which is the best sampling instant */
     int ph = s->phase;
-    s->trans[ph] = s->trans[ph] * (s->locked ? 0.99f : 0.97f) + fabsf(d - s->prev_d);
+    /* in a fade or in noise the transitions count less */
+    float cw = s->locked ? (s->level - 0.5f) * 5 : 1;
+    if (cw > 1) cw = 1;
+    if (cw < 0.05f) cw = 0.05f;
+    s->trans[ph] = s->trans[ph] * (1 - (1 - (s->locked ? CLK_DECAY : 0.97f)) * cw) + cw * fabsf(d - s->prev_d);
     s->prev_d = d;
     s->phase = (ph + 1) % SPB;
 
@@ -585,7 +668,21 @@ static void demod(sitorb_t *s, cpx z)
     }
     int now = ph;                            /* phase of this sample */
     int diff = (target - now + SPB + SPB / 2) % SPB - SPB / 2;
-    s->countdown = SPB + (diff > 0 ? 1 : diff < 0 ? -1 : 0);
+    /* the bit rate is exact (30 ppm): when locked the clock moves at most
+     * one sample every 8 bits, every 64 bits in a fade, so that a fade
+     * cannot drag it away */
+    int step = diff > 0 ? 1 : diff < 0 ? -1 : 0;
+    ++s->clk_bits;
+    if (s->locked && ((s->clk_bits & 7) || (s->level <= CLK_LEVEL && (s->clk_bits & 63))))
+        step = 0;
+    /* but a jump of the signal timing (audio lost in the recording or in
+     * the radio) is followed at once, when it lasts */
+    s->clk_far = (diff >= 5 || diff <= -5) && s->level > CLK_LEVEL ? s->clk_far + 1 : 0;
+    if (s->clk_far >= 24) {
+        step = diff;
+        s->clk_far = 0;
+    }
+    s->countdown = SPB + step;
 
     s->level += (fabsf(d) - s->level) * 0.02f;
     float e = eb + ey;
@@ -596,16 +693,16 @@ static void demod(sitorb_t *s, cpx z)
      * there, when the bit is clear and the signal is good */
     if (strong && fabsf(d) > 0.7f && (s->locked || s->level > 0.75f)) {
         float err = s->fq_sum / SPB - (d_raw > 0 ? TONE_HZ : -TONE_HZ);
-        s->afc_hz += err * 0.01f;
+        s->afc_hz += err * AFC_GAIN;
         if (s->afc_hz > AFC_MAX_HZ) s->afc_hz = AFC_MAX_HZ;
         if (s->afc_hz < -AFC_MAX_HZ) s->afc_hz = -AFC_MAX_HZ;
     }
 
-    /* the soft bit: the difference of the two tones against the mean
-     * energy, so that a bit received in a fade counts less */
-    float soft = (s->reverse ? ey - eb : eb - ey) / (s->energy + 1e-20f);
-    if (soft > 2) soft = 2;
-    if (soft < -2) soft = -2;
+    /* the soft bit: d, weighed down when the tones are weaker than usual
+     * (a fade), but never weighed up (a burst of noise must not outweigh
+     * the other copy of the character) */
+    float w = s->energy > 0 ? e / s->energy : 1;
+    float soft = d * (w < 1 ? w : 1);
     new_bit(s, soft);
 }
 

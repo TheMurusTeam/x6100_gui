@@ -11,7 +11,7 @@ Tools to test the SITOR-B receiver of the NAVTEX application
 | Tool | What it does |
 |---|---|
 | `sitorb_gen OUT.wav [--snr DB] [--off HZ] [--ppm N] [--fade S] [--rate HZ] [--rev] < text` | a NAVTEX message sent in SITOR-B (phasing, DX/RX repetition, idle alpha), with noise in 2500 Hz, frequency offset, clock error, fading |
-| `navtex_wav IN.wav` | decodes a recording with the firmware decoder; resamples to 12000 Hz; `--quality` writes the quality of each character after it (0 clean, 1 from the repetition, 2 guessed, 3 lost) |
+| `navtex_wav IN.wav [--centre HZ]` | decodes a recording (16-bit PCM or 32-bit float; `--centre` when the tones are not around 1000 Hz) with the firmware decoder; resamples to 12000 Hz; `--quality` writes the quality of each character after it (0 clean, 1 from the repetition, 2 guessed, 3 lost) |
 | `navtex_wav_old IN.wav` | the same with the previous decoder (fldigi demodulator, GPL 3, in `old/`), only for comparison |
 | `run_tests.py` | the same messages through both decoders at several signal to noise ratios: character error rate |
 
