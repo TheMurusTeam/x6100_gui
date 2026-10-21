@@ -837,11 +837,12 @@ static bool save_text(char *name, size_t name_size)
         return false;
     }
 
+    /* 1KO125: file name in UTC, the time of the broadcast schedules */
     time_t now = time(NULL);
     struct tm tm_now;
 
-    if (!localtime_r(&now, &tm_now)) {
-        fprintf(stderr, "NAVTEX SAVE: localtime failed\n");
+    if (!gmtime_r(&now, &tm_now)) {
+        fprintf(stderr, "NAVTEX SAVE: gmtime failed\n");
         return false;
     }
 
