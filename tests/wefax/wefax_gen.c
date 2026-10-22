@@ -7,6 +7,12 @@
  * radio (12000 Hz mono 16-bit WAV, the format of the radio's recordings).
  *
  *   wefax_gen IN.pgm OUT.wav [options]
+ *   wefax_pair IN.pgm OUT.pgm [options] [--denoise]
+ *
+ * wefax_pair is the same program built with the decoder of the firmware
+ * (src/wefax/decoder.c, -DWEFAX_PAIR): the audio goes straight into the
+ * decoder (Auto RX, as on the radio) and OUT.pgm is the received fax,
+ * without writing the WAV. Used to make training pairs for the denoiser.
  *
  *   IN.pgm         the picture, 8-bit PGM (P5), any size: each row is
  *                  stretched to the whole line, as Northwood sends it
@@ -40,6 +46,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef WEFAX_PAIR
+#include "decoder.h"
+#endif
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -140,12 +150,51 @@ static void path_gain(const path_t *p, double t, double *re, double *im)
     *im = b / sqrt(NSIN);
 }
 
+#ifdef WEFAX_PAIR
+static uint8_t *dimg;
+static unsigned int drows;
+
+static void row_cb(const uint8_t *row, unsigned int width, unsigned int nr, void *user)
+{
+    (void)user;
+    if (nr >= WEFAX_MAX_ROWS) return;
+    memcpy(dimg + (size_t)nr * WEFAX_WIDTH, row, width < WEFAX_WIDTH ? width : WEFAX_WIDTH);
+    if (nr + 1 > drows) drows = nr + 1;
+}
+
+/* the audio through the decoder of the firmware, the fax as PGM */
+static int write_decoded(const char *path, const int16_t *pcm, long n, int denoise)
+{
+    dimg = calloc((size_t)WEFAX_MAX_ROWS * WEFAX_WIDTH, 1);
+    wefax_decoder_t *d = wefax_decoder_create();
+    wefax_decoder_set_mode(d, WEFAX_MODE_AUTO);
+    wefax_decoder_set_row_callback(d, row_cb, NULL);
+    wefax_decoder_set_denoise(d, denoise);
+    float fb[1200];
+    for (long i = 0; i < n; i += 1200) {
+        long m = n - i < 1200 ? n - i : 1200;
+        for (long k = 0; k < m; k++) fb[k] = pcm[i + k] / 32768.0f;
+        wefax_decoder_process(d, fb, (unsigned int)m);
+    }
+    wefax_decoder_destroy(d);
+    if (drows == 0) { fprintf(stderr, "%s: no fax decoded\n", path); return -1; }
+    FILE *f = fopen(path, "wb");
+    if (!f) { perror(path); return -1; }
+    fprintf(f, "P5\n%d %u\n255\n", WEFAX_WIDTH, drows);
+    fwrite(dimg, WEFAX_WIDTH, drows, f);
+    fclose(f);
+    free(dimg);
+    return 0;
+}
+#endif
+
 int main(int argc, char **argv)
 {
     const char *in = NULL, *out = NULL;
     double snr = 1e9, delay_ms = 1.5, doppler = 0.2, flat = 0, depth = 15, clicks = 0, off = 0, ppm = 0;
     double scatter = 1e9;    /* none: all paths fade */
     double jitter = 0;
+    int denoise = 0;
     int paths = 1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--snr") && i + 1 < argc) snr = atof(argv[++i]);
@@ -154,6 +203,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--doppler") && i + 1 < argc) doppler = atof(argv[++i]);
         else if (!strcmp(argv[i], "--scatter") && i + 1 < argc) scatter = atof(argv[++i]);
         else if (!strcmp(argv[i], "--jitter") && i + 1 < argc) jitter = atof(argv[++i]);
+        else if (!strcmp(argv[i], "--denoise")) denoise = 1;
         else if (!strcmp(argv[i], "--flat") && i + 1 < argc) flat = atof(argv[++i]);
         else if (!strcmp(argv[i], "--depth") && i + 1 < argc) depth = atof(argv[++i]);
         else if (!strcmp(argv[i], "--clicks") && i + 1 < argc) clicks = atof(argv[++i]);
@@ -251,6 +301,10 @@ int main(int argc, char **argv)
         pcm[i] = (int16_t)lrint(fmax(-32767, fmin(32767, v * 32767)));
     }
 
+#ifdef WEFAX_PAIR
+    if (write_decoded(out, pcm, n, denoise)) return 1;
+#else
+    (void)denoise;
     FILE *fo = fopen(out, "wb");
     if (!fo) { perror(out); return 1; }
     uint32_t data = (uint32_t)n * 2, r = (uint32_t)RATE, v32;
@@ -263,6 +317,7 @@ int main(int argc, char **argv)
     fwrite("data", 1, 4, fo); fwrite(&data, 4, 1, fo);
     fwrite(pcm, 2, (size_t)n, fo);
     fclose(fo);
+#endif
     fprintf(stderr, "%s: %d x %d picture, %.0f s\n", out, pw, ph, t_end);
     return 0;
 }
