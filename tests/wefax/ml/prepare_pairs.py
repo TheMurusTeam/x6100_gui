@@ -7,7 +7,11 @@ goes through the simulated HF channel several times, each time with other
 random conditions near the measured ones, and through the decoder of the
 firmware (Denoise ON, as the radio saves the fax).
 
-    prepare_pairs.py ORIGINALS_FOLDER PAIRS_FOLDER [--per 20] [--jobs N]
+    prepare_pairs.py ORIGINALS_FOLDER PAIRS_FOLDER [--per 20] [--jobs N] [--exclude SETS_FOLDER]
+
+--exclude leaves out every original that is also in a FAX SET (same
+picture, whatever the file name): those are kept for test_real.py, and a
+network trained on them would look better on the test than it is.
 
 Each pair is PAIRS_FOLDER/<name>_<k>.npz with
     rx      uint8 1809 x 1293, the received fax, aligned with the original
@@ -18,6 +22,7 @@ new originals arrive. ORIGINALS_FOLDER is searched in subfolders too.
 """
 import argparse
 import glob
+import hashlib
 import os
 import random
 import sys
@@ -90,12 +95,25 @@ def main():
     ap.add_argument("pairs")
     ap.add_argument("--per", type=int, default=20, help="pairs per original (default 20)")
     ap.add_argument("--jobs", type=int, default=os.cpu_count())
+    ap.add_argument("--exclude", help="FAX SETs folder: its originals are not used")
     a = ap.parse_args()
 
     files = sorted(set(glob.glob(os.path.join(a.originals, "**", "*.bmp"), recursive=True) +
                        glob.glob(os.path.join(a.originals, "**", "*.BMP"), recursive=True)))
     if not files:
         sys.exit(f"no .bmp in {a.originals}")
+
+    def digest(f):
+        with open(f, "rb") as fh:
+            return hashlib.sha1(fh.read()).hexdigest()
+
+    if a.exclude:
+        test = {digest(f) for f in glob.glob(os.path.join(a.exclude, "**", "*.bmp"), recursive=True)}
+        before = len(files)
+        files = [f for f in files if digest(f) not in test]
+        print(f"{before - len(files)} originals left out: they are in the FAX SETs ({len(test)} there)")
+    else:
+        print("WARNING: no --exclude: originals of the FAX SETs, if any, are used for training too")
     os.makedirs(a.pairs, exist_ok=True)
     jobs = []
     for f in files:

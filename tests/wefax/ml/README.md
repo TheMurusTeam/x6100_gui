@@ -54,11 +54,13 @@ Every time you open a new Command Prompt: `cd C:\wefax-ml` and
 
 ## 3. Training pairs
 
-    python prepare_pairs.py originals pairs --per 20
+    python prepare_pairs.py originals pairs --per 20 --exclude sets
 
 20 versions of every original, each through other conditions (noise,
 selective fading, short dips, static crashes, line jitter). It uses all the
-processor cores; each pair is about 3 MB. Run it again when new originals
+processor cores; each pair is about 3 MB. `--exclude sets` leaves out the
+originals of the FAX SETs (found by content, whatever the file name): they
+are the test, and must not be seen in the training. Run it again when new originals
 arrive: only the new ones are done.
 
 ## 4. Training
