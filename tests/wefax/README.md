@@ -7,6 +7,13 @@ on a computer (Linux or macOS):
     ./wefax_wav REC.wav old.pgm              # phase discriminator
     ./wefax_wav REC.wav new.pgm --denoise    # Denoise ON
 
+`wefax_gen IN.pgm OUT.wav [--snr DB] [--paths N] [--delay MS] [--doppler HZ]
+[--flat S] [--clicks N] [--off HZ] [--ppm N]` makes the broadcast of a
+picture (start tone, phasing, picture, stop tone) through a simulated HF
+channel: noise, 2-3 propagation paths that fade on their own (selective
+fading), slow fading, static crashes. `wefax_score.py ORIGINAL DECODED.pgm`
+aligns a decoded fax with its original and prints the mean gray error.
+
 `--cont` decodes from the beginning of the recording (Manual RX) when the
 start tone is not in it. The picture is written as PGM, 1809 pixels wide,
 without the slant correction of the radio; any image viewer opens it.
