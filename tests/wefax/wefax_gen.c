@@ -12,11 +12,15 @@
  *                  stretched to the whole line, as Northwood sends it
  *   --snr DB       noise, signal to noise ratio in 2500 Hz (default: none)
  *   --paths N      propagation paths: 1 (default) or 2 or 3
+ *   --scatter DB   power of each fading path against the steady first
+ *                  path (default: all paths fading, the same power)
  *   --delay MS     delay of the 2nd path (3rd: 1.7 times it), default 1.5
  *   --doppler HZ   speed of the fading of each path (default 0.2)
  *   --flat S       slow fading of the whole signal, period S seconds
  *   --depth DB     depth of the slow fading (default 15)
  *   --clicks N     static crashes per minute (default 0)
+ *   --jitter PX    timing jitter of each line, standard deviation in
+ *                  pixels of the 1809-pixel line (default 0)
  *   --off HZ       tuning error (default 0)
  *   --ppm N        transmitter line period error (default 0)
  *   --seed N
@@ -31,6 +35,7 @@
  * (src/wefax/decoder.c).
  */
 #include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -79,6 +84,7 @@ static int read_pgm(const char *path)
 /* gray (0 black .. 255 white) of the broadcast at time t (s) */
 static double t_start, t_phase, t_pic, t_stop, t_end;
 static double line_s;
+static double *jit;     /* line timing jitter, picture pixels per row */
 
 static double gray_at(double t)
 {
@@ -93,7 +99,9 @@ static double gray_at(double t)
         double u = (t - t_phase) / line_s;
         int row = (int)u;
         if (row >= ph) row = ph - 1;
-        double x = (u - row) * pw;
+        double x = (u - row) * pw + (jit ? jit[row] : 0);
+        if (x < 0) x = 0;
+        if (x > pw - 1) x = pw - 1;
         int c = (int)x;
         double fr = x - c;
         int c2 = c + 1 < pw ? c + 1 : c;
@@ -106,29 +114,46 @@ static double gray_at(double t)
     return 0;                                       /* black */
 }
 
-/* a slowly varying complex gain (one propagation path) */
-typedef struct { double re, im, vre, vim; } path_t;
+/* a slowly varying complex gain of unit mean power (one fading path): a sum
+ * of NSIN rotating phasors with Doppler frequencies spread up to the
+ * Doppler limit (Jakes-like), Rayleigh-distributed amplitude */
+#define NSIN 12
+typedef struct { double f[NSIN], p[NSIN]; } path_t;
 
-static void path_step(path_t *p, double doppler)
+static void path_init(path_t *p, double doppler)
 {
-    /* a damped random walk: Rayleigh-like amplitude, ~1/doppler s correlation */
-    double a = 2 * M_PI * doppler / RATE;
-    p->vre += (-p->re * a * a - p->vre * a * 1.4) + grand() * a * sqrt(a) * 1.2;
-    p->vim += (-p->im * a * a - p->vim * a * 1.4) + grand() * a * sqrt(a) * 1.2;
-    p->re += p->vre;
-    p->im += p->vim;
+    for (int k = 0; k < NSIN; k++) {
+        p->f[k] = doppler * cos(2 * M_PI * (k + urand()) / NSIN);
+        p->p[k] = 2 * M_PI * urand();
+    }
+}
+
+static void path_gain(const path_t *p, double t, double *re, double *im)
+{
+    double a = 0, b = 0;
+    for (int k = 0; k < NSIN; k++) {
+        double ph = 2 * M_PI * p->f[k] * t + p->p[k];
+        a += cos(ph);
+        b += sin(ph);
+    }
+    *re = a / sqrt(NSIN);
+    *im = b / sqrt(NSIN);
 }
 
 int main(int argc, char **argv)
 {
     const char *in = NULL, *out = NULL;
     double snr = 1e9, delay_ms = 1.5, doppler = 0.2, flat = 0, depth = 15, clicks = 0, off = 0, ppm = 0;
+    double scatter = 1e9;    /* none: all paths fade */
+    double jitter = 0;
     int paths = 1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--snr") && i + 1 < argc) snr = atof(argv[++i]);
         else if (!strcmp(argv[i], "--paths") && i + 1 < argc) paths = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--delay") && i + 1 < argc) delay_ms = atof(argv[++i]);
         else if (!strcmp(argv[i], "--doppler") && i + 1 < argc) doppler = atof(argv[++i]);
+        else if (!strcmp(argv[i], "--scatter") && i + 1 < argc) scatter = atof(argv[++i]);
+        else if (!strcmp(argv[i], "--jitter") && i + 1 < argc) jitter = atof(argv[++i]);
         else if (!strcmp(argv[i], "--flat") && i + 1 < argc) flat = atof(argv[++i]);
         else if (!strcmp(argv[i], "--depth") && i + 1 < argc) depth = atof(argv[++i]);
         else if (!strcmp(argv[i], "--clicks") && i + 1 < argc) clicks = atof(argv[++i]);
@@ -139,14 +164,23 @@ int main(int argc, char **argv)
         else if (!out) out = argv[i];
     }
     if (!in || !out || paths < 1 || paths > 3) {
-        fprintf(stderr, "usage: wefax_gen IN.pgm OUT.wav [--snr DB] [--paths N] [--delay MS] [--doppler HZ]\n"
-                        "       [--flat S] [--depth DB] [--clicks N] [--off HZ] [--ppm N] [--seed N]\n");
+        fprintf(stderr, "usage: wefax_gen IN.pgm OUT.wav [--snr DB] [--paths N] [--scatter DB] [--delay MS] [--doppler HZ]\n"
+                        "       [--flat S] [--depth DB] [--clicks N] [--jitter PX] [--off HZ] [--ppm N] [--seed N]\n");
         return 2;
     }
     if (read_pgm(in)) return 1;
     for (int k = 0; k < 20; k++) urand();
 
     line_s = LINE_S * (1 + ppm * 1e-6);
+    if (jitter > 0) {
+        /* each line on its own, with a little memory from line to line */
+        jit = malloc(sizeof(double) * ph);
+        double j = 0;
+        for (int r = 0; r < ph; r++) {
+            j = 0.5 * j + 0.87 * grand();
+            jit[r] = j * jitter * pw / 1809.0;
+        }
+    }
     t_start = 5;
     t_phase = t_start + 30 * line_s;
     t_pic = t_phase + ph * line_s;
@@ -159,11 +193,14 @@ int main(int argc, char **argv)
     /* path delays in samples, gains starting at random */
     int dly[3] = {0, (int)lrint(delay_ms * 1e-3 * RATE), (int)lrint(1.7 * delay_ms * 1e-3 * RATE)};
     if (dly[2] >= MAX_DELAY) { fprintf(stderr, "delay too long\n"); return 2; }
+    /* with --scatter the first path is steady (amplitude 1) and the others
+     * fade with this power; otherwise all fade, the same power */
     path_t pa[3];
+    double pg[3];
+    bool steady = scatter < 1e8 && paths > 1;
     for (int k = 0; k < 3; k++) {
-        double g = paths == 1 ? 1 : 0.7;
-        double a = 2 * M_PI * urand();
-        pa[k] = (path_t){g * cos(a), g * sin(a), 0, 0};
+        path_init(&pa[k], doppler);
+        pg[k] = steady ? (k == 0 ? 1.0 : pow(10, scatter / 20)) : 1.0 / sqrt(paths);
     }
 
     double hist_re[MAX_DELAY] = {0}, hist_im[MAX_DELAY] = {0};
@@ -185,10 +222,13 @@ int main(int argc, char **argv)
         hist_im[hp] = sin(ph_acc);
         double re = 0, im = 0;
         for (int k = 0; k < paths; k++) {
-            if (paths > 1) path_step(&pa[k], doppler);
+            double gr = 1, gi = 0;
+            if (paths > 1 && !(steady && k == 0)) path_gain(&pa[k], t, &gr, &gi);
+            gr *= pg[k];
+            gi *= pg[k];
             int j = (hp - dly[k] + MAX_DELAY) % MAX_DELAY;
-            re += pa[k].re * hist_re[j] - pa[k].im * hist_im[j];
-            im += pa[k].re * hist_im[j] + pa[k].im * hist_re[j];
+            re += gr * hist_re[j] - gi * hist_im[j];
+            im += gr * hist_im[j] + gi * hist_re[j];
         }
         hp = (hp + 1) % MAX_DELAY;
         (void)im;
