@@ -26,12 +26,21 @@ import wfml
 from model import WefaxUNet, run_full
 
 
+def rows(path):
+    """rows of a decoded fax, 0 if there is none (no start tone: 0 rows)"""
+    try:
+        return wfml.load_gray(path).shape[0]
+    except Exception:
+        return 0
+
+
 def decode(wav, out):
-    r = wfml.run([wfml.tool("wefax_wav"), wav, out, "--denoise"])
-    if os.path.exists(out) and wfml.load_gray(out).shape[0] > 200:
+    """Auto RX as on the radio; Manual RX if the start tone is not in the recording"""
+    wfml.run([wfml.tool("wefax_wav"), wav, out, "--denoise"])
+    if rows(out) > 200:
         return "Auto RX"
     wfml.run([wfml.tool("wefax_wav"), wav, out, "--denoise", "--cont"])
-    return "Manual RX"
+    return "Manual RX" if rows(out) > 200 else None
 
 
 def main():
@@ -62,8 +71,15 @@ def main():
         with tempfile.TemporaryDirectory() as td:
             pgm = os.path.join(td, "rx.pgm")
             mode = decode(wavs[0], pgm)
+            if mode is None:
+                print(f"{name}: no fax decoded from {os.path.basename(wavs[0])}")
+                continue
             rx = wfml.load_gray(pgm)
-        dx, dy, cmin, cmax = wfml.align(orig, rx)
+        try:
+            dx, dy, cmin, cmax = wfml.align(orig, rx)
+        except ValueError as e:
+            print(f"{name}: {e}")
+            continue
         rx = wfml.cut(rx, dx, dy, orig.shape[0])
         p = run_full(model, rx, device)
         ai = (255 * (1 - p)).astype(np.uint8)
