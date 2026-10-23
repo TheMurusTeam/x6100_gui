@@ -4,8 +4,8 @@
 """
 Training pairs for the WEFAX denoiser: every original picture (JOMOC BMP)
 goes through the simulated HF channel several times, each time with other
-random conditions near the measured ones, and through the decoder of the
-firmware (Denoise ON, as the radio saves the fax).
+random conditions (from the measured ones down to almost no signal), and
+through the decoder of the firmware, Denoise ON or OFF at random.
 
     prepare_pairs.py ORIGINALS_FOLDER PAIRS_FOLDER [--per 20] [--jobs N] [--exclude SETS_FOLDER]
 
@@ -36,9 +36,10 @@ import wfml
 
 
 def random_channel(rng):
-    """conditions around the 5 measured Northwood recordings (8-9 dB SNR,
-    two close paths of similar power, line jitter), wider both ways"""
-    p = ["--snr", f"{rng.uniform(4, 15):.1f}"]
+    """conditions around the measured Northwood recordings (8-9 dB SNR, two
+    close paths of similar power, line jitter), much wider both ways: down
+    to almost no signal, with deep fades where the fax sinks into the noise"""
+    p = ["--snr", f"{rng.uniform(0, 15):.1f}"]
     paths = rng.choices([1, 2, 3], [0.1, 0.6, 0.3])[0]
     p += ["--paths", str(paths)]
     if paths > 1:
@@ -48,9 +49,13 @@ def random_channel(rng):
     p += ["--jitter", f"{rng.uniform(0.3, 2.5):.1f}"]
     if rng.random() < 0.5:
         p += ["--clicks", f"{rng.uniform(5, 60):.0f}"]
-    if rng.random() < 0.3:
-        p += ["--flat", f"{rng.uniform(8, 60):.0f}", "--depth", f"{rng.uniform(4, 15):.0f}"]
+    if rng.random() < 0.5:
+        p += ["--flat", f"{rng.uniform(8, 60):.0f}", "--depth", f"{rng.uniform(5, 30):.0f}"]
     p += ["--off", f"{rng.uniform(-15, 15):.1f}", "--seed", str(rng.randrange(1 << 30))]
+    # both decoders of the radio: Denoise ON (now the default) and OFF (the
+    # classic one, every fax saved before 1.0.2 beta 6); their noise differs
+    if rng.random() < 0.5:
+        p.append("--denoise")
     return p
 
 
@@ -73,7 +78,8 @@ def make_pair(orig_path, out_path, seed):
         from PIL import Image
         Image.open(orig_path).convert("L").save(pgm_in)
         params = random_channel(rng)
-        r = wfml.run([wfml.tool("wefax_pair"), pgm_in, pgm_out, *params, "--denoise"])
+        # Manual RX: a weak signal whose start tone is lost is still a pair
+        r = wfml.run([wfml.tool("wefax_pair"), pgm_in, pgm_out, *params, "--cont"])
         if r.returncode != 0 or not os.path.exists(pgm_out):
             return f"FAILED {out_path}: {r.stderr.strip()[-200:]}"
         rx = wfml.load_gray(pgm_out)

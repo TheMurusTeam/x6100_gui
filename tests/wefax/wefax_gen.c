@@ -11,7 +11,8 @@
  *
  * wefax_pair is the same program built with the decoder of the firmware
  * (src/wefax/decoder.c, -DWEFAX_PAIR): the audio goes straight into the
- * decoder (Auto RX, as on the radio) and OUT.pgm is the received fax,
+ * decoder (Auto RX, as on the radio, or Manual RX with --cont: a weak
+ * signal whose start tone is lost still gives a fax) and OUT.pgm is the received fax,
  * without writing the WAV. Used to make training pairs for the denoiser.
  *
  *   IN.pgm         the picture, 8-bit PGM (P5), any size: each row is
@@ -163,11 +164,11 @@ static void row_cb(const uint8_t *row, unsigned int width, unsigned int nr, void
 }
 
 /* the audio through the decoder of the firmware, the fax as PGM */
-static int write_decoded(const char *path, const int16_t *pcm, long n, int denoise)
+static int write_decoded(const char *path, const int16_t *pcm, long n, int denoise, int cont)
 {
     dimg = calloc((size_t)WEFAX_MAX_ROWS * WEFAX_WIDTH, 1);
     wefax_decoder_t *d = wefax_decoder_create();
-    wefax_decoder_set_mode(d, WEFAX_MODE_AUTO);
+    wefax_decoder_set_mode(d, cont ? WEFAX_MODE_CONT : WEFAX_MODE_AUTO);
     wefax_decoder_set_row_callback(d, row_cb, NULL);
     wefax_decoder_set_denoise(d, denoise);
     float fb[1200];
@@ -194,7 +195,7 @@ int main(int argc, char **argv)
     double snr = 1e9, delay_ms = 1.5, doppler = 0.2, flat = 0, depth = 15, clicks = 0, off = 0, ppm = 0;
     double scatter = 1e9;    /* none: all paths fade */
     double jitter = 0;
-    int denoise = 0;
+    int denoise = 0, cont = 0;
     int paths = 1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--snr") && i + 1 < argc) snr = atof(argv[++i]);
@@ -204,6 +205,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--scatter") && i + 1 < argc) scatter = atof(argv[++i]);
         else if (!strcmp(argv[i], "--jitter") && i + 1 < argc) jitter = atof(argv[++i]);
         else if (!strcmp(argv[i], "--denoise")) denoise = 1;
+        else if (!strcmp(argv[i], "--cont")) cont = 1;
         else if (!strcmp(argv[i], "--flat") && i + 1 < argc) flat = atof(argv[++i]);
         else if (!strcmp(argv[i], "--depth") && i + 1 < argc) depth = atof(argv[++i]);
         else if (!strcmp(argv[i], "--clicks") && i + 1 < argc) clicks = atof(argv[++i]);
@@ -302,9 +304,10 @@ int main(int argc, char **argv)
     }
 
 #ifdef WEFAX_PAIR
-    if (write_decoded(out, pcm, n, denoise)) return 1;
+    if (write_decoded(out, pcm, n, denoise, cont)) return 1;
 #else
     (void)denoise;
+    (void)cont;
     FILE *fo = fopen(out, "wb");
     if (!fo) { perror(out); return 1; }
     uint32_t data = (uint32_t)n * 2, r = (uint32_t)RATE, v32;
