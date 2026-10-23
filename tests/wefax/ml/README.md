@@ -8,6 +8,7 @@ Nvidia card (or Linux; a Mac works too, slower).
 |---|---|
 | `prepare_pairs.py` | every original through the simulated HF channel and the decoder of the firmware, many times: training pairs (received, original) |
 | `train.py` | trains the network on the pairs, on the Nvidia card |
+| `denoise.py` | cleans any fax (PNG saved by the radio, or a recording), no original needed |
 | `test_real.py` | the network on the FAX SETs (real recordings + their originals): how much it improves real faxes |
 | `model.py` | the network: a small U-Net (300,000 numbers), 0/1 black or white out |
 | `wfml.py` | shared code: pictures, alignment, scores, the C tools |
@@ -79,6 +80,14 @@ Ctrl+C stops it; `python train.py pairs --resume` goes on.
 Decodes every FAX SET again, cleans it with the network and prints the
 error before and after. In `results\`: the cleaned faxes and, side by side,
 original / received / cleaned.
+
+## 6. Any fax, without original
+
+    python denoise.py C:\path\to\faxes
+
+Cleans the faxes saved by the radio (PNG), or recordings (WAV, decoded here
+as on the radio). In `results\`: `NAME_ai.png` (cleaned) and
+`NAME_side.png` (received and cleaned side by side).
 
 ## The C tools
 
