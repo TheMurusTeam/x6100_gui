@@ -133,7 +133,7 @@ static const char *const bodies[] = {
 
     /* FT8 CB */
     H("FT8 CB - FT8 ON 11 METRES")
-    "FT8 for CB stations, with CB callsigns such as 1AT106 or 26AT101. It works with WSJT-CB "
+    "FT8 for CB stations, with CB callsigns such as 1KO125 or 14AB321. It works with WSJT-CB "
     "and with standard FT8 stations.\n\n"
     H("BEFORE YOU START")
     "Set your CB callsign: page 3, CB Call. It is kept apart from the amateur callsign of the "
@@ -142,7 +142,7 @@ static const char *const bodies[] = {
     H("HOW TO USE IT")
     "As the FT8 application: press a CQ to answer it, or TX CQ to call. With Auto on, the QSO "
     "goes on by itself. Between two CB stations the reports travel as short texts "
-    "(26AT101 -10, 26AT101 RR73) and one callsign may be shown as <...> until it has been "
+    "(14AB321 -10, 14AB321 RR73) and one callsign may be shown as <...> until it has been "
     "received in full.\n\n"
     H("LOG")
     "QSOs are saved in /mnt/ft8cb_log.adi (ADIF, band 11m), separate from the amateur log.\n\n"
@@ -150,7 +150,7 @@ static const char *const bodies[] = {
     "Green: never worked. Dark green crossed out: worked in the last 24 hours. "
     "Dark green: worked more than 24 hours ago.\n\n"
     H("COUNTRY")
-    "The country of a CB callsign comes from its division number (26AT101: 26, England). It is "
+    "The country of a CB callsign comes from its division number (14AB321: 14, France). It is "
     "shown on CQ calls and on the first answer of each station to your CQ. The list of "
     "divisions is /usr/share/x6100/cb_divisions.txt (number;country).",
 };

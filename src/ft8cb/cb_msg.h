@@ -6,7 +6,7 @@
 /*
  * FT8 CB - callsigns and messages of 11 m (CB) operation.
  *
- * CB callsigns ("1AT106", "26AT101", "1AT1000", "999ZZ/ZZ") are not standard
+ * CB callsigns ("1KO125", "14AB321", "3AB4567", "123AB/CD") are not standard
  * amateur callsigns: FT8 carries them as "non-standard" calls (77-bit type 4,
  * up to 11 characters in clear, the other call as a 12-bit hash) or inside
  * free text.  The callsign rules (including 4-digit units with a 1-digit
@@ -39,7 +39,7 @@ extern "C" {
 
 #define FT8CB_CALL_LEN  12      /* 11 characters + '\0' */
 
-/* "1AT106", "26AT101", "1AT1000", "999ZZ/ZZ" */
+/* "1KO125", "14AB321", "3AB4567", "123AB/CD" */
 bool ft8cb_is_cb_call(const char *call);
 
 /* A standard amateur callsign, as FT8 packs it in 28 bits (optional /P, /R) */

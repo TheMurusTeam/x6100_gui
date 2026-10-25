@@ -5,7 +5,7 @@
 
 /*
  * FT8 CB - country of a CB callsign from its division number (the digits
- * before the letters: 26AT101 -> 26 -> England).  The table is the text file
+ * before the letters: 14AB321 -> 14 -> France).  The table is the text file
  * CB_DIV_FILE, "number;country" per line, read on first use.
  */
 #pragma once

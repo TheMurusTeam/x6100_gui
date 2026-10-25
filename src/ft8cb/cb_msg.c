@@ -42,7 +42,7 @@ bool ft8cb_is_cb_call(const char *c)
     letters_at(c + p, &l);                  /* 1..2 letters */
     if (l < 1 || l > 2) return false;
     const char *t = c + p + l;
-    if (t[0] == '/') {                      /* 999ZZ/ZZ */
+    if (t[0] == '/') {                      /* 123AB/CD */
         int l2;
         letters_at(t + 1, &l2);
         return l2 == 2 && t[3] == '\0';

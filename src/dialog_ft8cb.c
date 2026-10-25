@@ -824,7 +824,7 @@ static void keyboard_open() {
     if (conf.call[0]) {
         textarea_window_set(conf.call);
     } else {
-        lv_textarea_set_placeholder_text(text, " CB callsign, e.g. 1AT106");
+        lv_textarea_set_placeholder_text(text, " CB callsign, e.g. 1KO125");
     }
     disable_buttons = true;
 }
