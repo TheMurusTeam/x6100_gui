@@ -30,6 +30,19 @@ from fldigi, under the GPL 3.0. From 1.0.2 beta 6 it uses a new SITOR-B
 receiver, `src/navtex/sitorb.c`, written from the ITU-R recommendations
 M.476, M.625 and M.540.
 
+## FT8 CB and WSJT-CB
+
+The FT8 CB application (`src/ft8cb/`) works with
+[WSJT-CB](https://github.com/vash909/WSJT-CB), the CB version of WSJT-X by
+Lorenzo 1AT106 / IU1BOT and contributors. To interoperate, it follows the
+conventions of WSJT-CB: the CB callsign rules (1–3 digit prefix, 1–2
+letters, 1–3 digit unit, 4 digits with a 1-digit prefix, the `/XX` form) and
+the message sequence between two CB stations (`<HIS> ME`, `HIS -NN`,
+`HIS R-NN`, `HIS RR73`, `HIS 73`). WSJT-CB was the reference for these
+conventions, and the credit for them goes to its authors. The FT8 CB code is
+a separate implementation in C on ft8_lib (WSJT-CB is C++/Qt): compared with
+the WSJT-CB sources, it contains no WSJT-CB code.
+
 ## Warranty
 
 This program comes with ABSOLUTELY NO WARRANTY, to the extent permitted by

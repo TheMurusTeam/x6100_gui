@@ -9,8 +9,12 @@
  * CB callsigns ("1AT106", "26AT101", "1AT1000", "999ZZ/ZZ") are not standard
  * amateur callsigns: FT8 carries them as "non-standard" calls (77-bit type 4,
  * up to 11 characters in clear, the other call as a 12-bit hash) or inside
- * free text.  Messages are built so that they interoperate with the CB
- * versions of the WSJT-X family:
+ * free text.  The callsign rules (including 4-digit units with a 1-digit
+ * prefix and the /XX form) and the messages below follow the conventions
+ * of WSJT-CB (https://github.com/vash909/WSJT-CB, Lorenzo 1AT106 / IU1BOT
+ * and contributors), so that the two interoperate: WSJT-CB was the
+ * reference for them.  This file is a separate implementation in C on
+ * ft8lib; it contains no WSJT-CB code.
  *
  *   both calls CB      CQ:  CQ ME            (type 4)
  *                      Tx1: <HIS> ME         (type 4, his call hashed)

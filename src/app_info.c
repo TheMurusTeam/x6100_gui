@@ -133,8 +133,8 @@ static const char *const bodies[] = {
 
     /* FT8 CB */
     H("FT8 CB - FT8 ON 11 METRES")
-    "FT8 for CB stations, with CB callsigns such as 1AT106 or 26AT101. It works with the CB "
-    "versions of the WSJT-X family and with standard FT8 stations.\n\n"
+    "FT8 for CB stations, with CB callsigns such as 1AT106 or 26AT101. It works with WSJT-CB "
+    "and with standard FT8 stations.\n\n"
     H("BEFORE YOU START")
     "Set your CB callsign: page 3, CB Call. It is kept apart from the amateur callsign of the "
     "radio. Freq. (page 1) or the band keys choose 27.265 or 27.045 MHz (USB-D). Check that "
@@ -162,7 +162,10 @@ static const char *const extras[] = {
     "QR code generator by Project Nayuki (MIT License).\n",
     "",
     "FT8 decoder, waterfall and TX chain of R1CBU x6100_gui (R1CBU, R2RFE); ft8_lib by "
-    "Karlis Goba YL3JG (MIT License).\n",
+    "Karlis Goba YL3JG (MIT License).\n"
+    "The CB callsign rules and the CB-to-CB message sequence follow the conventions of "
+    "WSJT-CB by Lorenzo 1AT106 / IU1BOT and contributors (github.com/vash909/WSJT-CB), "
+    "to work with it. No WSJT-CB code is included.\n",
 };
 
 /* the legal notices */
