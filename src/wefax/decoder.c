@@ -293,6 +293,13 @@ struct wefax_decoder {
 
     uint8_t row[WEFAX_WIDTH];
 
+    /* 1KO125: the same row from the classic discriminator.  With Denoise
+     * the picture comes from tone_gray(), but the black band that confirms
+     * START is judged on this one, as without Denoise: tone_gray() needs
+     * time (TAU) and more signal to reach full black on a weak start. */
+    double pixel_sum_cls;
+    uint8_t row_cls[WEFAX_WIDTH];
+
     uint32_t row_count;
 
 
@@ -634,6 +641,7 @@ static void reset_dsp(
     decoder->current_pixel = 0;
 
     decoder->pixel_sum = 0.0;
+    decoder->pixel_sum_cls = 0.0;
     decoder->pixel_samples = 0;
 
 
@@ -2132,6 +2140,7 @@ void wefax_decoder_process(
                             decoder->line_position = 0.0;
                             decoder->current_pixel = 0;
                             decoder->pixel_sum = 0.0;
+                            decoder->pixel_sum_cls = 0.0;
                             decoder->pixel_samples = 0;
                             decoder->row_count = 0;
 
@@ -2300,6 +2309,9 @@ void wefax_decoder_process(
                 decoder->pixel_sum +=
                     pix_gray;
 
+                decoder->pixel_sum_cls +=
+                    gray;
+
                 decoder->pixel_samples++;
             }
             else {
@@ -2315,6 +2327,15 @@ void wefax_decoder_process(
                     ] =
                         (uint8_t)(
                             decoder->pixel_sum /
+                            decoder->pixel_samples +
+                            0.5
+                        );
+
+                    decoder->row_cls[
+                        decoder->current_pixel
+                    ] =
+                        (uint8_t)(
+                            decoder->pixel_sum_cls /
                             decoder->pixel_samples +
                             0.5
                         );
@@ -2334,6 +2355,10 @@ void wefax_decoder_process(
                     decoder->row[
                         decoder->current_pixel
                     ] = pix_gray;
+
+                    decoder->row_cls[
+                        decoder->current_pixel
+                    ] = gray;
                 }
 
 
@@ -2342,6 +2367,9 @@ void wefax_decoder_process(
 
                 decoder->pixel_sum =
                     pix_gray;
+
+                decoder->pixel_sum_cls =
+                    gray;
 
                 decoder->pixel_samples =
                     1;
@@ -2359,6 +2387,15 @@ void wefax_decoder_process(
                     ] =
                         (uint8_t)(
                             decoder->pixel_sum /
+                            decoder->pixel_samples +
+                            0.5
+                        );
+
+                    decoder->row_cls[
+                        decoder->current_pixel
+                    ] =
+                        (uint8_t)(
+                            decoder->pixel_sum_cls /
                             decoder->pixel_samples +
                             0.5
                         );
@@ -2388,7 +2425,7 @@ void wefax_decoder_process(
                         x++
                     ) {
                         if (
-                            decoder->row[x] <
+                            decoder->row_cls[x] <
                             WEFAX_CONFIRM_BLACK_THRESHOLD
                         ) {
                             black_pixels++;
@@ -2454,7 +2491,7 @@ void wefax_decoder_process(
                         x++
                     ) {
                         if (
-                            decoder->row[x] <
+                            decoder->row_cls[x] <
                             WEFAX_CONFIRM_BLACK_THRESHOLD
                         ) {
                             black_pixels++;
@@ -2477,6 +2514,7 @@ void wefax_decoder_process(
                             decoder->line_position = 1.0;
                             decoder->current_pixel = 0;
                             decoder->pixel_sum = 0.0;
+                            decoder->pixel_sum_cls = 0.0;
                             decoder->pixel_samples = 0;
                             decoder->row_count = 0;
                             memset(
@@ -2592,6 +2630,9 @@ void wefax_decoder_process(
 
 
                 decoder->pixel_sum =
+                    0.0;
+
+                decoder->pixel_sum_cls =
                     0.0;
 
                 decoder->pixel_samples =
