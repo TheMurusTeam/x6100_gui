@@ -26,7 +26,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     rtty.c screenshot.c display.cpp gps.c
     ui_list.c app_info.c diag_log.c app_radio.c
     dxcc.c
-    dialog.c dialog_swrscan.c dialog_wefax.c wefax/decoder.c wefax/stations.c
+    dialog.c dialog_swrscan.c dialog_wefax.c wefax/decoder.c wefax/stations.c wefax/wefax_pp.c
     dialog_navtex.c navtex/decoder.c navtex/sitorb.c navtex/bulletin.c
     dialog_sstv.c sstv_resources.c sstv/decoder.c sstv/encoder.c sstv/autodetect.c sstv/vis.c sstv/linesync.c sstv/preview.c sstv/sstv_denoise.c sstv/sstv_dnn.c sstv/syncgrid.c
     dialog_dsc.c dsc/dsc_decoder.c dsc/dsc_format.c dsc/dsc_mid.c dsc/dsc_coast.c dsc/dsc_ships.c dsc/dsc_qrcodegen.c dsc/dsc_flags.c
