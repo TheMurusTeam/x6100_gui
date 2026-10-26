@@ -10,7 +10,10 @@ recording REC_*.wav and the original *.bmp from JOMOC).
 Each recording is decoded again by the decoder of the firmware (Denoise
 ON), aligned with the original and passed through the network. Printed:
 the error (mean gray difference from the original, 0..255) of the received
-fax and of the denoised one. Written in --out, for each set: the denoised
+fax and of the denoised one, on the whole fax ("all") and on its text only
+("text": the character-sized shapes of the original, compared softened and
+ word by word within 2 pixels, see wfml.text_error;
+--text-png shows them in red). Written in --out, for each set: the denoised
 fax (PNG) and a side by side of original / received / denoised.
 """
 import argparse
@@ -48,6 +51,9 @@ def main():
     ap.add_argument("sets")
     ap.add_argument("--model", default=os.path.join(wfml.KIT, "models", "wefax_unet.pt"))
     ap.add_argument("--out", default=os.path.join(wfml.KIT, "results"))
+    ap.add_argument("--min-corr", type=float, default=0.5,
+                    help="below this the recording is not the fax of the original: set left out (0.5)")
+    ap.add_argument("--text-png", action="store_true", help="also write NAME_textmask.png: the text found, in red")
     a = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -80,20 +86,30 @@ def main():
         except ValueError as e:
             print(f"{name}: {e}")
             continue
+        if cmax < a.min_corr:
+            print(f"{name:24s} {mode:9s} corr {cmax:.2f}  the recording does not match the original: left out")
+            continue
         rx = wfml.cut(rx, dx, dy, orig.shape[0])
         p = run_full(model, rx, device)
         ai = (255 * (1 - p)).astype(np.uint8)
         e_rx, e_ai = wfml.gray_error(rx, orig), wfml.gray_error(ai, orig)
-        rows.append((name, e_rx, e_ai))
-        print(f"{name:24s} {mode:9s} corr {cmax:.2f}  received {e_rx:5.1f}  denoised {e_ai:5.1f}  "
-              f"({100 * (e_ai - e_rx) / e_rx:+.0f} %)", flush=True)
+        tm = wfml.text_mask(orig)
+        t_rx, t_ai = wfml.text_error(rx, orig, tm), wfml.text_error(ai, orig, tm)
+        rows.append((name, e_rx, e_ai, t_rx, t_ai))
+        print(f"{name:24s} {mode:9s} corr {cmax:.2f}  all: {e_rx:5.1f} -> {e_ai:5.1f} ({100 * (e_ai - e_rx) / e_rx:+3.0f} %)"
+              f"   text: {t_rx:5.1f} -> {t_ai:5.1f} ({100 * (t_ai - t_rx) / t_rx:+3.0f} %)", flush=True)
+        if a.text_png:
+            ov = np.stack([orig] * 3, -1).copy()
+            ov[tm] = (ov[tm] * 0.5 + np.array([255, 0, 0]) * 0.5).astype(np.uint8)
+            Image.fromarray(ov).save(os.path.join(a.out, name + "_textmask.png"))
         Image.fromarray(ai).save(os.path.join(a.out, name + "_denoised.png"))
         side = np.concatenate([orig, np.full((orig.shape[0], 8), 128, np.uint8), rx,
                                np.full((orig.shape[0], 8), 128, np.uint8), ai], 1)
         Image.fromarray(side).save(os.path.join(a.out, name + "_compare.png"))
     if rows:
-        print(f"{'mean':24s} {'':9s} {'':9s} received {np.mean([r[1] for r in rows]):5.1f}  "
-              f"denoised {np.mean([r[2] for r in rows]):5.1f}")
+        m = lambda k: float(np.nanmean([r[k] for r in rows]))
+        print(f"{'mean':24s} {'':9s} {'':9s}  all: {m(1):5.1f} -> {m(2):5.1f} ({100 * (m(2) - m(1)) / m(1):+3.0f} %)"
+              f"   text: {m(3):5.1f} -> {m(4):5.1f} ({100 * (m(4) - m(3)) / m(3):+3.0f} %)")
 
 
 if __name__ == "__main__":

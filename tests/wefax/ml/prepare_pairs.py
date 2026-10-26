@@ -35,7 +35,7 @@ import numpy as np
 import wfml
 
 
-def random_channel(rng):
+def random_channel(rng, denoise_only=False):
     """conditions around the measured Northwood recordings (8-9 dB SNR, two
     close paths of similar power, line jitter), much wider both ways: down
     to almost no signal, with deep fades where the fax sinks into the noise"""
@@ -54,7 +54,7 @@ def random_channel(rng):
     p += ["--off", f"{rng.uniform(-15, 15):.1f}", "--seed", str(rng.randrange(1 << 30))]
     # both decoders of the radio: Denoise ON (now the default) and OFF (the
     # classic one, every fax saved before 1.0.2 beta 6); their noise differs
-    if rng.random() < 0.5:
+    if rng.random() < 0.5 or denoise_only:
         p.append("--denoise")
     return p
 
@@ -66,7 +66,7 @@ def one(job):
         return f"FAILED {job[1]}: {e}"
 
 
-def make_pair(orig_path, out_path, seed):
+def make_pair(orig_path, out_path, seed, denoise_only=False):
     rng = random.Random(seed)
     try:
         orig = wfml.load_original(orig_path)
@@ -77,7 +77,7 @@ def make_pair(orig_path, out_path, seed):
         pgm_out = os.path.join(td, "out.pgm")
         from PIL import Image
         Image.open(orig_path).convert("L").save(pgm_in)
-        params = random_channel(rng)
+        params = random_channel(rng, denoise_only)
         # Manual RX: a weak signal whose start tone is lost is still a pair
         r = wfml.run([wfml.tool("wefax_pair"), pgm_in, pgm_out, *params, "--cont"])
         if r.returncode != 0 or not os.path.exists(pgm_out):
@@ -101,6 +101,8 @@ def main():
     ap.add_argument("pairs")
     ap.add_argument("--per", type=int, default=20, help="pairs per original (default 20)")
     ap.add_argument("--jobs", type=int, default=os.cpu_count())
+    ap.add_argument("--denoise-only", action="store_true",
+                    help="all pairs with the Denoise ON decoder (named NAME_dNN, next to the others)")
     ap.add_argument("--exclude", help="FAX SETs folder: its originals are not used")
     a = ap.parse_args()
 
@@ -124,10 +126,11 @@ def main():
     jobs = []
     for f in files:
         name = os.path.splitext(os.path.basename(f))[0]
+        tag = "d" if a.denoise_only else ""
         for k in range(a.per):
-            out = os.path.join(a.pairs, f"{name}_{k:02d}")
+            out = os.path.join(a.pairs, f"{name}_{tag}{k:02d}")
             if not os.path.exists(out + ".npz"):
-                jobs.append((f, out, zlib.crc32(f"{name}/{k}".encode())))
+                jobs.append((f, out, zlib.crc32(f"{name}/{tag}{k}".encode()), a.denoise_only))
     print(f"{len(files)} originals, {len(jobs)} pairs to make, {a.jobs} at a time")
     with ProcessPoolExecutor(a.jobs) as ex:
         for i, msg in enumerate(ex.map(one, jobs), 1):

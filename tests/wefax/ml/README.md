@@ -50,6 +50,17 @@ Every time you open a new Command Prompt: `cd C:\wefax-ml` and
 - `C:\wefax-ml\originals`: the original pictures (`*.bmp`, 1720 x 1293)
   kept by `get_gya_originals.py` (subfolders are fine). The more, the
   better: every new day adds about 50.
+- Charts of the US National Weather Service (Boston, New Orleans, Point
+  Reyes, Kodiak, Honolulu): `python get_noaa_originals.py` downloads them
+  in `originals\noaa`, as faxed. They change every few hours: run it again
+  every 6 hours or so to collect more.
+- Analysis charts of the DWD as faxed by DWD Hamburg (surface "Boden"
+  and the sideways sea chart): `python get_dwd_originals.py` downloads
+  them from the DWD open data in `originals\dwd`. The site keeps about two
+  days: run it once a day.
+- Charts of the DWD (PNG files of the web site, about 4400 pixels wide):
+  `python dwd_to_original.py C:\path\to\pngs` makes them black and white
+  at the size the radio receives them, in `originals\dwd`.
 - `C:\wefax-ml\sets`: the FAX SETs, one folder each, with the recording
   `REC_*.wav` and its original `*.bmp`.
 
@@ -68,9 +79,13 @@ arrive: only the new ones are done.
 
     python train.py pairs
 
-Every 1000 steps it prints the error on originals kept out of the training
-(mean gray difference from the original, 0..255) next to the error of the
-received faxes, and saves the best network in `models\wefax_unet.pt`.
+Every 1000 steps it prints the errors on originals kept out of the training
+(mean gray difference from the original, 0..255; whole fax and text only)
+next to the errors of the received faxes, and saves the best network in
+`models\wefax_unet.pt` (`--out` for another name). The text counts 10 times
+more than the rest (`--text-weight`), and half of the pieces the network
+learns on are around text (`--text-crops`). `--base 24` makes a bigger
+network: slower, maybe better.
 Ctrl+C stops it; `python train.py pairs --resume` goes on.
 
 ## 5. Real faxes
@@ -95,3 +110,18 @@ as on the radio). In `results\`: `NAME_ai.png` (cleaned) and
 `tests/wefax/wefax_gen.c`, `wefax_wav.c` and the decoder of the firmware
 (`src/wefax/decoder.c`) by `build_windows_tools.sh`. On Linux or a Mac,
 `make` in `tests/wefax` builds them instead.
+
+## 7. The model for the radio
+
+    python export_model.py models\wefax_unet11.pt wefax_pp.bin
+
+writes the network as the model file of the firmware
+(`src/wefax/wefax_pp.c`), to be put in the firmware as
+`rootfs/usr/share/x6100/wefax_pp.bin`. `tests/wefax/wefax_pp_test` runs the
+same C code on a computer (`make` in `tests/wefax`):
+
+    wefax_pp_test wefax_pp.bin IN.pgm OUT.pgm [--threads N] [--tile N]
+
+It prints the multiply-adds and the time. Its output is the same as
+`denoise.py` (at most 1 gray level of rounding).
+
