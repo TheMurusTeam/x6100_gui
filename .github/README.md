@@ -1,5 +1,12 @@
 # 1KO125 firmware for the Xiegu X6100
 
+> **The home of SSTV, WEFAX, DSC and NAVTEX/SITOR-B for the Xiegu X6100.**
+>
+> This is where these applications were born, and where they keep growing:
+> better receivers, new features, tested on the air with real signals.
+> They are free software, written to be shared: the goal is to see them in
+> every X6100 firmware, so that every owner of this radio can use them.
+
 An alternative firmware for the Xiegu X6100, based on
 [R1CBU x6100_gui](https://github.com/OpenX6100/x6100_gui) (the LVGL GUI of
 the X6100 by Oleg Belousov R1CBU, Georgy Dyuldin R2RFE and contributors),
