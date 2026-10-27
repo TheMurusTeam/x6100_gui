@@ -26,6 +26,7 @@
 #include "app_info.h"
 #include "app_radio.h"  /* 1KO125: radio set up while open */
 #include "spectrum.h"
+#include "cfg/cfg_api.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -591,6 +592,24 @@ static void ui_timer_cb(lv_timer_t *timer)
         lv_obj_scroll_to_y(scroll, LV_COORD_MAX, LV_ANIM_OFF);
 }
 
+/* 1KO125: the text font follows Settings > Interface > Decoder text, as the
+ * RTTY panel (panel.cpp): Compact sony_28, Large sony_38; live */
+static ObserverDelayed *text_size_obs = NULL;
+
+static const lv_font_t *navtex_font(void)
+{
+    return param_i_get(cfg.ui.digi_compact()) ? &sony_28 : &sony_38;
+}
+
+static void text_size_cb(Subject *subj, void *user_data)
+{
+    (void)subj;
+    (void)user_data;
+    if (label) lv_obj_set_style_text_font(label, navtex_font(), 0);
+    if (view_label) lv_obj_set_style_text_font(view_label, navtex_font(), 0);
+    if (scroll && follow_tail) lv_obj_scroll_to_y(scroll, LV_COORD_MAX, LV_ANIM_OFF);
+}
+
 static void construct_cb(lv_obj_t *parent)
 {
     app_radio_begin();      /* 1KO125: USB-D locked, zoom 4x, DSP off while open */
@@ -647,8 +666,10 @@ static void construct_cb(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(label, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(label, 0, 0);
     lv_obj_set_style_pad_all(label, 0, 0);
-    /* Keep the existing NAVTEX font: deliberately smaller than RTTY. */
-    lv_obj_set_style_text_font(label, &sony_24, 0);
+    /* 1KO125: the font of Settings > Interface > Decoder text */
+    lv_obj_set_style_text_font(label, navtex_font(), 0);
+    if (!text_size_obs)
+        text_size_obs = subject_subscribe_delayed((Subject *)cfg.ui.digi_compact(), text_size_cb, NULL);
     lv_obj_set_style_text_color(label, lv_color_white(), 0);
     lv_label_set_text(label, "Awaiting NAVTEX signal...\n");
 
@@ -670,6 +691,10 @@ static void construct_cb(lv_obj_t *parent)
 static void destruct_cb(void)
 {
     app_radio_end();        /* 1KO125: mode, zoom and DSP of before */
+    if (text_size_obs) {
+        param_unsubscribe((Observer *)text_size_obs);
+        text_size_obs = NULL;
+    }
     spectrum_clear_markers();
     app_info_abort();
     /* The browser panel is not a child of dialog.obj: delete it here. */
@@ -1112,7 +1137,7 @@ static void view_key_cb(lv_event_t *e)
 {
     lv_obj_t *obj = lv_event_get_target(e);
     uint32_t key = *((uint32_t *)lv_event_get_param(e));
-    lv_coord_t lh = lv_font_get_line_height(&sony_24);
+    lv_coord_t lh = lv_font_get_line_height(navtex_font());
     lv_coord_t step = NAVTEX_VIEW_STEP_LINES * lh;
 
     /* Scroll by whole lines: the view height is a whole number of lines,
@@ -1205,7 +1230,7 @@ static void view_open(int index)
     lv_obj_remove_style_all(view_scroll);
 
     /* Height: a whole number of text lines (see view_key_cb). */
-    lv_coord_t lh = lv_font_get_line_height(&sony_24);
+    lv_coord_t lh = lv_font_get_line_height(navtex_font());
     lv_coord_t vh = lv_obj_get_content_height(browser_panel) / lh * lh;
     lv_obj_set_size(view_scroll, lv_pct(100), vh);
     lv_obj_align(view_scroll, LV_ALIGN_LEFT_MID, 0, 0);
@@ -1216,7 +1241,7 @@ static void view_open(int index)
     view_label = lv_label_create(view_scroll);
     lv_obj_set_width(view_label, lv_pct(100));
     lv_label_set_long_mode(view_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(view_label, &sony_24, 0);
+    lv_obj_set_style_text_font(view_label, navtex_font(), 0);
     lv_obj_set_style_text_color(view_label, lv_color_white(), 0);
     lv_obj_set_style_text_line_space(view_label, 0, 0);
     lv_label_set_text_static(view_label, text[0] ? text : "(empty file)");
