@@ -7,10 +7,11 @@ every X6100 firmware, so that every owner of this radio can use them.
 
 <table>
 <tr>
-<td align="center"><img src="images/wefax_first.jpg" width="190"><br><sub>The first weather fax</sub></td>
-<td align="center"><img src="images/sstv_rx.jpg" width="190"><br><sub>The first SSTV picture received</sub></td>
-<td align="center"><img src="images/sstv_tx.jpg" width="190"><br><sub>The first SSTV picture sent</sub></td>
-<td align="center"><img src="images/navtex_first.jpg" width="190"><br><sub>The first NAVTEX message</sub></td>
+<td align="center"><img src="images/wefax_first.jpg" width="160"><br><sub>The first weather fax</sub></td>
+<td align="center"><img src="images/sstv_rx.jpg" width="160"><br><sub>The first SSTV picture received</sub></td>
+<td align="center"><img src="images/sstv_tx.jpg" width="160"><br><sub>The first SSTV picture sent</sub></td>
+<td align="center"><img src="images/navtex_first.jpg" width="160"><br><sub>The first NAVTEX message</sub></td>
+<td align="center"><img src="images/dsc_first.jpg" width="160"><br><sub>The first DSC calls</sub></td>
 </tr>
 </table>
 
