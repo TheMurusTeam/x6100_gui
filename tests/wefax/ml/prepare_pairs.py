@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Copyright (C) 2026 Hany El Imam - 1KO125 firmware for the Xiegu X6100
 """
-Training pairs for the WEFAX denoiser: every original picture (JOMOC BMP)
+Training pairs for the WEFAX post-processing network: every original picture (JOMOC BMP)
 goes through the simulated HF channel several times, each time with other
 random conditions (from the measured ones down to almost no signal), and
 through the decoder of the firmware, Denoise ON or OFF at random.

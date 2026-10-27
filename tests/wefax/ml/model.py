@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Copyright (C) 2026 Hany El Imam - 1KO125 firmware for the Xiegu X6100
 """
-The WEFAX denoiser network: a small U-Net, received gray picture in, the
+The WEFAX post-processing network: a small U-Net, received gray picture in, the
 probability that each pixel of the original is black out (as a logit).
 
 Plain 3x3 convolutions, ReLU, 2x2 max pooling and nearest upsampling: easy

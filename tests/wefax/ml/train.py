@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Copyright (C) 2026 Hany El Imam - 1KO125 firmware for the Xiegu X6100
 """
-Trains the WEFAX denoiser on the pairs of prepare_pairs.py.
+Trains the WEFAX post-processing network on the pairs of prepare_pairs.py.
 
     train.py PAIRS_FOLDER [--out models/wefax_unet.pt] [--steps 30000]
                           [--text-weight 5] [--text-crops 0.5] [--base 16]

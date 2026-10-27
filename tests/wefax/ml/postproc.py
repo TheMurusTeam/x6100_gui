@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Copyright (C) 2026 Hany El Imam - 1KO125 firmware for the Xiegu X6100
 """
-Cleans any received fax with the WEFAX denoiser: no original needed.
+Cleans any received fax with the WEFAX post-processing network: no original needed.
 
-    denoise.py FILE_OR_FOLDER... [--model models/wefax_unet.pt] [--out results]
+    postproc.py FILE_OR_FOLDER... [--model models/wefax_unet.pt] [--out results]
 
 Takes the faxes saved by the radio (PNG, as in /mnt/wefax), PGM, or
 recordings (REC_*.wav, decoded here as on the radio: Denoise ON, Auto RX,
@@ -54,7 +54,7 @@ def main():
 
     for f in inputs(a.files):
         name = os.path.splitext(os.path.basename(f))[0]
-        if name.endswith("_ai") or name.endswith("_side") or name.endswith("_compare") or name.endswith("_denoised"):
+        if name.endswith("_ai") or name.endswith("_side") or name.endswith("_compare") or name.endswith("_denoised") or name.endswith("_postproc"):
             continue        # our own results
         if f.lower().endswith(".wav"):
             with tempfile.TemporaryDirectory() as td:

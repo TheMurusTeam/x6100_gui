@@ -1,4 +1,4 @@
-# WEFAX denoiser: training kit
+# WEFAX post-processing: training kit
 
 Trains a neural network that cleans received weather faxes, on the
 original pictures of Northwood (GYA). It runs on a Windows PC with an
@@ -8,7 +8,7 @@ Nvidia card (or Linux; a Mac works too, slower).
 |---|---|
 | `prepare_pairs.py` | every original through the simulated HF channel and the decoder of the firmware, many times: training pairs (received, original) |
 | `train.py` | trains the network on the pairs, on the Nvidia card |
-| `denoise.py` | cleans any fax (PNG saved by the radio, or a recording), no original needed |
+| `postproc.py` | cleans any fax (PNG saved by the radio, or a recording), no original needed |
 | `test_real.py` | the network on the FAX SETs (real recordings + their originals): how much it improves real faxes |
 | `model.py` | the network: a small U-Net (300,000 numbers), 0/1 black or white out |
 | `wfml.py` | shared code: pictures, alignment, scores, the C tools |
@@ -98,7 +98,7 @@ original / received / cleaned.
 
 ## 6. Any fax, without original
 
-    python denoise.py C:\path\to\faxes
+    python postproc.py C:\path\to\faxes
 
 Cleans the faxes saved by the radio (PNG), or recordings (WAV, decoded here
 as on the radio). In `results\`: `NAME_ai.png` (cleaned) and
@@ -123,5 +123,5 @@ same C code on a computer (`make` in `tests/wefax`):
     wefax_pp_test wefax_pp.bin IN.pgm OUT.pgm [--threads N] [--tile N]
 
 It prints the multiply-adds and the time. Its output is the same as
-`denoise.py` (at most 1 gray level of rounding).
+`postproc.py` (at most 1 gray level of rounding).
 

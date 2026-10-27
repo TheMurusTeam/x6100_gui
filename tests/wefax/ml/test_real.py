@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Copyright (C) 2026 Hany El Imam - 1KO125 firmware for the Xiegu X6100
 """
-The WEFAX denoiser on real faxes: the FAX SETs (a folder each, with the
+The WEFAX post-processing network on real faxes: the FAX SETs (a folder each, with the
 recording REC_*.wav and the original *.bmp from JOMOC).
 
     test_real.py SETS_FOLDER [--model models/wefax_unet.pt] [--out results]
@@ -10,11 +10,11 @@ recording REC_*.wav and the original *.bmp from JOMOC).
 Each recording is decoded again by the decoder of the firmware (Denoise
 ON), aligned with the original and passed through the network. Printed:
 the error (mean gray difference from the original, 0..255) of the received
-fax and of the denoised one, on the whole fax ("all") and on its text only
+fax and of the cleaned one, on the whole fax ("all") and on its text only
 ("text": the character-sized shapes of the original, compared softened and
  word by word within 2 pixels, see wfml.text_error;
---text-png shows them in red). Written in --out, for each set: the denoised
-fax (PNG) and a side by side of original / received / denoised.
+--text-png shows them in red). Written in --out, for each set: the cleaned
+fax (PNG) and a side by side of original / received / cleaned.
 """
 import argparse
 import glob
@@ -102,7 +102,7 @@ def main():
             ov = np.stack([orig] * 3, -1).copy()
             ov[tm] = (ov[tm] * 0.5 + np.array([255, 0, 0]) * 0.5).astype(np.uint8)
             Image.fromarray(ov).save(os.path.join(a.out, name + "_textmask.png"))
-        Image.fromarray(ai).save(os.path.join(a.out, name + "_denoised.png"))
+        Image.fromarray(ai).save(os.path.join(a.out, name + "_postproc.png"))
         side = np.concatenate([orig, np.full((orig.shape[0], 8), 128, np.uint8), rx,
                                np.full((orig.shape[0], 8), 128, np.uint8), ai], 1)
         Image.fromarray(side).save(os.path.join(a.out, name + "_compare.png"))
