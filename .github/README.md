@@ -1,11 +1,20 @@
 <h1 align="center">The home of SSTV, WEFAX, DSC and NAVTEX/SITOR-B<br>for the Xiegu X6100</h1>
 
-<p align="center">
 This is where these applications were born, and where they keep growing:
-better receivers and new features, release after release.<br>
+better receivers and new features, release after release.
 They are free software, written to be shared: the goal is to see them in
 every X6100 firmware, so that every owner of this radio can use them.
-</p>
+
+<table>
+<tr>
+<td align="center"><img src="images/wefax_first.jpg" width="190"><br><sub>The first weather fax</sub></td>
+<td align="center"><img src="images/sstv_rx.jpg" width="190"><br><sub>The first SSTV picture received</sub></td>
+<td align="center"><img src="images/sstv_tx.jpg" width="190"><br><sub>The first SSTV picture sent</sub></td>
+<td align="center"><img src="images/navtex_first.jpg" width="190"><br><sub>The first NAVTEX message</sub></td>
+</tr>
+</table>
+
+<sub>The first ones ever on an X6100.</sub>
 
 ---
 
