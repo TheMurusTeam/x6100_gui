@@ -1,7 +1,9 @@
 # WEFAX post-processing: training kit
 
-Trains a neural network that cleans received weather faxes, on the
-original pictures of Northwood (GYA). It runs on a Windows PC with an
+Trains the neural network of the WEFAX **Post Proc.** (Denoise button):
+it cleans received weather faxes. It learns on original charts (Northwood
+GYA, DWD, NOAA... the ones you collect: none are included here), sent
+through a simulated HF channel and the decoder of the firmware. It runs on a Windows PC with an
 Nvidia card (or Linux; a Mac works too, slower).
 
 | File | What it does |
@@ -10,7 +12,8 @@ Nvidia card (or Linux; a Mac works too, slower).
 | `train.py` | trains the network on the pairs, on the Nvidia card |
 | `postproc.py` | cleans any fax (PNG saved by the radio, or a recording), no original needed |
 | `test_real.py` | the network on the FAX SETs (real recordings + their originals): how much it improves real faxes |
-| `model.py` | the network: a small U-Net (300,000 numbers), 0/1 black or white out |
+| `model.py` | the network: a small U-Net (`--base 16`: 300,000 numbers), 0/1 black or white out |
+| `export_model.py` | a trained network as the model file of the radio, `wefax_pp.bin` |
 | `wfml.py` | shared code: pictures, alignment, scores, the C tools |
 | `bin/*.exe` | the C tools for Windows: `wefax_pair` (channel + decoder), `wefax_wav` (decoder) |
 
