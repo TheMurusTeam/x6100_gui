@@ -73,7 +73,9 @@ static const char *const bodies[] = {
     "NAVTEX - bulletins (ZCZC ... NNNN) shown as cards, with the quality of reception: OK, "
     "DAMAGED or UNREADABLE. Copies received again are merged.\n"
     "SITORB - the received text as it arrives, for any SITOR-B station.\n"
-    "Bulletins are recognised and saved in both modes.\n\n"
+    "Bulletins are recognised and saved in both modes. Messages sent without ZCZC and NNNN, "
+    "each starting with its date and time (as some coast stations do on HF), are shown as "
+    "SITOR-B messages, with a purple bar.\n\n"
     H("HOW TO USE IT")
     "Press Freq. and tune 518 kHz (international NAVTEX, English), 490 kHz (national "
     "languages), 4209.5 kHz (HF), a coast station or an HF MSI channel. The dial is set 1 kHz "

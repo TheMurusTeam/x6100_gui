@@ -20,6 +20,12 @@
  * loss of the signal or by a timeout.  Short noise between bulletins is
  * thrown away.
  *
+ * Some coast stations send on HF plain SITOR-B messages, without the
+ * NAVTEX frame: no ZCZC and no NNNN, each message starts with its
+ * date-time group ("190730 UTC JUN 26") and ends where the next starts.
+ * Such a message is marked sitor, complete unless the signal went in the
+ * middle of its text.
+ *
  * Pure C, no LVGL: fed from any thread, the owner serialises the calls.
  */
 #pragma once
@@ -39,6 +45,7 @@ typedef struct {
     int      num;                   /* serial 0..99, -1 = unknown */
     bool     lost_head;             /* no ZCZC header */
     bool     lost_tail;             /* no NNNN */
+    bool     sitor;                 /* SITOR-B message without ZCZC / NNNN */
     time_t   first_rx, last_rx;
     int      receptions;            /* copies merged into this one */
     int      len;

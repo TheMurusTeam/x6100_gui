@@ -44,6 +44,7 @@
 #define NB_C_OK             0x3aaa6e
 #define NB_C_WARN           0xe2b028
 #define NB_C_BAD            0xe04848
+#define NB_C_SITOR          0x8a5cd0    /* SITOR-B message without ZCZC / NNNN */
 
 /* text colours in the bulletin (LVGL recolour, no '#') */
 #define NB_T_GUESS          "e2b028"        /* reconstructed character */
@@ -178,12 +179,16 @@ static void nav_done_cb(const nb_bulletin_t *b, void *user)
     memmove(&nav_items[1], &nav_items[0], sizeof(nav_items[0]) * (size_t)nav_count);
     nav_items[0] = it;
     nav_count++;
-    fprintf(stderr, "NAVTEX: bulletin %c%c%02d, %d chars, quality %d%%%s%s\n",
+    fprintf(stderr, "NAVTEX: %s %c%c%02d, %d chars, quality %d%%%s%s\n", b->sitor ? "SITOR-B message" : "bulletin",
             b->b1 ? b->b1 : '?', b->b2 ? b->b2 : '?', b->num >= 0 ? b->num : 99, b->len,
             nb_quality(b), b->lost_head ? ", start lost" : "", b->lost_tail ? ", end lost" : "");
-    if (nav_mode && !nav_detail)
-        msg_update_text_fmt("NAVTEX %c%c%02d - %s", b->b1 ? b->b1 : '?', b->b2 ? b->b2 : '?',
-                            b->num >= 0 ? b->num : 99, b->b2 ? nb_subject_name(b->b2) : "start lost");
+    if (nav_mode && !nav_detail) {
+        if (b->sitor)
+            msg_update_text_fmt("SITOR-B message");
+        else
+            msg_update_text_fmt("NAVTEX %c%c%02d - %s", b->b1 ? b->b1 : '?', b->b2 ? b->b2 : '?',
+                                b->num >= 0 ? b->num : 99, b->b2 ? nb_subject_name(b->b2) : "start lost");
+    }
 
 shown:
     /* the selection follows the newest bulletin, unless one is open */
@@ -352,8 +357,22 @@ static uint32_t nav_subject_color(char b2)
     }
 }
 
+/* side bar / subject block of a bulletin */
+static uint32_t nav_color(const nb_bulletin_t *b)
+{
+    return b->sitor ? NB_C_SITOR : nav_subject_color(b->b2);
+}
+
+/* subject in words, or what is known of it */
+static const char *nav_subject(const nb_bulletin_t *b, const char *start_lost)
+{
+    if (b->sitor) return "SITOR-B message";
+    return b->b2 ? nb_subject_name(b->b2) : start_lost;
+}
+
 static void nav_code(const nb_bulletin_t *b, char *dst, size_t sz)
 {
+    if (b->sitor) { snprintf(dst, sz, "SB"); return; }
     char n[4] = "--";
     if (b->num >= 0) snprintf(n, sizeof(n), "%02d", b->num);
     snprintf(dst, sz, "%c%c%s", b->b1 ? b->b1 : '-', b->b2 ? b->b2 : '-', n);
@@ -396,7 +415,7 @@ static void nav_draw_card(lv_draw_ctx_t *ctx, const nb_bulletin_t *b, lv_coord_t
 {
     nav_rect(ctx, x1, y1, x2, y2, sel ? NB_C_PANEL_SEL : NB_C_PANEL, 6,
              sel ? NB_C_SELECT : NB_C_LINE, sel ? 3 : 1);
-    uint32_t sc = nav_subject_color(b->b2);
+    uint32_t sc = nav_color(b);
     nav_rect(ctx, x1 + (sel ? 3 : 1), y1 + 8, x1 + 10, y2 - 8, sc, 2, 0, 0);
 
     char code[8], ts[24], st[80], dtg[80], t1[80], t2[80];
@@ -408,8 +427,8 @@ static void nav_draw_card(lv_draw_ctx_t *ctx, const nb_bulletin_t *b, lv_coord_t
     /* 1: code, subject, time */
     lv_coord_t e = nav_text(ctx, &sony_22, NB_C_TEXT, x, y1 + 6, 0, LV_TEXT_ALIGN_LEFT, code);
     lv_coord_t tl = nav_text(ctx, &sony_16, NB_C_SUB, r, y1 + 10, 0, LV_TEXT_ALIGN_RIGHT, ts);
-    const char *subj = b->b2 ? nb_subject_name(b->b2) : "Start lost";
-    nav_text(ctx, &sony_16, b->b2 ? sc : NB_C_WARN, e + 10, y1 + 10, tl - e - 22, LV_TEXT_ALIGN_LEFT, subj);
+    const char *subj = nav_subject(b, "Start lost");
+    nav_text(ctx, &sony_16, b->b2 || b->sitor ? sc : NB_C_WARN, e + 10, y1 + 10, tl - e - 22, LV_TEXT_ALIGN_LEFT, subj);
     /* 2, 3: the message */
     nav_text(ctx, &sony_18, NB_C_TEXT, x, y1 + 34, r - x, LV_TEXT_ALIGN_LEFT, t1[0] ? t1 : "(no text)");
     nav_text(ctx, &sony_16, NB_C_SUB, x, y1 + 58, r - x, LV_TEXT_ALIGN_LEFT, t2);
@@ -485,7 +504,7 @@ static void nav_hdr_draw_cb(lv_event_t *e)
     lv_area_t a;
     lv_obj_get_coords(obj, &a);
 
-    uint32_t sc = nav_subject_color(b->b2);
+    uint32_t sc = nav_color(b);
     nav_rect(ctx, a.x1, a.y1, a.x2, a.y2, NB_C_PANEL, 6, NB_C_LINE, 1);
     /* subject block */
     lv_coord_t bw = 112;
@@ -507,7 +526,7 @@ static void nav_hdr_draw_cb(lv_event_t *e)
 
     /* 1: subject, quality */
     lv_coord_t pl = nav_pill(ctx, b, r, a.y1 + 6, &sony_20);
-    const char *subj = b->b2 ? nb_subject_name(b->b2) : "Bulletin (start lost)";
+    const char *subj = nav_subject(b, "Bulletin (start lost)");
     nav_text(ctx, &sony_24, NB_C_TEXT, x, a.y1 + 4, pl - x - 10, LV_TEXT_ALIGN_LEFT, subj);
     /* 2: station, date-time group */
     snprintf(line, sizeof(line), "%s%s%s", st[0] ? st : (b->b1 ? "" : ""), st[0] && dtg[0] ? "   " : "", dtg);

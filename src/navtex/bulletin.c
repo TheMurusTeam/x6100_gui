@@ -27,6 +27,9 @@ struct nb_assembler {
 
     nb_bulletin_t cur;              /* bulletin being received */
     bool has_header;
+    bool dtg_first;                 /* no header, first line a date-time group */
+    int content_lines;              /* lines with text so far */
+    bool blank_after;               /* an empty line after the last one */
 
     char line[NB_LINE_MAX];
     uint8_t line_q[NB_LINE_MAX];
@@ -55,11 +58,15 @@ static void cur_reset(nb_assembler_t *a)
     b->num = -1;
     b->lost_head = true;
     b->lost_tail = false;
+    b->sitor = false;
     b->first_rx = b->last_rx = 0;
     b->receptions = 1;
     b->len = 0;
     b->text[0] = '\0';
     a->has_header = false;
+    a->dtg_first = false;
+    a->content_lines = 0;
+    a->blank_after = false;
 }
 
 static void cur_append(nb_assembler_t *a, const char *s, const uint8_t *q, int n, time_t now)
@@ -186,12 +193,36 @@ static bool worth_keeping(const nb_bulletin_t *b)
            bad * 100 <= NB_JUNK_MAX_BAD * (alnum ? alnum : 1);
 }
 
-static void cur_close(nb_assembler_t *a, bool tail_seen)
+/* how a bulletin ended */
+typedef enum {
+    END_NNNN,                       /* its NNNN */
+    END_NEXT,                       /* the header of the next one */
+    END_DTG,                        /* the date-time group of the next one */
+    END_SIGNAL                      /* signal gone, silence, decoder stopped */
+} end_t;
+
+static void cur_close(nb_assembler_t *a, end_t end)
 {
     nb_bulletin_t *b = &a->cur;
+    bool tail_seen = end == END_NNNN;
     trim(b);
-    b->lost_head = !a->has_header;
-    b->lost_tail = !tail_seen;
+    if (!a->has_header && a->dtg_first && !tail_seen) {
+        /*
+         * A SITOR-B message without the NAVTEX frame (no ZCZC, no NNNN),
+         * as some coast stations send on HF: it starts with its date-time
+         * group and ends where the next one starts.  Complete, unless the
+         * signal went in the middle of a line of text.
+         */
+        b->sitor = true;
+        b->lost_head = false;
+        b->lost_tail = end == END_SIGNAL && !a->blank_after;
+    } else {
+        /* (a date-time group first and an NNNN: a NAVTEX bulletin whose header was lost) */
+        b->lost_head = !a->has_header;
+        /* text without header up to the date-time group of a SITOR-B
+         * message: caught in the middle, but received to its end */
+        b->lost_tail = !tail_seen && !(end == END_DTG && !a->has_header);
+    }
     /* a header and nothing else, cut by the end of the signal: nothing to show */
     bool empty_cut = a->has_header && b->len == 0 && !tail_seen;
     if (!empty_cut && (a->has_header || (b->len > 0 && worth_keeping(b)))) {
@@ -214,7 +245,7 @@ static void commit_line(nb_assembler_t *a, time_t now)
     char b1, b2;
     int num;
     if (parse_header(s, n, &b1, &b2, &num)) {
-        if (cur_has_content(a)) cur_close(a, false);
+        if (cur_has_content(a)) cur_close(a, END_NEXT);
         a->has_header = true;
         a->cur.b1 = b1;
         a->cur.b2 = b2;
@@ -223,15 +254,23 @@ static void commit_line(nb_assembler_t *a, time_t now)
         return;
     }
     if (is_end(s, n)) {
-        if (cur_has_content(a)) cur_close(a, true);
+        if (cur_has_content(a)) cur_close(a, END_NNNN);
         return;
     }
     /* a date-time group after some text: a new bulletin whose header was lost */
     if (a->cur.len > 0 && is_dtg(s, n)) {
         int lines = 0;
         for (int i = 0; i < a->cur.len; ++i) lines += a->cur.text[i] == '\n';
-        if (lines >= 2) cur_close(a, false);
+        if (lines >= 2) cur_close(a, END_DTG);
     }
+
+    bool blank = true;
+    for (int i = 0; i < n && blank; ++i) blank = s[i] == ' ';
+    if (!blank) {
+        if (a->content_lines == 0 && !a->has_header && is_dtg(s, n)) a->dtg_first = true;
+        a->content_lines++;
+    }
+    a->blank_after = blank && a->content_lines > 0;
 
     static const uint8_t nl_q = NAVTEX_Q_CLEAN;
     cur_append(a, s, a->line_q, n, now);
@@ -293,7 +332,7 @@ void nb_flush(nb_assembler_t *a)
 {
     if (!a) return;
     if (a->line_len) commit_line(a, a->last_char);
-    if (cur_has_content(a)) cur_close(a, false);
+    if (cur_has_content(a)) cur_close(a, END_SIGNAL);
 }
 
 /* ---- helpers ------------------------------------------------------------------ */
@@ -452,6 +491,7 @@ bool nb_merge(nb_bulletin_t *dst, const nb_bulletin_t *src)
 
     /* the header of the copy that has it */
     if (!dst->b1 && other.b1) { dst->b1 = other.b1; dst->b2 = other.b2; dst->num = other.num; }
+    dst->sitor = dst->sitor && !dst->b1 && !dst->b2;
     dst->lost_head = dst->lost_head && other.lost_head;
     dst->lost_tail = dst->lost_tail && other.lost_tail;
     dst->receptions = receptions;
@@ -624,6 +664,7 @@ bool nb_save(const nb_bulletin_t *b, const char *path)
     fprintf(f, "HEADER %c%c%02d\n", b->b1 ? b->b1 : '-', b->b2 ? b->b2 : '-', b->num >= 0 ? b->num : 99);
     fprintf(f, "KNOWN %d %d %d\n", b->b1 != 0, b->b2 != 0, b->num >= 0);
     fprintf(f, "LOST %d %d\n", b->lost_head, b->lost_tail);
+    if (b->sitor) fprintf(f, "KIND SITORB\n");
     fprintf(f, "RX %lld %lld %d\n", (long long)b->first_rx, (long long)b->last_rx, b->receptions);
     fprintf(f, "QUALITY ");
     for (int i = 0; i < b->len; ++i) fputc('0' + (b->q[i] & 3), f);
@@ -668,6 +709,7 @@ bool nb_load(nb_bulletin_t *b, const char *path)
         if (sscanf(line, "HEADER %7s", h) == 1) continue;
         if (sscanf(line, "KNOWN %d %d %d", &kb1, &kb2, &knum) == 3) continue;
         if (sscanf(line, "LOST %d %d", &l1, &l2) == 2) { b->lost_head = l1; b->lost_tail = l2; continue; }
+        if (!strncmp(line, "KIND SITORB", 11)) { b->sitor = true; continue; }
         if (sscanf(line, "RX %lld %lld %d", &a1, &a2, &r) == 3) {
             b->first_rx = (time_t)a1; b->last_rx = (time_t)a2; b->receptions = r; continue;
         }
