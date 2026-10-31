@@ -6,13 +6,22 @@
 ## Source
 
 The **EiBi shortwave schedule** by Eike Bierwirth, https://www.eibispace.de/
-(the CSV database, `sked-<season>.csv`, unchanged).
+(the CSV database, `sked-<season>.csv`; the only change is the one noted below).
 
 This copy is season **A26** (summer 2026, 29 March to 24 October 2026),
-from an update of that season taken for 1KO125 1.0.2 (Hany El Imam). EiBi
-publishes a new file for each season: **B26** (winter) starts on
-25 October 2026, then A27 at the end of March 2027, and updates each file
-during its season.
+the latest update of that season available on 31 October 2026, converted
+from ISO-8859-1 to UTF-8 with LF line endings. EiBi publishes a new file for
+each season: **B26** (winter) starts on 25 October 2026, then A27 at the
+end of March 2027, and updates each file during its season.
+
+**Temporary change:** the B26 file was not yet published on 31 October
+2026, and the firmware ignores a row whose Stop date has passed (the
+Channel List would answer "no station scheduled" for stations that are
+on the air). So, in this copy, every Stop date between 24 and 31 October
+(`2410`, `2510`, `3010`, `3110`, with a trailing `[..]` kept) was
+changed to `3112`: the A26 schedule stays valid until the end of the
+year. Nothing else was touched. **Replace this file with B26 as soon as
+EiBi publishes it** (then this note goes away).
 
 ## Terms of use
 
