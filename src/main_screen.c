@@ -39,6 +39,7 @@
 #include "dialog_msg_voice.h"
 #include "dialog_swrscan.h"
 #include "dialog_ft8.h"
+#include "dialog_js8.h"
 #include "dialog_wefax.h"
 #include "dialog_navtex.h"
 #include "dialog_sstv.h"
@@ -221,6 +222,11 @@ void main_screen_start_app(press_action_t app_action) {
         /* The apps on their way in: each one's case below its name */
         /* WSPR */
         /* JS8 */
+        case ACTION_APP_JS8:
+            dialog_construct(dialog_js8, obj);
+            voice_say_text_fmt("JS8 window");
+            break;
+
         /* PSK31 */
         /* Olivia */
         /* WeFax */
@@ -320,6 +326,7 @@ void main_screen_action(press_action_t action) {
         case ACTION_APP_BT:
         /* WSPR */
         /* JS8 */
+        case ACTION_APP_JS8:
         /* PSK31 */
         /* Olivia */
         /* WeFax */
@@ -341,6 +348,12 @@ void main_screen_action(press_action_t action) {
         case ACTION_APP_CALLSIGN:
             dialog_construct(dialog_callsign, obj);
             voice_say_text_fmt("Callsign window");
+            break;
+
+        case ACTION_APP_CHANNELS:
+            /* As the hand mic's V/M key: over a running app it opens as
+             * an overlay (dialog_channels.c). */
+            dialog_channels_toggle(obj, dialog_running);
             break;
     }
 }

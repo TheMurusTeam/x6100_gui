@@ -35,6 +35,7 @@
 #include "msg.h"
 #include "meter.h"
 #include "scheduler.h"
+#include "diag_log.h"
 
 #define BUF_SIZE 1024
 

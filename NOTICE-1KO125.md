@@ -1,6 +1,6 @@
 # 1KO125 – License notice
 
-1KO125 is a firmware for the Xiegu X6100 based on R1CBU x6100_gui 1.1.0.
+1KO125 is a firmware for the Xiegu X6100 based on R1CBU x6100_gui 1.2.0 (OpenX6100).
 
 ## Licenses
 

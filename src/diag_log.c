@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -25,8 +26,12 @@
 #define DIAG_MAX_PER_S  10          /* lines per second and file, the rest only counted */
 #define DIAG_ECHO_PER_S 5           /* of them, messages copied from stderr / kernel */
 
+#define DIAG_QUEUE      32          /* lines waiting for the writer thread */
+#define DIAG_LINE       512
+
 static __thread const char *thread_source = NULL;
 static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  log_cond  = PTHREAD_COND_INITIALIZER;
 static int stderr_orig = -1;
 static atomic_bool i2c_error;
 
@@ -38,11 +43,58 @@ typedef struct {
 } rate_t;
 static rate_t rate_ptt, rate_i2c, rate_echo;
 
+/* Lines are queued and written by a thread of their own, so a TX command
+ * never waits for the SD card (open, write, fsync, close). */
+static char     queue[DIAG_QUEUE][DIAG_LINE];
+static const char *queue_path[DIAG_QUEUE];     /* the file of each line */
+static unsigned q_head, q_count;
+static bool     writer_running;
+
 /* ---- writing ------------------------------------------------------------------- */
+
+static void write_line(const char *path, const char *line, size_t len)
+{
+    struct stat st;
+    if (stat(path, &st) == 0 && st.st_size > DIAG_MAX_BYTES) {
+        char old[64];
+        snprintf(old, sizeof(old), "%s.old", path);
+        rename(path, old);
+    }
+    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd >= 0) {
+        ssize_t w = write(fd, line, len);
+        (void)w;
+        fsync(fd);              /* the next event may be a crash or a power cut */
+        close(fd);
+    }
+}
+
+static void *writer_thread(void *arg)
+{
+    (void)arg;
+    char line[DIAG_LINE];
+    const char *path;
+
+    pthread_mutex_lock(&log_mutex);
+    for (;;) {
+        while (q_count == 0)
+            pthread_cond_wait(&log_cond, &log_mutex);
+        memcpy(line, queue[q_head], sizeof(line));
+        path = queue_path[q_head];
+        q_head = (q_head + 1) % DIAG_QUEUE;
+        q_count--;
+        pthread_mutex_unlock(&log_mutex);
+
+        write_line(path, line, strlen(line));
+
+        pthread_mutex_lock(&log_mutex);
+    }
+    return NULL;
+}
 
 static void vlog_to(const char *path, rate_t *rate, int max_per_s, const char *fmt, va_list ap)
 {
-    char line[512];
+    char line[DIAG_LINE];
     struct timespec ts;
     struct tm tm;
 
@@ -55,12 +107,12 @@ static void vlog_to(const char *path, rate_t *rate, int max_per_s, const char *f
     while (len && (line[len - 1] == '\n' || line[len - 1] == '\r')) line[--len] = '\0';
 
     pthread_mutex_lock(&log_mutex);
-    /* a burst of errors must not wear the SD card: DIAG_MAX_PER_S lines a second */
+    /* a burst must not wear the SD card: DIAG_MAX_PER_S lines a second */
     if (rate->sec != ts.tv_sec) {
         rate->sec = ts.tv_sec;
         rate->n   = 0;
     }
-    if (++rate->n > max_per_s) {
+    if (++rate->n > max_per_s || (writer_running && q_count == DIAG_QUEUE)) {
         rate->skipped++;
         pthread_mutex_unlock(&log_mutex);
         return;
@@ -70,20 +122,18 @@ static void vlog_to(const char *path, rate_t *rate, int max_per_s, const char *f
         len = strlen(line);
         rate->skipped = 0;
     }
-    struct stat st;
-    if (stat(path, &st) == 0 && st.st_size > DIAG_MAX_BYTES) {
-        char old[64];
-        snprintf(old, sizeof(old), "%s.old", path);
-        rename(path, old);
-    }
-    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (fd >= 0) {
-        if (len > sizeof(line) - 2) len = sizeof(line) - 2;
-        line[len++] = '\n';
-        ssize_t w = write(fd, line, len);
-        (void)w;
-        fsync(fd);              /* the next event may be a crash or a power cut */
-        close(fd);
+    if (len > sizeof(line) - 2) len = sizeof(line) - 2;
+    line[len++] = '\n';
+    line[len]   = '\0';
+
+    if (writer_running) {
+        unsigned slot = (q_head + q_count) % DIAG_QUEUE;
+        memcpy(queue[slot], line, len + 1);
+        queue_path[slot] = path;
+        q_count++;
+        pthread_cond_signal(&log_cond);
+    } else {
+        write_line(path, line, len);    /* no thread (yet): write it here */
     }
     pthread_mutex_unlock(&log_mutex);
 }
@@ -114,25 +164,27 @@ static void echo_log(const char *fmt, ...)
     va_end(ap);
 }
 
-void diag_set_source(const char *name)
-{
-    thread_source = name;
-}
-
 bool diag_i2c_error_take(void)
 {
     return atomic_exchange(&i2c_error, false);
 }
 
-const char *diag_source(void)
+const char *diag_set_source(const char *name)
 {
-    static __thread char buf[32];
-    if (thread_source) return thread_source;
-    snprintf(buf, sizeof(buf), "thread %ld", (long)syscall(SYS_gettid));
-    return buf;
+    const char *prev = thread_source;
+    thread_source = name;
+    return prev;
 }
 
-/* ---- I2C errors -------------------------------------------------------------------- */
+void diag_source_copy(char *dst, size_t size)
+{
+    if (thread_source)
+        snprintf(dst, size, "%s", thread_source);
+    else
+        snprintf(dst, size, "thread %ld", (long)syscall(SYS_gettid));
+}
+
+/* ---- I2C errors (1KO125) ----------------------------------------------------------- */
 
 static bool has_i2c(const char *s)
 {
@@ -202,19 +254,26 @@ static void *kmsg_thread(void *arg)
 
 void diag_init(void)
 {
+    pthread_t thread;
+
     diag_set_source("UI");              /* the thread of main(): LVGL, keys */
     diag_ptt_log("---- start (firmware running) ----");
     diag_i2c_log("---- start (firmware running) ----");
+    if (pthread_create(&thread, NULL, writer_thread, NULL) == 0) {
+        pthread_detach(thread);
+        pthread_mutex_lock(&log_mutex);
+        writer_running = true;
+        pthread_mutex_unlock(&log_mutex);
+    }
 
     int p[2];
-    pthread_t t;
     if (pipe(p) == 0) {
         stderr_orig = dup(STDERR_FILENO);
         fcntl(p[1], F_SETFL, O_NONBLOCK);       /* a full pipe drops text, never blocks the app */
         dup2(p[1], STDERR_FILENO);
         close(p[1]);
         setvbuf(stderr, NULL, _IONBF, 0);
-        if (pthread_create(&t, NULL, stderr_thread, (void *)(long)p[0]) == 0) pthread_detach(t);
+        if (pthread_create(&thread, NULL, stderr_thread, (void *)(long)p[0]) == 0) pthread_detach(thread);
     }
-    if (pthread_create(&t, NULL, kmsg_thread, NULL) == 0) pthread_detach(t);
+    if (pthread_create(&thread, NULL, kmsg_thread, NULL) == 0) pthread_detach(thread);
 }

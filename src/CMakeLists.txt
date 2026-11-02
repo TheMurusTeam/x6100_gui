@@ -14,6 +14,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 target_compile_definitions(${PROJECT_NAME} PRIVATE _GNU_SOURCE)
 
 target_sources(${PROJECT_NAME} PUBLIC
+    diag_log.c
     main.c main_screen.c
     channels.c dialog_channels.c broadcast_db.c broadcast_overlay.c cJSON.c
     styles.c spectrum.c radio.c dsp.cpp util.cpp
@@ -24,17 +25,15 @@ target_sources(${PROJECT_NAME} PUBLIC
     meter.c band_info.cpp tx_info.c tx_level.c tx_player.c
     audio.c mfk.cpp cw.cpp panel.cpp
     rtty.c screenshot.c display.cpp gps.c
-    ui_list.c app_info.c diag_log.c app_radio.c
+    ui_list.c app_info.c
+    app_radio.c
+    dialog.c dialog_swrscan.c
     dxcc.c
-    dialog.c dialog_swrscan.c dialog_wefax.c wefax/decoder.c wefax/stations.c wefax/wefax_pp.c
-    dialog_navtex.c navtex/decoder.c navtex/sitorb.c navtex/bulletin.c
-    dialog_sstv.c sstv_resources.c sstv/decoder.c sstv/encoder.c sstv/autodetect.c sstv/vis.c sstv/linesync.c sstv/preview.c sstv/sstv_denoise.c sstv/sstv_dnn.c sstv/syncgrid.c
-    dialog_dsc.c dsc/dsc_decoder.c dsc/dsc_format.c dsc/dsc_mid.c dsc/dsc_coast.c dsc/dsc_ships.c dsc/dsc_qrcodegen.c dsc/dsc_flags.c
     dialog_ft8.c dialog_freq.c dialog_gps.c dialog_msg_cw.c
     dialog_ft8cb.c ft8cb/cb_msg.c ft8cb/qso_cb.c ft8cb/tx_cb.c ft8cb/cb_store.c ft8cb/cb_div.c ft8cb/table_view_cb.c
     ft8_ui/table_view.c
     ft8_udp.c
-    dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c
+    dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c digi_menu.c
     textarea_window.c cw_encoder.c buttons.cpp vol.cpp recorder.c
     voice.cpp cw_tune_ui.c adif.c qso_log.c scheduler.cpp
     format.c msg_cw_store.c
@@ -45,10 +44,16 @@ target_sources(${PROJECT_NAME} PUBLIC
     # The apps on their way in: each one's sources below its name
     # WSPR
     # JS8
+    dialog_js8.c js8_wf.c js8_clock.c
     # PSK31
     # Olivia
     # WeFax
+    dialog_wefax.c wefax/decoder.c wefax/stations.c wefax/wefax_pp.c
     # SSTV
+    dialog_sstv.c sstv_resources.c sstv/decoder.c sstv/encoder.c sstv/autodetect.c sstv/vis.c sstv/linesync.c sstv/preview.c sstv/sstv_denoise.c sstv/sstv_dnn.c sstv/syncgrid.c
+    # 1KO125 apps
+    dialog_navtex.c navtex/decoder.c navtex/sitorb.c navtex/bulletin.c
+    dialog_dsc.c dsc/dsc_decoder.c dsc/dsc_format.c dsc/dsc_mid.c dsc/dsc_coast.c dsc/dsc_ships.c dsc/dsc_qrcodegen.c dsc/dsc_flags.c
 )
 
 add_subdirectory(fonts)
@@ -87,6 +92,7 @@ liquid
 RHVoice RHVoice_core RHVoice_audio
 ft8
 cw_decoder
+JS8
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

@@ -330,12 +330,15 @@ static button_data_t  btn_bt     = make_app_btn("Bluetooth", ACTION_APP_BT);
  * other's lines. Their places on the pages are fixed below. */
 /* WSPR */
 /* JS8 */
+static button_data_t  btn_js8    = make_app_btn("JS8", ACTION_APP_JS8);
 /* PSK31 */
 /* Olivia */
 /* WeFax */
 static button_data_t  btn_wefax  = make_app_btn("WeFax", ACTION_APP_WEFAX);
 /* SSTV */
 static button_data_t  btn_sstv   = make_app_btn("SSTV", ACTION_APP_SSTV);
+/* Channels */
+static button_data_t  btn_channels = make_action_btn("Channels", ACTION_APP_CHANNELS);
 /* 1KO125 apps, on page 5 */
 static button_data_t  btn_navtex = make_app_btn("Navtex\nSitorB", ACTION_APP_NAVTEX);
 static button_data_t  btn_dsc    = make_app_btn("DSC", ACTION_APP_DSC);
@@ -472,37 +475,18 @@ static buttons_page_t page_app_1 = {
 static buttons_page_t page_app_2 = {
     {&btn_app_p2, &btn_rec, &btn_qth, &btn_callsign, &btn_settings}
 };
-/* Pages 3 and 4: every app has its fixed place, kept empty (NULL) until the
- * app comes in. Each app only replaces its own NULL, so the order on the
- * radio never changes whichever app is merged first. */
-static buttons_page_t page_app_3 = {{
-    &btn_app_p3,
-    &btn_wifi,
-    &btn_bt,
-    /* WSPR */
-    NULL,
-    /* JS8 */
-    NULL,
-}};
-static buttons_page_t page_app_4 = {{
-    &btn_app_p4,
-    /* PSK31 */
-    NULL,
-    /* Olivia */
-    NULL,
-    /* WeFax */
-    &btn_wefax,
-    /* SSTV */
-    &btn_sstv,
-}};
+/* Pages 3 and 4: no empty places (an empty button looks like a bug);
+ * new apps go at the end. */
+static buttons_page_t page_app_3 = {
+    {&btn_app_p3, &btn_wifi, &btn_bt, &btn_js8, &btn_wefax}
+};
+static buttons_page_t page_app_4 = {
+    {&btn_app_p4, &btn_sstv, &btn_channels}
+};
 /* 1KO125 */
-static buttons_page_t page_app_5 = {{
-    &btn_app_p5,
-    &btn_navtex,
-    &btn_dsc,
-    &btn_ft8cb,
-    NULL,
-}};
+static buttons_page_t page_app_5 = {
+    {&btn_app_p5, &btn_navtex, &btn_dsc, &btn_ft8cb}
+};
 
 /* RTTY */
 
