@@ -914,7 +914,8 @@ static void main_screen_hkey_cb(lv_event_t * e) {
         case HKEY_UP:
             if (hkey->state == HKEY_RELEASE) {
                 if (!lm_get_freq()) {
-                    if (dialog_wefax_mic_step(-1) || dialog_dsc_mic_step(-1) || dialog_navtex_mic_step(-1)) {
+                    if (dialog_wefax_mic_step(-1) || dialog_dsc_mic_step(-1) || dialog_navtex_mic_step(-1) ||
+                        app_broadcast_mic_scan(-1)) {
                         /* WEFAX / DSC / NAVTEX open: previous/next station or channel */
                     } else if (dialog_channels_recall_relative(-1)) {
                         msg_update_text_fmt("%s", dialog_channels_last_recalled_name());
@@ -933,7 +934,8 @@ static void main_screen_hkey_cb(lv_event_t * e) {
         case HKEY_DOWN:
             if (hkey->state == HKEY_RELEASE) {
                 if (!lm_get_freq()) {
-                    if (dialog_wefax_mic_step(+1) || dialog_dsc_mic_step(+1) || dialog_navtex_mic_step(+1)) {
+                    if (dialog_wefax_mic_step(+1) || dialog_dsc_mic_step(+1) || dialog_navtex_mic_step(+1) ||
+                        app_broadcast_mic_scan(+1)) {
                         /* WEFAX / DSC / NAVTEX open: previous/next station or channel */
                     } else if (dialog_channels_recall_relative(+1)) {
                         msg_update_text_fmt("%s", dialog_channels_last_recalled_name());
@@ -956,7 +958,8 @@ static void main_screen_hkey_cb(lv_event_t * e) {
                 /* WEFAX / DSC open: their stations / frequency list instead
                  * (CHANNELS, if already open over them, is still closed by V/M) */
                 if (dialog_channels_is_open() ||
-                    !(dialog_wefax_vm_toggle() || dialog_dsc_vm_toggle() || dialog_navtex_vm_toggle())) {
+                    !(dialog_wefax_vm_toggle() || dialog_dsc_vm_toggle() || dialog_navtex_vm_toggle() ||
+                      app_broadcast_vm_toggle())) {
                     dialog_channels_toggle(obj, dialog_running);
                 }
             }
