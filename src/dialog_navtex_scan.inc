@@ -21,13 +21,13 @@
  *      the median and the other present (a run of one tone).  A broad signal (radar, noise,
  *      pulses) is flat there and does not pass.  If not, on to the next
  *      frequency;
- *   3. if so, up to 8 s for the decoder to lock, then up to 10 s for
+ *   3. if so, up to 8 s for the decoder to lock, then up to 15 s for
  *      SCAN_GOOD characters received correctly (clean or from the repeated
- *      copy), at least twice as many as the lost or guessed ones; or 6 s
- *      locked with no bad character (phasing or idle between messages,
- *      nothing to print).  A lock on something that only looks like
- *      SITOR-B gives random characters.  A lock lost in a fade may come
- *      back within 3 s.
+ *      copy), at least twice as many as the lost or guessed ones.  A
+ *      station sending only phasing or idle keeps the decoder locked with
+ *      nothing to print: if no message starts within 15 s, on to the next
+ *      frequency.  A lock on something that only looks like SITOR-B gives
+ *      random characters.  A lock lost in a fade may come back within 3 s.
  * Checked with tests/navtex/scan_sim on recordings of 518 kHz and of
  * Istanbul (shifted to 1000 Hz), arriving every 5 s: every arrival during
  * a transmission stops on the station.
@@ -39,10 +39,9 @@
 
 #define SCAN_MEASURE_MS     500
 #define SCAN_LOCK_MS        8000    /* for the decoder to lock */
-#define SCAN_IDLE_MS        6000    /* locked this long with no bad character:
-                                     * a station sending phasing or idle */
-#define SCAN_TEXT_MS        10000   /* after the lock, for good characters (the
-                                     * decoder prints them 1.5 s late) */
+#define SCAN_TEXT_MS        15000   /* after the lock, for good characters (the
+                                     * decoder prints them 1.5 s late); a station
+                                     * only phasing or idle this long: on */
 #define SCAN_RELOCK_MS      3000    /* a lock lost: this long to lock again */
 #define SCAN_GOOD           12
 /* The weaker tone over the median of 550-1450 Hz, and over the middle
@@ -421,16 +420,6 @@ static void scan_poll(void)
                 fprintf(stderr, "NAVTEX SCAN: %s kHz locked, %d good / %d lost characters\n", k, good, bad);
                 scan_stop(NULL);
                 scan_resume = true;         /* the next Scan goes on from here */
-                msg_update_text_fmt("Scan: SITOR-B signal on %s kHz", k);
-                break;
-            }
-            if (!scan_unsynced && t >= SCAN_IDLE_MS && bad <= 2) {
-                /* locked all along, nothing printed: phasing or idle
-                 * between messages, a real SITOR-B station */
-                fprintf(stderr, "NAVTEX SCAN: %s kHz locked on phasing / idle (%d good / %d lost)\n",
-                        k, good, bad);
-                scan_stop(NULL);
-                scan_resume = true;
                 msg_update_text_fmt("Scan: SITOR-B signal on %s kHz", k);
                 break;
             }

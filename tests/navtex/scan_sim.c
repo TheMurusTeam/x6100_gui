@@ -10,7 +10,7 @@
  *   scan_sim IN.wav [WAIT] [STEP]       (defaults 0.7 s, 15 s)
  *
  * One line per arrival: tone and dip (dB), lock time, good / bad
- * characters, the decision (FOUND, FOUND-IDLE, TONE-FAIL, NO-LOCK,
+ * characters, the decision (FOUND, TONE-FAIL, NO-LOCK,
  * TIMEOUT, LOST-LOCK, BAD).  Keep the numbers in step with the .inc.
  */
 #include <math.h>
@@ -54,9 +54,8 @@ int main(int argc,char**argv){
     if(synced && !text && now>=wait){ text=1; text_t=now; good=bad=0; unseen=0;}
     if(!text && measured && now>wait+0.5+8){res="NO-LOCK";break;}
     if(text){ if(good>=12 && bad*2<=good){res="FOUND";break;}
-      if(!unsynced && now-text_t>=6 && bad<=2 && good<12){res="FOUND-IDLE";break;}
       int gone=0; if(unsynced){ if(!unseen){unseen=1;us=now;} gone= now-us>=3;} else unseen=0;
-      if(gone||now-text_t>=10||(bad>=24&&bad>good)){res=gone?"LOST-LOCK":(now-text_t>=10?"TIMEOUT":"BAD");break;} }
+      if(gone||now-text_t>=15||(bad>=24&&bad>good)){res=gone?"LOST-LOCK":(now-text_t>=15?"TIMEOUT":"BAD");break;} }
   }
   printf("T0 %6.1f  tone %+5.1f dip %+5.1f (%d Hz)  lock %+5.1f  good %3d bad %3d  t %5.1f  %s\n",T0,tone,dip,low,lock_t,good,bad,tt,res);
   sitorb_destroy(d);
