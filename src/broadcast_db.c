@@ -376,6 +376,49 @@ static void make_match(const broadcast_entry_t *e, broadcast_match_t *m) {
     copy_text(m->remarks, sizeof(m->remarks), TEXT(e, F_REMARKS));
 }
 
+/* the entry is on the air at now_minute of the day utc */
+static bool entry_on_air(const broadcast_entry_t *e, const struct tm *utc, int now_minute) {
+    if (!time_is_active(now_minute, e->start_minute, e->stop_minute)) return false;
+    /* For a schedule crossing midnight, the after-midnight portion still
+     * belongs to the day on which the transmission started. */
+    int schedule_wday = utc->tm_wday;
+    if (e->start_minute > e->stop_minute && now_minute < e->stop_minute)
+        schedule_wday = (schedule_wday + 6) % 7;
+    if (!days_is_active(TEXT(e, F_DAYS), schedule_wday)) return false;
+    return date_is_active(TEXT(e, F_START_DATE), TEXT(e, F_STOP_DATE), utc);
+}
+
+static int cmp_i32(const void *a, const void *b) {
+    int32_t x = *(const int32_t *)a, y = *(const int32_t *)b;
+    return (x > y) - (x < y);
+}
+
+size_t broadcast_db_list_freqs(int32_t lo_hz, int32_t hi_hz, bool on_air_now,
+                               int32_t *out_hz, size_t max_out) {
+    if (!loaded) broadcast_db_init();
+    if (!entries || !out_hz || !max_out) return 0;
+
+    time_t now_t = time(NULL);
+    struct tm utc;
+    if (!gmtime_r(&now_t, &utc)) return 0;
+    int now_minute = utc.tm_hour * 60 + utc.tm_min;
+    size_t n = 0;
+
+    for (size_t i = 0; i < entry_count; ++i) {
+        const broadcast_entry_t *e = &entries[i];
+        int32_t hz = (int32_t)lround(e->freq_khz * 1000.0);
+        if (hz < lo_hz || hz > hi_hz) continue;
+        if (on_air_now && !entry_on_air(e, &utc, now_minute)) continue;
+        bool dup = false;
+        for (size_t k = 0; k < n && !dup; ++k) dup = out_hz[k] == hz;
+        if (dup) continue;
+        if (n == max_out) break;
+        out_hz[n++] = hz;
+    }
+    qsort(out_hz, n, sizeof(*out_hz), cmp_i32);
+    return n;
+}
+
 size_t broadcast_db_find_matches(int32_t freq_hz, int tolerance_hz,
                                  broadcast_match_t *matches, size_t max_matches) {
     if (!loaded) broadcast_db_init();
@@ -390,15 +433,7 @@ size_t broadcast_db_find_matches(int32_t freq_hz, int tolerance_hz,
     for (size_t i = 0; i < entry_count && found < max_matches; ++i) {
         const broadcast_entry_t *e = &entries[i];
         if (fabs(e->freq_khz * 1000.0 - (double)freq_hz) > (double)tolerance_hz) continue;
-        if (!time_is_active(now_minute, e->start_minute, e->stop_minute)) continue;
-
-        /* For a schedule crossing midnight, the after-midnight portion still
-         * belongs to the day on which the transmission started. */
-        int schedule_wday = utc.tm_wday;
-        if (e->start_minute > e->stop_minute && now_minute < e->stop_minute)
-            schedule_wday = (schedule_wday + 6) % 7;
-        if (!days_is_active(TEXT(e, F_DAYS), schedule_wday)) continue;
-        if (!date_is_active(TEXT(e, F_START_DATE), TEXT(e, F_STOP_DATE), &utc)) continue;
+        if (!entry_on_air(e, &utc, now_minute)) continue;
         make_match(e, &matches[found++]);
     }
     return found;

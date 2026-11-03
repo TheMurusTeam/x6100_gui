@@ -34,6 +34,11 @@ bool broadcast_db_init(void);
 size_t broadcast_db_find_matches(int32_t freq_hz, int tolerance_hz,
                                  broadcast_match_t *matches, size_t max_matches);
 
+/* The frequencies (Hz, each once, from the lowest) of the schedule between
+ * lo_hz and hi_hz; with on_air_now only those of stations on the air now. */
+size_t broadcast_db_list_freqs(int32_t lo_hz, int32_t hi_hz, bool on_air_now,
+                               int32_t *out_hz, size_t max_out);
+
 
 #endif
 

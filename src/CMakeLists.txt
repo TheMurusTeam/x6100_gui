@@ -53,6 +53,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     dialog_sstv.c sstv_resources.c sstv/decoder.c sstv/encoder.c sstv/autodetect.c sstv/vis.c sstv/linesync.c sstv/preview.c sstv/sstv_denoise.c sstv/sstv_dnn.c sstv/syncgrid.c
     # 1KO125 apps
     dialog_navtex.c navtex/decoder.c navtex/sitorb.c navtex/bulletin.c
+    app_broadcast.c
     dialog_dsc.c dsc/dsc_decoder.c dsc/dsc_format.c dsc/dsc_mid.c dsc/dsc_coast.c dsc/dsc_ships.c dsc/dsc_qrcodegen.c dsc/dsc_flags.c
 )
 

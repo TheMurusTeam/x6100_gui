@@ -343,6 +343,7 @@ static button_data_t  btn_channels = make_action_btn("Channels", ACTION_APP_CHAN
 static button_data_t  btn_navtex = make_app_btn("Navtex\nSitorB", ACTION_APP_NAVTEX);
 static button_data_t  btn_dsc    = make_app_btn("DSC", ACTION_APP_DSC);
 static button_data_t  btn_ft8cb  = make_app_btn("FT8 CB", ACTION_APP_FT8CB);
+static button_data_t  btn_bcast  = make_app_btn("Broadcast", ACTION_APP_BROADCAST);
 
 /* RTTY */
 static button_data_t btn_rtty_p1 = {
@@ -485,7 +486,7 @@ static buttons_page_t page_app_4 = {
 };
 /* 1KO125 */
 static buttons_page_t page_app_5 = {
-    {&btn_app_p5, &btn_navtex, &btn_dsc, &btn_ft8cb}
+    {&btn_app_p5, &btn_navtex, &btn_dsc, &btn_ft8cb, &btn_bcast}
 };
 
 /* RTTY */

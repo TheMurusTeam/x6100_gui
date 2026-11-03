@@ -65,6 +65,7 @@ typedef enum {
     ACTION_APP_NAVTEX = 110,
     ACTION_APP_DSC = 200,
     ACTION_APP_FT8CB = 201,
+    ACTION_APP_BROADCAST = 202,
 } press_action_t;
 
 typedef enum {

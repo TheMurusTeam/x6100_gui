@@ -45,6 +45,7 @@
 #include "dialog_sstv.h"
 #include "dialog_dsc.h"
 #include "dialog_ft8cb.h"
+#include "app_broadcast.h"
 #include "dialog_channels.h"
 #include "broadcast_db.h"
 #include "broadcast_overlay.h"
@@ -170,6 +171,7 @@ static void apps_disable() {
     dialog_destruct();
 
     rtty_set_state(RTTY_OFF);
+    app_broadcast_stop();       /* 1KO125 */
     panel_update_visibility(false);
 }
 
@@ -257,6 +259,11 @@ void main_screen_start_app(press_action_t app_action) {
             voice_say_text_fmt("FT8 CB window");
             break;
 
+        case ACTION_APP_BROADCAST:
+            app_broadcast_start(obj);
+            voice_say_text_fmt("Broadcast scan");
+            break;
+
         default:
             break;
     }
@@ -337,6 +344,7 @@ void main_screen_action(press_action_t action) {
         case ACTION_APP_NAVTEX:
         case ACTION_APP_DSC:
         case ACTION_APP_FT8CB:
+        case ACTION_APP_BROADCAST:
             main_screen_start_app(action);
             break;
 
