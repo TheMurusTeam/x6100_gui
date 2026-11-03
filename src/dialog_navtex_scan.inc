@@ -14,38 +14,44 @@
  *
  *   1. Wait: the time the radio needs after a frequency change (relays,
  *      audio, spectrum); 0.5 to 1.5 s, chosen with the "Wait" button;
- *   2. 0.3 s of audio: is there energy around the two tones (1000 Hz
- *      +/- 85 Hz, AFC range included) well above the audio on both sides?
- *      If not, on to the next frequency;
- *   3. if so, up to 5 s for the decoder to lock (phasing or DX/RX
- *      repetitions of a real SITOR-B signal: RTTY, DGPS and other FSK do
- *      not lock it).
+ *   2. 0.3 s of audio, its spectrum from 550 to 1450 Hz in 25 Hz steps:
+ *      two tones 150-175 Hz apart (SITOR-B: 170 Hz) near 1000 Hz (AFC
+ *      range included), both well above the median of the spectrum and
+ *      above the middle between them.  A broad signal (radar, noise,
+ *      pulses) is flat there and does not pass.  If not, on to the next
+ *      frequency;
+ *   3. if so, up to 5 s for the decoder to lock, then up to 4 s for
+ *      SCAN_GOOD characters received correctly (clean or from the repeated
+ *      copy) with no more than a third lost or guessed: a lock on
+ *      something that only looks like SITOR-B gives random characters.
  *
- * The scan stops on the first lock, at the end of the list, when the
+ * The scan stops on such a signal, at the end of the list, when the
  * frequency is changed by hand, or when Scan is pressed again.  It never
  * starts again by itself.
  */
 
 #define SCAN_MEASURE_MS     300
-#define SCAN_CONFIRM_MS     5000
-/* tone band over the bands beside it: plain noise reads 0 dB (at most
- * +1.5 dB in 0.3 s), a SITOR-B signal at -5 dB SNR (2500 Hz) +5 dB, at
- * -8 dB +3.5 dB (synthetic, tests/navtex/sitorb_gen) */
-#define SCAN_RATIO_DB       3.0f
+#define SCAN_LOCK_MS        5000    /* for the decoder to lock */
+#define SCAN_TEXT_MS        4000    /* after the lock, for good characters */
+#define SCAN_GOOD           12
+/* The weaker tone over the median of 550-1450 Hz, and over the middle
+ * between the tones.  0.3 s of synthetic audio (tests/navtex/sitorb_gen):
+ * SITOR-B at -8 dB SNR (2500 Hz) +4.3 dB and +4.2 dB, at -5 dB +6.6 and
+ * +4.7; plain noise, coloured noise and broadband pulses at most +1.6 and
+ * +2.0 dB. */
+#define SCAN_TONE_DB        3.0f
+#define SCAN_DIP_DB         3.0f
 #define SCAN_FILE           NAVTEX_SAVE_DIR "/scan.txt"
 
 /* Goertzel blocks of 20 ms at 12000 Hz: bins 50 Hz wide, every 25 Hz */
 #define SCAN_BLOCK          240
-#define SCAN_TONE_LO        850     /* 1000 -/+ (85 + AFC range + half a bin) */
-#define SCAN_TONE_HI        1150
-#define SCAN_REF1_LO        550     /* the audio on both sides */
-#define SCAN_REF1_HI        750
-#define SCAN_REF2_LO        1250
-#define SCAN_REF2_HI        1450
+#define SCAN_F0             550
 #define SCAN_BIN_STEP       25
-#define SCAN_BINS_MAX       40
+#define SCAN_BINS           37      /* 550 ... 1450 Hz */
+#define SCAN_LOW_MIN        850     /* the lower tone: 1000 - 85 -/+ 65 Hz */
+#define SCAN_LOW_MAX        1000
 
-typedef enum { SCAN_OFF, SCAN_SETTLE, SCAN_MEASURE, SCAN_CONFIRM } scan_state_t;
+typedef enum { SCAN_OFF, SCAN_SETTLE, SCAN_MEASURE, SCAN_CONFIRM, SCAN_TEXT } scan_state_t;
 
 static const uint16_t scan_wait_ms[] = { 500, 700, 1000, 1200, 1500 };
 #define SCAN_WAITS ((int)(sizeof(scan_wait_ms) / sizeof(scan_wait_ms[0])))
@@ -62,17 +68,17 @@ static char scan_wait_label[16] = "Wait\n0.7 s";
 
 /* from the decoder (DSP thread) */
 static volatile bool scan_synced = false;
+static volatile bool scan_unsynced = false;
+static volatile int scan_good = 0, scan_bad = 0;   /* characters since the lock */
 
 /* tone measurement, filled by scan_audio() in the DSP thread */
 static pthread_mutex_t scan_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool scan_measuring = false;
-static float scan_coef[SCAN_BINS_MAX];
-static int scan_bin_kind[SCAN_BINS_MAX];    /* 0 tone band, 1 beside it */
-static int scan_nbins = 0;
-static float scan_s1[SCAN_BINS_MAX], scan_s2[SCAN_BINS_MAX];
+static float scan_coef[SCAN_BINS];
+static bool scan_coef_ok = false;
+static float scan_s1[SCAN_BINS], scan_s2[SCAN_BINS];
 static int scan_block_n = 0;
-static double scan_pow[2];                  /* tone band, beside it */
-static int scan_cnt[2];
+static double scan_pow[SCAN_BINS];
 static int scan_blocks = 0;
 
 static void scan_cb(button_data_t *d);
@@ -131,16 +137,10 @@ static void scan_wait_cb(button_data_t *d)
 
 static void scan_bins_init(void)
 {
-    if (scan_nbins) return;
-    for (int f = SCAN_REF1_LO; f <= SCAN_REF2_HI && scan_nbins < SCAN_BINS_MAX; f += SCAN_BIN_STEP) {
-        int kind;
-        if (f >= SCAN_TONE_LO && f <= SCAN_TONE_HI) kind = 0;
-        else if ((f >= SCAN_REF1_LO && f <= SCAN_REF1_HI) || (f >= SCAN_REF2_LO && f <= SCAN_REF2_HI)) kind = 1;
-        else continue;
-        scan_coef[scan_nbins] = 2.0f * cosf(2.0f * (float)M_PI * f / NAVTEX_SAMPLE_RATE);
-        scan_bin_kind[scan_nbins] = kind;
-        scan_nbins++;
-    }
+    if (scan_coef_ok) return;
+    for (int b = 0; b < SCAN_BINS; ++b)
+        scan_coef[b] = 2.0f * cosf(2.0f * (float)M_PI * (SCAN_F0 + b * SCAN_BIN_STEP) / NAVTEX_SAMPLE_RATE);
+    scan_coef_ok = true;
 }
 
 static void scan_measure_start(void)
@@ -148,27 +148,54 @@ static void scan_measure_start(void)
     pthread_mutex_lock(&scan_mutex);
     memset(scan_s1, 0, sizeof(scan_s1));
     memset(scan_s2, 0, sizeof(scan_s2));
+    memset(scan_pow, 0, sizeof(scan_pow));
     scan_block_n = 0;
-    scan_pow[0] = scan_pow[1] = 0.0;
-    scan_cnt[0] = scan_cnt[1] = 0;
     scan_blocks = 0;
     scan_measuring = true;
     pthread_mutex_unlock(&scan_mutex);
 }
 
-/* tone band over the bands beside it, dB; false when too little audio came */
-static bool scan_measure_end(float *ratio_db)
+static int scan_cmp_d(const void *a, const void *b)
 {
-    bool ok;
+    double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
+/* The best pair of tones: the weaker of the two over the median (*tone_db)
+ * and over the middle between them (*dip_db).  false: too little audio. */
+static bool scan_measure_end(float *tone_db, float *dip_db, int *low_hz)
+{
+    double p[SCAN_BINS], sorted[SCAN_BINS];
+    int blocks;
+
     pthread_mutex_lock(&scan_mutex);
     scan_measuring = false;
-    ok = scan_blocks >= 5 && scan_cnt[0] && scan_cnt[1];
-    if (ok) {
-        double t = scan_pow[0] / scan_cnt[0], r = scan_pow[1] / scan_cnt[1];
-        *ratio_db = 10.0f * log10f((float)((t + 1e-20) / (r + 1e-20)));
-    }
+    blocks = scan_blocks;
+    memcpy(p, scan_pow, sizeof(p));
     pthread_mutex_unlock(&scan_mutex);
-    return ok;
+    if (blocks < 5) return false;
+
+    memcpy(sorted, p, sizeof(sorted));
+    qsort(sorted, SCAN_BINS, sizeof(double), scan_cmp_d);
+    double med = sorted[SCAN_BINS / 2] + 1e-20;
+
+    *tone_db = -99.0f;
+    *dip_db = 0.0f;
+    *low_hz = 0;
+    for (int f = SCAN_LOW_MIN; f <= SCAN_LOW_MAX; f += SCAN_BIN_STEP) {
+        int l = (f - SCAN_F0) / SCAN_BIN_STEP;
+        int h = l + 6;                      /* +150 Hz; +175 Hz is h + 1 */
+        double hi = p[h] > p[h + 1] ? p[h] : p[h + 1];
+        double weak = p[l] < hi ? p[l] : hi;
+        double mid = (p[l + 3] + p[l + 4]) / 2.0 + 1e-20;   /* +75, +100 Hz */
+        float t = 10.0f * log10f((float)(weak / med));
+        if (t > *tone_db) {
+            *tone_db = t;
+            *dip_db = 10.0f * log10f((float)(weak / mid));
+            *low_hz = f;
+        }
+    }
+    return true;
 }
 
 static void scan_audio(const float *samples, size_t n)
@@ -178,17 +205,15 @@ static void scan_audio(const float *samples, size_t n)
     if (scan_measuring) {
         for (size_t i = 0; i < n; ++i) {
             float x = samples[i];
-            for (int b = 0; b < scan_nbins; ++b) {
+            for (int b = 0; b < SCAN_BINS; ++b) {
                 float s = x + scan_coef[b] * scan_s1[b] - scan_s2[b];
                 scan_s2[b] = scan_s1[b];
                 scan_s1[b] = s;
             }
             if (++scan_block_n == SCAN_BLOCK) {
-                for (int b = 0; b < scan_nbins; ++b) {
-                    float p = scan_s1[b] * scan_s1[b] + scan_s2[b] * scan_s2[b] -
-                              scan_coef[b] * scan_s1[b] * scan_s2[b];
-                    scan_pow[scan_bin_kind[b]] += p;
-                    scan_cnt[scan_bin_kind[b]]++;
+                for (int b = 0; b < SCAN_BINS; ++b) {
+                    scan_pow[b] += scan_s1[b] * scan_s1[b] + scan_s2[b] * scan_s2[b] -
+                                   scan_coef[b] * scan_s1[b] * scan_s2[b];
                     scan_s1[b] = scan_s2[b] = 0.0f;
                 }
                 scan_block_n = 0;
@@ -202,8 +227,18 @@ static void scan_audio(const float *samples, size_t n)
 /* the decoder's characters and events: a lock is what the scan looks for */
 static void scan_q_cb(int c, int quality, void *user)
 {
-    if (quality == NAVTEX_Q_EVENT && c == NAVTEX_EV_SYNC_ON)
-        scan_synced = true;
+    if (quality == NAVTEX_Q_EVENT) {
+        if (c == NAVTEX_EV_SYNC_ON) {
+            scan_good = scan_bad = 0;
+            scan_synced = true;
+        } else if (c == NAVTEX_EV_SYNC_OFF) {
+            scan_unsynced = true;
+        }
+    } else if (quality == NAVTEX_Q_CLEAN || quality == NAVTEX_Q_REP) {
+        scan_good++;
+    } else {
+        scan_bad++;
+    }
     nav_char_q_cb(c, quality, user);
 }
 
@@ -307,12 +342,12 @@ static void scan_poll(void)
     char k[16];
     nf_fmt_khz(k, sizeof(k), scan_hz);
 
-    /* a lock at any time after the wait: found */
-    if (scan_state != SCAN_SETTLE && scan_synced) {
-        scan_stop(NULL);
-        scan_resume = true;                 /* the next Scan goes on from here */
-        msg_update_text_fmt("Scan: SITOR-B signal on %s kHz", k);
-        return;
+    /* a lock after the wait: then the characters decide */
+    if ((scan_state == SCAN_MEASURE || scan_state == SCAN_CONFIRM) && scan_synced) {
+        scan_unsynced = false;
+        scan_state = SCAN_TEXT;
+        scan_since = lv_tick_get();
+        t = 0;
     }
 
     switch (scan_state) {
@@ -327,10 +362,12 @@ static void scan_poll(void)
 
         case SCAN_MEASURE:
             if (t >= SCAN_MEASURE_MS) {
-                float db = -99.0f;
-                bool ok = scan_measure_end(&db);
-                fprintf(stderr, "NAVTEX SCAN: %s kHz tones %+.1f dB%s\n", k, db, ok ? "" : " (no audio)");
-                if (ok && db >= SCAN_RATIO_DB) {
+                float tone = -99.0f, dip = 0.0f;
+                int low = 0;
+                bool ok = scan_measure_end(&tone, &dip, &low);
+                fprintf(stderr, "NAVTEX SCAN: %s kHz tones %d/%d Hz %+.1f dB, dip %+.1f dB%s\n", k, low,
+                        low + 170, tone, dip, ok ? "" : " (no audio)");
+                if (ok && tone >= SCAN_TONE_DB && dip >= SCAN_DIP_DB) {
                     scan_state = SCAN_CONFIRM;
                     scan_since = lv_tick_get();
                     msg_update_text_fmt("Scan: %s kHz, a signal: waiting for the lock...", k);
@@ -342,11 +379,29 @@ static void scan_poll(void)
             break;
 
         case SCAN_CONFIRM:
-            if (t >= SCAN_CONFIRM_MS && !scan_step()) {
+            if (t >= SCAN_LOCK_MS && !scan_step()) {
                 scan_stop("Scan: end of the list, no SITOR-B signal found");
                 scan_resume = false;
             }
             break;
+
+        case SCAN_TEXT: {
+            int good = scan_good, bad = scan_bad;
+            if (good >= SCAN_GOOD && bad * 2 <= good) {
+                fprintf(stderr, "NAVTEX SCAN: %s kHz locked, %d good / %d lost characters\n", k, good, bad);
+                scan_stop(NULL);
+                scan_resume = true;         /* the next Scan goes on from here */
+                msg_update_text_fmt("Scan: SITOR-B signal on %s kHz", k);
+            } else if (scan_unsynced || t >= SCAN_TEXT_MS || bad > SCAN_GOOD) {
+                fprintf(stderr, "NAVTEX SCAN: %s kHz lock without text (%d good / %d lost), on\n",
+                        k, good, bad);
+                if (!scan_step()) {
+                    scan_stop("Scan: end of the list, no SITOR-B signal found");
+                    scan_resume = false;
+                }
+            }
+            break;
+        }
 
         default:
             break;

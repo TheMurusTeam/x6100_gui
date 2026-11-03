@@ -19,7 +19,8 @@
  *                  (AM, on its carrier, what EiBi says about it) or at the
  *                  end of the band; pressed during a scan: stop
  *          Info   what EiBi says about the current frequency
- *   page 2  Wait, Level (temporary, until their best values are known), Close
+ *   page 2  Wait, Level, Audio (temporary, until their best values are
+ *          known), Close
  *
  * Scan looks at the spectrum, not at one channel at a time: the DSP gives
  * the power spectrum of the whole span around the dial (100 kHz at zoom
@@ -27,7 +28,11 @@
  * next channels; after Wait, a few frames are averaged and each channel in
  * it is checked: a station is a peak at the channel (+/- 2 bins) at least
  * Level dB above the noise of the span (its median) and 3 dB above the
- * sidebands around it (a carrier, not the sideband of a strong neighbour).
+ * spectrum 1.2 to 2.5 kHz around it (a carrier, not the sideband of a
+ * strong neighbour), with its modulation: the power 0.3 to 3.5 kHz below
+ * and above the carrier, the weaker side, at least Audio dB above the noise
+ * (a carrier alone, nothing to hear, is left out; a neighbour's sideband
+ * is on one side only).
  */
 
 #include "app_broadcast.h"
@@ -59,6 +64,8 @@
 #define BC_SIDE_LO_HZ   1200        /* the sidebands: 1.2 to 2.5 kHz away */
 #define BC_SIDE_HI_HZ   2500
 #define BC_SIDE_DB      3.0f
+#define BC_MOD_LO_HZ    300         /* the modulation: 0.3 to 3.5 kHz away */
+#define BC_MOD_HI_HZ    3500
 #define BC_MAX_CH       1024
 #define BC_FRAME_MS     3000        /* no frame for this long: on anyway */
 
@@ -91,6 +98,8 @@ static const bc_band_t bc_bands[] = {
 static const char *bc_mode_names[] = { "All", "EiBi", "On air" };
 static const uint16_t bc_wait_ms[] = { 300, 500, 700, 1000, 1500 };
 static const uint8_t bc_level_db[] = { 6, 10, 15 };
+static const uint8_t bc_audio_db[] = { 2, 4, 6, 8 };
+#define BC_AUDIOS ((int)(sizeof(bc_audio_db) / sizeof(bc_audio_db[0])))
 #define BC_WAITS  ((int)(sizeof(bc_wait_ms) / sizeof(bc_wait_ms[0])))
 #define BC_LEVELS ((int)(sizeof(bc_level_db) / sizeof(bc_level_db[0])))
 
@@ -101,6 +110,7 @@ static int bc_band = -1;
 static int bc_mode = 0;
 static int bc_wait = 2;
 static int bc_level = 1;
+static int bc_audio = 1;
 static bool bc_loaded = false;
 
 static bc_state_t bc_state = BC_IDLE;
@@ -123,7 +133,8 @@ static int bc_frames = 0;
 static uint16_t bc_size = 0;
 static uint32_t bc_base = 0, bc_width = 0;
 
-static char bc_mode_label[24], bc_wait_label[16], bc_level_label[16], bc_scan_label[16] = "Scan";
+static char bc_mode_label[24], bc_wait_label[16], bc_level_label[16], bc_audio_label[16];
+static char bc_scan_label[16] = "Scan";
 
 static void bc_page2_cb(button_data_t *d);
 static void bc_page1_cb(button_data_t *d);
@@ -133,6 +144,7 @@ static void bc_scan_cb(button_data_t *d);
 static void bc_info_cb(button_data_t *d);
 static void bc_wait_cb(button_data_t *d);
 static void bc_level_cb(button_data_t *d);
+static void bc_audio_cb(button_data_t *d);
 static void bc_close_cb(button_data_t *d);
 
 static button_data_t btn_bc_p1    = { .type = BTN_TEXT, .label = "(BCAST 1:2)", .press = bc_page2_cb };
@@ -143,10 +155,11 @@ static button_data_t btn_bc_scan  = { .type = BTN_TEXT, .label = bc_scan_label, 
 static button_data_t btn_bc_info  = { .type = BTN_TEXT, .label = "Info", .press = bc_info_cb };
 static button_data_t btn_bc_wait  = { .type = BTN_TEXT, .label = bc_wait_label, .press = bc_wait_cb };
 static button_data_t btn_bc_level = { .type = BTN_TEXT, .label = bc_level_label, .press = bc_level_cb };
+static button_data_t btn_bc_audio = { .type = BTN_TEXT, .label = bc_audio_label, .press = bc_audio_cb };
 static button_data_t btn_bc_close = { .type = BTN_TEXT, .label = "Close", .press = bc_close_cb };
 
 static buttons_page_t bc_page_1 = { .items = { &btn_bc_p1, &btn_bc_band, &btn_bc_mode, &btn_bc_scan, &btn_bc_info } };
-static buttons_page_t bc_page_2 = { .items = { &btn_bc_p2, &btn_bc_wait, &btn_bc_level, NULL, &btn_bc_close } };
+static buttons_page_t bc_page_2 = { .items = { &btn_bc_p2, &btn_bc_wait, &btn_bc_level, &btn_bc_audio, &btn_bc_close } };
 
 /* ---- settings ---------------------------------------------------------------------- */
 
@@ -156,8 +169,9 @@ static void bc_labels(void)
     unsigned ms = bc_wait_ms[bc_wait];
     snprintf(bc_wait_label, sizeof(bc_wait_label), "Wait\n%u.%u s", ms / 1000, (ms % 1000) / 100);
     snprintf(bc_level_label, sizeof(bc_level_label), "Level\n%u dB", (unsigned)bc_level_db[bc_level]);
+    snprintf(bc_audio_label, sizeof(bc_audio_label), "Audio\n%u dB", (unsigned)bc_audio_db[bc_audio]);
     snprintf(bc_scan_label, sizeof(bc_scan_label), "%s", bc_state == BC_IDLE ? "Scan" : "Stop\nScan");
-    button_data_t *b[] = { &btn_bc_mode, &btn_bc_wait, &btn_bc_level, &btn_bc_scan };
+    button_data_t *b[] = { &btn_bc_mode, &btn_bc_wait, &btn_bc_level, &btn_bc_audio, &btn_bc_scan };
     for (size_t i = 0; i < sizeof(b) / sizeof(b[0]); ++i)
         if (b[i]->disp_btn) buttons_refresh(b[i]);
 }
@@ -177,6 +191,8 @@ static void bc_load(void)
             for (int i = 0; i < BC_WAITS; ++i) if (bc_wait_ms[i] == v) bc_wait = i;
         } else if (sscanf(line, "level_db %d", &v) == 1) {
             for (int i = 0; i < BC_LEVELS; ++i) if (bc_level_db[i] == v) bc_level = i;
+        } else if (sscanf(line, "audio_db %d", &v) == 1) {
+            for (int i = 0; i < BC_AUDIOS; ++i) if (bc_audio_db[i] == v) bc_audio = i;
         }
     }
     fclose(f);
@@ -186,8 +202,8 @@ static void bc_save(void)
 {
     FILE *f = fopen(BC_FILE, "w");
     if (!f) return;
-    fprintf(f, "band %d\nmode %d\nwait_ms %u\nlevel_db %u\n", bc_band, bc_mode,
-            (unsigned)bc_wait_ms[bc_wait], (unsigned)bc_level_db[bc_level]);
+    fprintf(f, "band %d\nmode %d\nwait_ms %u\nlevel_db %u\naudio_db %u\n", bc_band, bc_mode,
+            (unsigned)bc_wait_ms[bc_wait], (unsigned)bc_level_db[bc_level], (unsigned)bc_audio_db[bc_audio]);
     fflush(f);
     fsync(fileno(f));
     fclose(f);
@@ -269,15 +285,31 @@ static float bc_max(const float *a, int from, int to)
     return m;
 }
 
-/* a station on hz in the averaged spectrum a: its carrier over the noise */
-static bool bc_station(const float *a, float noise, int32_t hz, float *over)
+/* power of the bins from..to (dB, their mean power) */
+static float bc_mean_db(const float *a, int from, int to)
+{
+    double sum = 0.0;
+    int n = 0;
+    if (from < 0) from = 0;
+    if (to >= bc_size) to = bc_size - 1;
+    for (int i = from; i <= to; ++i, ++n) sum += pow(10.0, a[i] / 10.0);
+    return n ? 10.0f * (float)log10(sum / n + 1e-30) : -1e9f;
+}
+
+/* a station on hz in the averaged spectrum a: its carrier over the noise
+ * (*over) and the weaker side of its modulation over the noise (*mod) */
+static bool bc_station(const float *a, float noise, int32_t hz, float *over, float *mod)
 {
     int c = bc_bin(hz);
     float peak = bc_max(a, c - BC_PEAK_BINS, c + BC_PEAK_BINS);
     int s1 = (int)(BC_SIDE_LO_HZ / bc_bin_hz()), s2 = (int)(BC_SIDE_HI_HZ / bc_bin_hz());
     float side = fmaxf(bc_max(a, c - s2, c - s1), bc_max(a, c + s1, c + s2));
+    int m1 = (int)(BC_MOD_LO_HZ / bc_bin_hz()), m2 = (int)(BC_MOD_HI_HZ / bc_bin_hz());
+    if (m1 <= BC_PEAK_BINS) m1 = BC_PEAK_BINS + 1;
+    float lower = bc_mean_db(a, c - m2, c - m1), upper = bc_mean_db(a, c + m1, c + m2);
     *over = peak - noise;
-    return peak - noise >= bc_level_db[bc_level] && peak - side >= BC_SIDE_DB;
+    *mod = fminf(lower, upper) - noise;
+    return *over >= bc_level_db[bc_level] && peak - side >= BC_SIDE_DB && *mod >= bc_audio_db[bc_audio];
 }
 
 /* ---- scan (LVGL thread) ------------------------------------------------------------ */
@@ -325,11 +357,12 @@ static void bc_move(void)
     bc_since = lv_tick_get();
 }
 
-static void bc_found(int32_t hz, float over)
+static void bc_found(int32_t hz, float over, float mod)
 {
     bc_stop(NULL);
     bc_tune(hz);
-    fprintf(stderr, "BROADCAST SCAN: station on %ld Hz, %.1f dB over the noise\n", (long)hz, over);
+    fprintf(stderr, "BROADCAST SCAN: station on %ld Hz, carrier %.1f dB, modulation %.1f dB over the noise\n",
+            (long)hz, over, mod);
     bc_show(hz);
 }
 
@@ -358,13 +391,16 @@ static void bc_check_span(void)
 
     int checked = 0;
     while (bc_next < bc_nch && bc_in_span(bc_ch[bc_next])) {
-        float over;
+        float over, mod;
         int32_t hz = bc_ch[bc_next++];
         checked++;
-        if (bc_station(a, noise, hz, &over)) {
-            bc_found(hz, over);
+        if (bc_station(a, noise, hz, &over, &mod)) {
+            bc_found(hz, over, mod);
             return;
         }
+        if (over >= bc_level_db[bc_level])
+            fprintf(stderr, "BROADCAST SCAN: carrier on %ld Hz (%.1f dB), modulation %.1f dB: left out\n",
+                    (long)hz, over, mod);
     }
     fprintf(stderr, "BROADCAST SCAN: span %ld Hz +/- %ld, %d frames, %d channels, none\n",
             (long)bc_base, (long)(bc_width / 2), frames, checked);
@@ -494,6 +530,14 @@ static void bc_level_cb(button_data_t *d)
 {
     (void)d;
     bc_level = (bc_level + 1) % BC_LEVELS;
+    bc_labels();
+    bc_save();
+}
+
+static void bc_audio_cb(button_data_t *d)
+{
+    (void)d;
+    bc_audio = (bc_audio + 1) % BC_AUDIOS;
     bc_labels();
     bc_save();
 }
