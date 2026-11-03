@@ -3,3 +3,4 @@ sitorb_gen
 *.o
 __pycache__/
 bulletin_test
+scan_sim

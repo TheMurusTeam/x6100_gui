@@ -16,15 +16,19 @@
  *      audio, spectrum); 0.5 to 1.5 s, chosen with the "Wait" button;
  *   2. 0.3 s of audio, its spectrum from 550 to 1450 Hz in 25 Hz steps:
  *      two tones 150-175 Hz apart (SITOR-B: 170 Hz) near 1000 Hz (AFC
- *      range included), both well above the median of the spectrum and
- *      above the middle between them.  A broad signal (radar, noise,
+ *      range included), both well above the median of the spectrum and,
+ *      when weak, above the middle between them.  A broad signal (radar, noise,
  *      pulses) is flat there and does not pass.  If not, on to the next
  *      frequency;
- *   3. if so, up to 5 s for the decoder to lock, then up to 10 s for
+ *   3. if so, up to 8 s for the decoder to lock, then up to 10 s for
  *      SCAN_GOOD characters received correctly (clean or from the repeated
- *      copy), at least twice as many as the lost or guessed ones: a lock
- *      on something that only looks like SITOR-B gives random characters.
- *      A lock lost in a fade may come back within 3 s.
+ *      copy), at least twice as many as the lost or guessed ones; or 6 s
+ *      locked with no bad character (phasing or idle between messages,
+ *      nothing to print).  A lock on something that only looks like
+ *      SITOR-B gives random characters.  A lock lost in a fade may come
+ *      back within 3 s.
+ * Checked on recordings of 518 kHz started every 7 s
+ * (tests/navtex/README.md): every start stops on the station.
  *
  * The scan stops on such a signal, at the end of the list, when the
  * frequency is changed by hand, or when Scan is pressed again.  It never
@@ -32,7 +36,9 @@
  */
 
 #define SCAN_MEASURE_MS     300
-#define SCAN_LOCK_MS        5000    /* for the decoder to lock */
+#define SCAN_LOCK_MS        8000    /* for the decoder to lock */
+#define SCAN_IDLE_MS        6000    /* locked this long with no bad character:
+                                     * a station sending phasing or idle */
 #define SCAN_TEXT_MS        10000   /* after the lock, for good characters (the
                                      * decoder prints them 1.5 s late) */
 #define SCAN_RELOCK_MS      3000    /* a lock lost: this long to lock again */
@@ -43,7 +49,9 @@
  * +4.7; plain noise, coloured noise and broadband pulses at most +1.6 and
  * +2.0 dB. */
 #define SCAN_TONE_DB        3.0f
-#define SCAN_DIP_DB         3.0f
+#define SCAN_DIP_DB         2.0f
+#define SCAN_STRONG_DB      6.0f    /* this strong: no dip needed (real 518 kHz
+                                     * recordings: +15 dB with a dip of -1 dB) */
 #define SCAN_FILE           NAVTEX_SAVE_DIR "/scan.txt"
 
 /* Goertzel blocks of 20 ms at 12000 Hz: bins 50 Hz wide, every 25 Hz */
@@ -374,7 +382,7 @@ static void scan_poll(void)
                 bool ok = scan_measure_end(&tone, &dip, &low);
                 fprintf(stderr, "NAVTEX SCAN: %s kHz tones %d/%d Hz %+.1f dB, dip %+.1f dB%s\n", k, low,
                         low + 170, tone, dip, ok ? "" : " (no audio)");
-                if (ok && tone >= SCAN_TONE_DB && dip >= SCAN_DIP_DB) {
+                if (ok && tone >= SCAN_TONE_DB && (dip >= SCAN_DIP_DB || tone >= SCAN_STRONG_DB)) {
                     scan_state = SCAN_CONFIRM;
                     scan_since = lv_tick_get();
                     msg_update_text_fmt("Scan: %s kHz, a signal: waiting for the lock...", k);
@@ -398,6 +406,16 @@ static void scan_poll(void)
                 fprintf(stderr, "NAVTEX SCAN: %s kHz locked, %d good / %d lost characters\n", k, good, bad);
                 scan_stop(NULL);
                 scan_resume = true;         /* the next Scan goes on from here */
+                msg_update_text_fmt("Scan: SITOR-B signal on %s kHz", k);
+                break;
+            }
+            if (!scan_unsynced && t >= SCAN_IDLE_MS && bad <= 2) {
+                /* locked all along, nothing printed: phasing or idle
+                 * between messages, a real SITOR-B station */
+                fprintf(stderr, "NAVTEX SCAN: %s kHz locked on phasing / idle (%d good / %d lost)\n",
+                        k, good, bad);
+                scan_stop(NULL);
+                scan_resume = true;
                 msg_update_text_fmt("Scan: SITOR-B signal on %s kHz", k);
                 break;
             }
