@@ -428,10 +428,10 @@ static void nav_draw_card(lv_draw_ctx_t *ctx, const nb_bulletin_t *b, lv_coord_t
     lv_coord_t e = nav_text(ctx, &sony_22, NB_C_TEXT, x, y1 + 6, 0, LV_TEXT_ALIGN_LEFT, code);
     lv_coord_t tl = nav_text(ctx, &sony_16, NB_C_SUB, r, y1 + 10, 0, LV_TEXT_ALIGN_RIGHT, ts);
     const char *subj = nav_subject(b, "Start lost");
-    nav_text(ctx, &sony_16, b->b2 || b->sitor ? sc : NB_C_WARN, e + 10, y1 + 10, tl - e - 22, LV_TEXT_ALIGN_LEFT, subj);
+    nav_text(ctx, &sony_20, b->b2 || b->sitor ? sc : NB_C_WARN, e + 10, y1 + 10, tl - e - 22, LV_TEXT_ALIGN_LEFT, subj);
     /* 2, 3: the message */
-    nav_text(ctx, &sony_18, NB_C_TEXT, x, y1 + 34, r - x, LV_TEXT_ALIGN_LEFT, t1[0] ? t1 : "(no text)");
-    nav_text(ctx, &sony_16, NB_C_SUB, x, y1 + 58, r - x, LV_TEXT_ALIGN_LEFT, t2);
+    nav_text(ctx, &sony_20, NB_C_TEXT, x, y1 + 34, r - x, LV_TEXT_ALIGN_LEFT, t1[0] ? t1 : "(no text)");
+    nav_text(ctx, &sony_18, NB_C_SUB, x, y1 + 58, r - x, LV_TEXT_ALIGN_LEFT, t2);
     /* 4: station, copies, quality */
     lv_coord_t px = nav_pill(ctx, b, r, y2 - 26, &sony_16);
     char info[96];
@@ -439,7 +439,7 @@ static void nav_draw_card(lv_draw_ctx_t *ctx, const nb_bulletin_t *b, lv_coord_t
              b->receptions > 1 ? (st[0] ? "  x" : "x") : "", "");
     if (b->receptions > 1) snprintf(info + strlen(info), sizeof(info) - strlen(info), "%d", b->receptions);
     if (b->lost_tail) snprintf(info + strlen(info), sizeof(info) - strlen(info), "%send lost", info[0] ? "  " : "");
-    nav_text(ctx, &sony_16, NB_C_SUB, x, y2 - 24, px - x - 10, LV_TEXT_ALIGN_LEFT, info);
+    nav_text(ctx, &sony_18, NB_C_SUB, x, y2 - 24, px - x - 10, LV_TEXT_ALIGN_LEFT, info);
 }
 
 /* ---- the grid ------------------------------------------------------------------------- */
@@ -517,7 +517,7 @@ static void nav_hdr_draw_cb(lv_event_t *e)
              LV_TEXT_ALIGN_LEFT, code);
     char sn[24];
     snprintf(sn, sizeof(sn), "%d / %d", nav_sel + 1, nav_count);
-    nav_text(ctx, &sony_16, tc, a.x1 + (bw - nav_text_w(&sony_16, sn)) / 2, a.y1 + 52, 0,
+    nav_text(ctx, &sony_20, tc, a.x1 + (bw - nav_text_w(&sony_16, sn)) / 2, a.y1 + 52, 0,
              LV_TEXT_ALIGN_LEFT, sn);
 
     lv_coord_t x = a.x1 + bw + 14, r = a.x2 - 12;
@@ -531,24 +531,24 @@ static void nav_hdr_draw_cb(lv_event_t *e)
     /* 2: station, date-time group */
     snprintf(line, sizeof(line), "%s%s%s", st[0] ? st : (b->b1 ? "" : ""), st[0] && dtg[0] ? "   " : "", dtg);
     if (!line[0] && b->b1) snprintf(line, sizeof(line), "Station %c", b->b1);
-    nav_text(ctx, &sony_18, NB_C_SUB, x, a.y1 + 33, r - x, LV_TEXT_ALIGN_LEFT, line);
+    nav_text(ctx, &sony_20, NB_C_SUB, x, a.y1 + 33, r - x, LV_TEXT_ALIGN_LEFT, line);
     /* 3: reception */
     nav_time(b->last_rx, ts, sizeof(ts));
     snprintf(line, sizeof(line), "Received %s UTC", ts);
     if (b->receptions > 1)
         snprintf(line + strlen(line), sizeof(line) - strlen(line), " - %d copies merged", b->receptions);
-    lv_coord_t ex = nav_text(ctx, &sony_16, NB_C_SUB, x, a.y1 + 58, 0, LV_TEXT_ALIGN_LEFT, line);
+    lv_coord_t ex = nav_text(ctx, &sony_20, NB_C_SUB, x, a.y1 + 58, 0, LV_TEXT_ALIGN_LEFT, line);
     if (b->lost_head || b->lost_tail) {
         const char *f = b->lost_head && b->lost_tail ? "START AND END LOST" :
                         b->lost_head ? "START LOST" : "END LOST";
-        nav_text(ctx, &sony_16, NB_C_WARN, ex + 14, a.y1 + 58, 0, LV_TEXT_ALIGN_LEFT, f);
+        nav_text(ctx, &sony_20, NB_C_WARN, ex + 14, a.y1 + 58, 0, LV_TEXT_ALIGN_LEFT, f);
     }
     /* legend */
     lv_coord_t lx = r;
-    lx = nav_text(ctx, &sony_14, 0x5ee08a, lx, a.y1 + 60, 0, LV_TEXT_ALIGN_RIGHT, "repaired") - 10;
-    lx = nav_text(ctx, &sony_14, 0x6ad0ff, lx, a.y1 + 60, 0, LV_TEXT_ALIGN_RIGHT, "position") - 10;
-    lx = nav_text(ctx, &sony_14, 0xff5a5a, lx, a.y1 + 60, 0, LV_TEXT_ALIGN_RIGHT, "* lost") - 10;
-    nav_text(ctx, &sony_14, 0xe2b028, lx, a.y1 + 60, 0, LV_TEXT_ALIGN_RIGHT, "uncertain");
+    lx = nav_text(ctx, &sony_18, 0x5ee08a, lx, a.y1 + 60, 0, LV_TEXT_ALIGN_RIGHT, "repaired") - 10;
+    lx = nav_text(ctx, &sony_18, 0x6ad0ff, lx, a.y1 + 60, 0, LV_TEXT_ALIGN_RIGHT, "position") - 10;
+    lx = nav_text(ctx, &sony_18, 0xff5a5a, lx, a.y1 + 60, 0, LV_TEXT_ALIGN_RIGHT, "* lost") - 10;
+    nav_text(ctx, &sony_18, 0xe2b028, lx, a.y1 + 60, 0, LV_TEXT_ALIGN_RIGHT, "uncertain");
 }
 
 /* the text with LVGL colour commands: "#rrggbb text#" */
