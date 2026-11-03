@@ -110,6 +110,7 @@ static void scan_stop(const char *why);
 static void scan_audio(const float *samples, size_t n);
 static void scan_q_cb(int c, int quality, void *user);
 static void scan_wait_load(void);
+static bool scan_resume;
 
 static navtex_decoder_t *decoder = NULL;
 static lv_obj_t *scroll = NULL;
@@ -810,6 +811,7 @@ static void construct_cb(lv_obj_t *parent)
     nav_construct(parent);
     nf_update_label();
     scan_wait_load();
+    scan_resume = false;    /* the first Scan from the lowest frequency */
 
     ui_timer = lv_timer_create(ui_timer_cb, NAVTEX_UI_TIMER_MS, NULL);
 }

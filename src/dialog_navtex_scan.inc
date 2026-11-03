@@ -6,9 +6,12 @@
 /*
  * Xiegu X6100 - NAVTEX / SITOR-B scan ("Scan"), included by dialog_navtex.c.
  *
- * The frequencies of the list ("Freq.", dialog_navtex_freq.inc) from the
- * lowest (490 kHz) up to the highest, always, each once and in order of
- * frequency (fewer clicks of the band relays).  On each one:
+ * The frequencies of the list ("Freq.", dialog_navtex_freq.inc) up to the
+ * highest, each once and in order of frequency (fewer clicks of the band
+ * relays): from the lowest (490 kHz) the first time after the app opens, at
+ * the end of the list or after a frequency change by hand; after a stop on
+ * a signal or with the button, from the frequency where it stopped.  On
+ * each one:
  *
  *   1. Wait: the time the radio needs after a frequency change (relays,
  *      audio, spectrum); 0.5 to 1.5 s, chosen with the "Wait" button;
@@ -54,6 +57,7 @@ static bool scan_wait_loaded = false;
 static uint32_t scan_since;                 /* lv_tick of the current state */
 static int32_t scan_dial;                   /* the dial the scan set */
 static int32_t scan_hz;                     /* channel being looked at */
+static bool scan_resume = false;            /* the next Scan goes on from scan_hz */
 static char scan_btn_label[16] = "Scan";
 static char scan_wait_label[16] = "Wait\n0.7 s";
 
@@ -257,7 +261,8 @@ static void scan_start(void)
     }
     scan_wait_load();
     scan_bins_init();
-    scan_hz = 0;                            /* always from the lowest frequency */
+    if (!scan_resume)
+        scan_hz = 0;                        /* from the lowest frequency */
     if (!scan_step())
         return;
     scan_set_button();
@@ -268,6 +273,7 @@ static void scan_cb(button_data_t *d)
     (void)d;
     if (scan_state != SCAN_OFF) {
         scan_stop("Scan stopped");
+        scan_resume = true;
         return;
     }
     if (nf_frame) nf_close();               /* started from the list: show the text */
@@ -282,6 +288,7 @@ static void scan_poll(void)
     /* a frequency change not made by the scan ends it */
     if (cparam_i_get(cfg.cur.fg_freq()) != scan_dial) {
         scan_stop("Scan stopped: frequency changed");
+        scan_resume = false;
         return;
     }
 
@@ -292,6 +299,7 @@ static void scan_poll(void)
     /* a lock at any time after the wait: found */
     if (scan_state != SCAN_SETTLE && scan_synced) {
         scan_stop(NULL);
+        scan_resume = true;                 /* the next Scan goes on from here */
         msg_update_text_fmt("Scan: SITOR-B signal on %s kHz", k);
         return;
     }
@@ -317,13 +325,16 @@ static void scan_poll(void)
                     msg_update_text_fmt("Scan: %s kHz, a signal: waiting for the lock...", k);
                 } else if (!scan_step()) {
                     scan_stop("Scan: end of the list, no SITOR-B signal found");
+                    scan_resume = false;
                 }
             }
             break;
 
         case SCAN_CONFIRM:
-            if (t >= SCAN_CONFIRM_MS && !scan_step())
+            if (t >= SCAN_CONFIRM_MS && !scan_step()) {
                 scan_stop("Scan: end of the list, no SITOR-B signal found");
+                scan_resume = false;
+            }
             break;
 
         default:
