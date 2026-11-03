@@ -95,6 +95,7 @@ static void nav_destruct(void);
 static void nav_poll(void);
 static void nav_flush(void);
 static bool nav_key(uint32_t key);
+static lv_obj_t *nav_body_label;     /* text of the open bulletin */
 
 /* frequency list, see dialog_navtex_freq.inc */
 static button_data_t btn_freq;
@@ -729,6 +730,8 @@ static void text_size_cb(Subject *subj, void *user_data)
         lv_obj_set_style_text_font(label, navtex_font(), 0);
         if (text_len) live_label_update();     /* another height per line */
     }
+    if (nav_body_label)                 /* the open NAVTEX bulletin */
+        lv_obj_set_style_text_font(nav_body_label, navtex_font(), 0);
     if (view_label) {
         lv_obj_set_style_text_font(view_label, navtex_font(), 0);
         view_set_window(view_start);

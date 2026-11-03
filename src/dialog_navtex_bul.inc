@@ -802,7 +802,9 @@ static void nav_construct(lv_obj_t *parent)
     lv_obj_set_width(nav_body_label, lv_pct(100));
     lv_label_set_long_mode(nav_body_label, LV_LABEL_LONG_WRAP);
     lv_label_set_recolor(nav_body_label, true);
-    lv_obj_set_style_text_font(nav_body_label, &sony_22, 0);
+    /* 1KO125: Settings > Interface > Decoder text, as RTTY and the SITORB
+     * text (navtex_font(), text_size_cb()); the colours stay (recolor) */
+    lv_obj_set_style_text_font(nav_body_label, navtex_font(), 0);
     lv_obj_set_style_text_color(nav_body_label, lv_color_hex(NB_C_TEXT), 0);
     lv_label_set_text_static(nav_body_label, "");
 
