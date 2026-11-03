@@ -10,14 +10,20 @@
  * spectrum, waterfall), only the buttons are the application's:
  *
  *   page 1  Band   the list of the AM broadcast bands, 100 kHz - 27 MHz;
- *                  a band chosen: AM at its first channel, and Scan starts
+ *                  a band chosen: AM on its first channel
  *          Mode   which channels Scan looks at: All (every channel of the
  *                  band: 9 kHz LW/MW, 5 kHz short waves), EiBi (those in
  *                  the schedule, broadcast.csv), On air (those the schedule
  *                  says are on the air now)
- *          Scan   the next station above the current frequency; stops there
- *                  (AM, on its carrier, what EiBi says about it) or at the
- *                  end of the band; pressed during a scan: stop
+ *          Scan   the next station: the stations of one span (80 kHz at
+ *                  zoom 1x) are measured together and kept in a list; Scan
+ *                  goes to the next one of the list at once, and measures
+ *                  the next span after the last one.  The list is forgotten
+ *                  when the VFO is moved, after 2 minutes, or with another
+ *                  mode.  At the end of the band Scan stops; pressed again,
+ *                  it goes on with the next band from its first channel.
+ *                  Long press: the band again from its first channel.
+ *                  Pressed during a measure: stop
  *          Info   what EiBi says about the current frequency
  *   page 2  Wait, Level, Audio (temporary, until their best values are
  *          known), Close
@@ -141,6 +147,7 @@ static void bc_page1_cb(button_data_t *d);
 static void bc_band_cb(button_data_t *d);
 static void bc_mode_cb(button_data_t *d);
 static void bc_scan_cb(button_data_t *d);
+static void bc_scan_hold_cb(button_data_t *d);
 static void bc_info_cb(button_data_t *d);
 static void bc_wait_cb(button_data_t *d);
 static void bc_level_cb(button_data_t *d);
@@ -151,7 +158,8 @@ static button_data_t btn_bc_p1    = { .type = BTN_TEXT, .label = "(BCAST 1:2)", 
 static button_data_t btn_bc_p2    = { .type = BTN_TEXT, .label = "(BCAST 2:2)", .press = bc_page1_cb };
 static button_data_t btn_bc_band  = { .type = BTN_TEXT, .label = "Band", .press = bc_band_cb };
 static button_data_t btn_bc_mode  = { .type = BTN_TEXT, .label = bc_mode_label, .press = bc_mode_cb };
-static button_data_t btn_bc_scan  = { .type = BTN_TEXT, .label = bc_scan_label, .press = bc_scan_cb };
+static button_data_t btn_bc_scan  = { .type = BTN_TEXT, .label = bc_scan_label, .press = bc_scan_cb,
+                                     .hold = bc_scan_hold_cb };
 static button_data_t btn_bc_info  = { .type = BTN_TEXT, .label = "Info", .press = bc_info_cb };
 static button_data_t btn_bc_wait  = { .type = BTN_TEXT, .label = bc_wait_label, .press = bc_wait_cb };
 static button_data_t btn_bc_level = { .type = BTN_TEXT, .label = bc_level_label, .press = bc_level_cb };
@@ -357,13 +365,40 @@ static void bc_move(void)
     bc_since = lv_tick_get();
 }
 
-static void bc_found(int32_t hz, float over, float mod)
+/* ---- the stations of the last span measured --------------------------------------- */
+
+#define BC_LIST_MAX     64
+#define BC_LIST_MS      120000      /* older than this: measured again */
+
+static int32_t bc_list[BC_LIST_MAX];
+static int bc_list_n = 0;
+static int bc_list_pos = -1;        /* the station of the list we are on */
+static uint32_t bc_list_time;
+static int32_t bc_list_dial;        /* the dial on that station */
+static bool bc_at_end = false;      /* the last scan reached the end of the band */
+
+static void bc_list_forget(void)
+{
+    bc_list_n = 0;
+    bc_list_pos = -1;
+}
+
+static void bc_go_station(int i)
 {
     bc_stop(NULL);
-    bc_tune(hz);
-    fprintf(stderr, "BROADCAST SCAN: station on %ld Hz, carrier %.1f dB, modulation %.1f dB over the noise\n",
-            (long)hz, over, mod);
-    bc_show(hz);
+    bc_list_pos = i;
+    bc_tune(bc_list[i]);
+    bc_list_dial = bc_dial;
+    bc_show(bc_list[i]);
+}
+
+static void bc_end_of_band(void)
+{
+    bc_stop(NULL);
+    bc_list_forget();
+    bc_at_end = true;
+    msg_update_text_fmt("%s: end of the band. Scan: %s", bc_bands[bc_band].name,
+                        bc_bands[(bc_band + 1) % BC_BANDS].name);
 }
 
 static void bc_check_span(void)
@@ -389,25 +424,28 @@ static void bc_check_span(void)
     qsort(tmp, n, sizeof(float), bc_cmp_float);
     float noise = n ? tmp[n / 2] : 0.0f;
 
+    /* every channel of the span: the stations go in the list */
     int checked = 0;
+    bc_list_forget();
     while (bc_next < bc_nch && bc_in_span(bc_ch[bc_next])) {
         float over, mod;
         int32_t hz = bc_ch[bc_next++];
         checked++;
         if (bc_station(a, noise, hz, &over, &mod)) {
-            bc_found(hz, over, mod);
-            return;
-        }
-        if (over >= bc_level_db[bc_level])
+            if (bc_list_n < BC_LIST_MAX) bc_list[bc_list_n++] = hz;
+            fprintf(stderr, "BROADCAST SCAN: station on %ld Hz, carrier %.1f dB, modulation %.1f dB\n",
+                    (long)hz, over, mod);
+        } else if (over >= bc_level_db[bc_level]) {
             fprintf(stderr, "BROADCAST SCAN: carrier on %ld Hz (%.1f dB), modulation %.1f dB: left out\n",
                     (long)hz, over, mod);
+        }
     }
-    fprintf(stderr, "BROADCAST SCAN: span %ld Hz +/- %ld, %d frames, %d channels, none\n",
-            (long)bc_base, (long)(bc_width / 2), frames, checked);
+    fprintf(stderr, "BROADCAST SCAN: span %ld Hz +/- %ld, %d frames, %d channels, %d stations\n",
+            (long)bc_base, (long)(bc_width / 2), frames, checked, bc_list_n);
 
-    if (bc_next >= bc_nch) {
-        bc_stop(NULL);
-        msg_update_text_fmt("%s: end of the band", bc_bands[bc_band].name);
+    if (bc_list_n) {
+        bc_list_time = lv_tick_get();
+        bc_go_station(0);
         return;
     }
     if (checked) {
@@ -418,8 +456,7 @@ static void bc_check_span(void)
         bc_misses = 0;
     }
     if (bc_next >= bc_nch) {
-        bc_stop(NULL);
-        msg_update_text_fmt("%s: end of the band", bc_bands[bc_band].name);
+        bc_end_of_band();
         return;
     }
     bc_move();
@@ -431,6 +468,7 @@ static void bc_timer_cb(lv_timer_t *t)
     if (bc_state == BC_IDLE) return;
 
     if (cparam_i_get(cfg.cur.fg_freq()) != bc_dial) {
+        bc_list_forget();
         bc_stop("Scan stopped: frequency changed");
         return;
     }
@@ -464,12 +502,15 @@ static void bc_timer_cb(lv_timer_t *t)
     }
 }
 
+/* a new scan of the band: from its first channel, or above the dial */
 static void bc_scan_start(void)
 {
     if (bc_band < 0) {
         msg_update_text_fmt("Choose a band first");
         return;
     }
+    bc_at_end = false;
+    bc_list_forget();
     bc_build_channels();
     if (bc_nch == 0) {
         msg_update_text_fmt("%s: no channel to look at in mode %s", bc_bands[bc_band].name,
@@ -483,13 +524,57 @@ static void bc_scan_start(void)
     bc_from_band_start = false;
     bc_misses = 0;
     if (bc_next >= bc_nch) {
-        msg_update_text_fmt("%s: end of the band", bc_bands[bc_band].name);
+        bc_end_of_band();
         return;
     }
     msg_update_text_fmt("Scan %s, %s: %d channels", bc_bands[bc_band].name, bc_mode_names[bc_mode],
                         bc_nch - bc_next);
     bc_move();
     bc_labels();
+}
+
+/* the dial on the first channel of the band, the next Scan from there */
+static void bc_band_begin(void)
+{
+    bc_stop(NULL);
+    bc_list_forget();
+    bc_at_end = false;
+    bc_tune(bc_bands[bc_band].lo);
+    bc_from_band_start = true;
+}
+
+/* Scan: the next station of the list, else the next span, else the next band */
+static void bc_scan_next(void)
+{
+    if (bc_band < 0) {
+        msg_update_text_fmt("Choose a band first");
+        return;
+    }
+    if (bc_at_end) {
+        bc_band = (bc_band + 1) % BC_BANDS;
+        bc_save();
+        bc_band_begin();
+        bc_scan_start();
+        return;
+    }
+    bool on_list = bc_list_n && bc_list_pos >= 0 && cparam_i_get(cfg.cur.fg_freq()) == bc_list_dial;
+    bool fresh = on_list && lv_tick_elaps(bc_list_time) < BC_LIST_MS;
+    if (fresh && bc_list_pos + 1 < bc_list_n) {
+        bc_go_station(bc_list_pos + 1);    /* already measured: at once */
+        return;
+    }
+    if (fresh && bc_next < bc_nch) {
+        bc_list_forget();                   /* the next span, where the last one ended */
+        bc_misses = 0;
+        bc_move();
+        bc_labels();
+        return;
+    }
+    if (fresh) {
+        bc_end_of_band();
+        return;
+    }
+    bc_scan_start();                        /* VFO moved, list too old or none */
 }
 
 /* ---- buttons ----------------------------------------------------------------------- */
@@ -501,6 +586,8 @@ static void bc_mode_cb(button_data_t *d)
 {
     (void)d;
     bc_mode = (bc_mode + 1) % 3;
+    bc_list_forget();
+    bc_at_end = false;
     bc_labels();
     bc_save();
 }
@@ -508,8 +595,24 @@ static void bc_mode_cb(button_data_t *d)
 static void bc_scan_cb(button_data_t *d)
 {
     (void)d;
-    if (bc_state != BC_IDLE) bc_stop("Scan stopped");
-    else bc_scan_start();
+    if (bc_state != BC_IDLE) {
+        bc_list_forget();
+        bc_stop("Scan stopped");
+    } else {
+        bc_scan_next();
+    }
+}
+
+/* long press: the scan again from the first channel of the band */
+static void bc_scan_hold_cb(button_data_t *d)
+{
+    (void)d;
+    if (bc_band < 0) {
+        msg_update_text_fmt("Choose a band first");
+        return;
+    }
+    bc_band_begin();
+    bc_scan_start();
 }
 
 static void bc_info_cb(button_data_t *d)
@@ -577,10 +680,9 @@ static void bl_close_async(void *chosen)
 {
     dialog_destruct();                      /* back to the Broadcast buttons */
     if (chosen) {
-        const bc_band_t *b = &bc_bands[bc_band];
-        bc_tune(b->lo);
-        bc_from_band_start = true;          /* its first channel too */
-        bc_scan_start();
+        bc_band_begin();                    /* AM on the first channel of the band */
+        msg_update_text_fmt("%s: %ld - %ld kHz. Scan for the first station", bc_bands[bc_band].name,
+                            (long)(bc_bands[bc_band].lo / 1000), (long)(bc_bands[bc_band].hi / 1000));
     }
 }
 
