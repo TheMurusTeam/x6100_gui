@@ -303,6 +303,13 @@ static bool scan_step(void)
     int32_t hz = scan_next_hz(scan_hz, &row);
     if (!hz) return false;
     scan_hz = hz;
+    /* a new decoder for each frequency: its lock (SYNC_ON) is then surely
+     * a lock on this one, also when it comes during the wait (a strong
+     * station locks in a fraction of a second) */
+    nav_flush();                            /* a bulletin being received is closed */
+    reset_decoder();
+    scan_synced = false;
+    scan_unsynced = false;
     nf_tune_row(row);                       /* USB-D, dial, its name on the screen */
     scan_dial = cparam_i_get(cfg.cur.fg_freq());
     scan_state = SCAN_SETTLE;
@@ -363,8 +370,8 @@ static void scan_poll(void)
     char k[16];
     nf_fmt_khz(k, sizeof(k), scan_hz);
 
-    /* a lock after the wait: then the characters decide */
-    if ((scan_state == SCAN_MEASURE || scan_state == SCAN_CONFIRM) && scan_synced) {
+    /* a lock on this frequency, also during the wait: the characters decide */
+    if (scan_state != SCAN_TEXT && scan_synced) {
         scan_unsynced = false;
         scan_unsync_seen = false;
         scan_good = scan_bad = 0;
@@ -376,7 +383,6 @@ static void scan_poll(void)
     switch (scan_state) {
         case SCAN_SETTLE:
             if (t >= scan_wait_ms[scan_wait]) {
-                scan_synced = false;        /* only a lock on this frequency counts */
                 scan_measure_start();
                 scan_state = SCAN_MEASURE;
                 scan_since = lv_tick_get();
