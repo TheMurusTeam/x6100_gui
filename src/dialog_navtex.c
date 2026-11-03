@@ -43,14 +43,20 @@
 #define NAVTEX_TEST_CHUNK 256
 #define NAVTEX_SAMPLE_RATE 12000
 
-/* Stress-test value: intentionally small so history rollover happens
- * repeatedly during one live NAVTEX transmission.  Raise this for release
- * (for example to 16384) without changing the rollover algorithm. */
-#define NAVTEX_TEXT_MAX 8192
+/* Live text history (what Save writes).  The panel shows only its newest
+ * part that fits in NAVTEX_LABEL_MAX_H, see fit_tail(). */
+#define NAVTEX_TEXT_MAX 16384
 #define NAVTEX_PENDING_MAX 512
 #define NAVTEX_UI_TIMER_MS 50
 
 #define NAVTEX_SCROLL_STEP 36
+
+/* 1KO125: LVGL 8.3 (LV_USE_LARGE_COORD 0) handles objects up to 8191 px
+ * (LV_COORD_MAX): a taller label cannot be scrolled to its end, and new
+ * text looked frozen until Clear.  The labels never show more than this
+ * height of text, with room for the lines of the next updates. */
+#define NAVTEX_LABEL_MAX_H  7000
+#define NAVTEX_MEASURE_MAX  1024    /* text measured at a time, see text_px() */
 
 /* Saved messages: NAVTEX_SAVE_DIR/sitorb-YYYYMMDD-HHMMSS.txt */
 #define NAVTEX_SAVE_DIR     "/mnt/navtex"
@@ -114,6 +120,12 @@ static lv_obj_t *browser_panel = NULL;  /* same panel as the live text */
 static lv_obj_t *browser_list = NULL;
 static lv_obj_t *view_scroll = NULL;    /* text of the selected file */
 static lv_obj_t *view_label = NULL;
+/* 1KO125: the view shows a window of the file that fits in
+ * NAVTEX_LABEL_MAX_H, moved along by view_key_cb() at its ends */
+static char *view_text = NULL;      /* the whole file, freed with the label */
+static size_t view_len, view_start, view_end;
+static char view_cut = '\0';        /* the character at view_end */
+static void view_set_window(size_t start);
 static navtex_file_t *browser_files = NULL;
 static size_t browser_file_count = 0;
 static size_t browser_file_capacity = 0;
@@ -221,6 +233,106 @@ static void info_cb(button_data_t *data) { (void)data; app_info_open(dialog.obj,
 bool dialog_navtex_is_active(void)
 {
     return dialog.run;
+}
+
+static const lv_font_t *navtex_font(void);
+
+/* Height in pixels of text[0..n) (no newline in it) shown with font in a
+ * label width px wide: at least one line. */
+static int32_t text_px(const char *text, size_t n, const lv_font_t *font, lv_coord_t width)
+{
+    char tmp[NAVTEX_MEASURE_MAX + 1];
+    int32_t lh = lv_font_get_line_height(font);
+    int32_t h = 0;
+
+    do {
+        size_t k = n > NAVTEX_MEASURE_MAX ? NAVTEX_MEASURE_MAX : n;
+        lv_point_t size;
+
+        memcpy(tmp, text, k);
+        tmp[k] = '\0';
+        lv_txt_get_size(&size, tmp, font, 0, 0, width, LV_TEXT_FLAG_NONE);
+        h += size.y < lh ? lh : size.y;
+        text += k;
+        n -= k;
+    } while (n > 0);
+    return h;
+}
+
+/* The start of the newest lines of text[0..len) that fit in limit px.  A
+ * single line taller than that is shown from the part of it that fits. */
+static size_t fit_tail(const char *text, size_t len, const lv_font_t *font, lv_coord_t width,
+                       int32_t limit, int32_t *height)
+{
+    size_t end = len;
+    int32_t h = 0;
+
+    while (end > 0) {
+        size_t e = end;
+        if (text[e - 1] == '\n')
+            e--;
+        size_t st = e;
+        while (st > 0 && text[st - 1] != '\n')
+            st--;
+        int32_t px = text_px(text + st, e - st, font, width);
+        if (h + px > limit) {
+            if (h == 0 && px > 0)       /* one very long line */
+                end = e - (size_t)((int64_t)(e - st) * limit / px);
+            break;
+        }
+        h += px;
+        end = st;
+    }
+    if (height)
+        *height = h;
+    return end;
+}
+
+/* The end (after a newline) of the lines of text[start..len) that fit in
+ * limit px; at least part of the first one. */
+static size_t fit_head(const char *text, size_t start, size_t len, const lv_font_t *font,
+                       lv_coord_t width, int32_t limit, int32_t *height)
+{
+    size_t st = start;
+    int32_t h = 0;
+
+    while (st < len) {
+        const char *nl = memchr(text + st, '\n', len - st);
+        size_t e = nl ? (size_t)(nl - text) : len;
+        size_t next = nl ? e + 1 : len;
+        int32_t px = text_px(text + st, e - st, font, width);
+        if (h + px > limit) {
+            if (h == 0 && px > 0)       /* one very long line */
+                st += (size_t)((int64_t)(e - st) * limit / px);
+            break;
+        }
+        h += px;
+        st = next;
+    }
+    if (height)
+        *height = h;
+    return st;
+}
+
+/* Text width of a label filling obj (its content width, after a layout) */
+static lv_coord_t label_width(lv_obj_t *obj)
+{
+    lv_coord_t w = lv_obj_get_content_width(obj);
+    if (w <= 0) {
+        lv_obj_update_layout(obj);
+        w = lv_obj_get_content_width(obj);
+    }
+    return w > 0 ? w : 1;
+}
+
+/* The live label: the newest part of the history that fits */
+static void live_label_update(void)
+{
+    if (!label || !scroll)
+        return;
+    size_t from = fit_tail(text_buf, text_len, navtex_font(), label_width(scroll),
+                           NAVTEX_LABEL_MAX_H, NULL);
+    lv_label_set_text_static(label, text_buf + from);
 }
 
 static size_t drop_oldest_complete_line(void)
@@ -582,11 +694,8 @@ static void ui_timer_cb(lv_timer_t *timer)
 
     append_text(local, n);
 
-    /*
-     * text_buf has static lifetime, like the stock RTTY panel buffer.
-     * Keep the current NAVTEX font and let LVGL perform visual wrapping.
-     */
-    lv_label_set_text_static(label, text_buf);
+    /* text_buf has static lifetime, like the stock RTTY panel buffer */
+    live_label_update();
 
     if (scroll && follow_tail)
         lv_obj_scroll_to_y(scroll, LV_COORD_MAX, LV_ANIM_OFF);
@@ -605,8 +714,14 @@ static void text_size_cb(Subject *subj, void *user_data)
 {
     (void)subj;
     (void)user_data;
-    if (label) lv_obj_set_style_text_font(label, navtex_font(), 0);
-    if (view_label) lv_obj_set_style_text_font(view_label, navtex_font(), 0);
+    if (label) {
+        lv_obj_set_style_text_font(label, navtex_font(), 0);
+        if (text_len) live_label_update();     /* another height per line */
+    }
+    if (view_label) {
+        lv_obj_set_style_text_font(view_label, navtex_font(), 0);
+        view_set_window(view_start);
+    }
     if (scroll && follow_tail) lv_obj_scroll_to_y(scroll, LV_COORD_MAX, LV_ANIM_OFF);
 }
 
@@ -1127,7 +1242,28 @@ static void view_close(void)
 static void view_delete_cb(lv_event_t *e)
 {
     /* The label shows the text as static text: free it with the label. */
+    if (lv_event_get_user_data(e) == view_text) {
+        view_text = NULL;
+        view_len = view_start = view_end = 0;
+    }
     free(lv_event_get_user_data(e));
+}
+
+/* Shows view_text from start, as much as fits */
+static void view_set_window(size_t start)
+{
+    if (!view_label || !view_text || !view_len)
+        return;
+    view_text[view_end] = view_cut;     /* the whole text again */
+    view_end = fit_head(view_text, start, view_len, navtex_font(), label_width(view_scroll),
+                        NAVTEX_LABEL_MAX_H, NULL);
+    if (view_end <= start)
+        view_end = view_len;            /* never an empty window */
+    view_cut = view_text[view_end];
+    view_text[view_end] = '\0';
+    view_start = start;
+    lv_label_set_text_static(view_label, view_text + start);
+    lv_obj_update_layout(view_scroll);
 }
 
 /* One MFK step scrolls the saved text by this many whole lines. */
@@ -1161,6 +1297,34 @@ static void view_key_cb(lv_event_t *e)
     }
 
     lv_coord_t max_y = lv_obj_get_scroll_y(obj) + lv_obj_get_scroll_bottom(obj);
+    lv_coord_t w = label_width(obj);
+
+    /* past the end of the window: move it on by half its height, the text
+     * on the screen staying where it is */
+    if (y > max_y && view_end < view_len) {
+        int32_t gone;
+        size_t start = fit_head(view_text, view_start, view_end, navtex_font(), w,
+                                NAVTEX_LABEL_MAX_H / 2, &gone);
+        if (start > view_start) {
+            lv_coord_t old_y = lv_obj_get_scroll_y(obj);
+            view_set_window(start);
+            lv_obj_scroll_to_y(obj, old_y - gone, LV_ANIM_OFF);
+            y -= gone;
+            max_y = lv_obj_get_scroll_y(obj) + lv_obj_get_scroll_bottom(obj);
+        }
+    } else if (y < 0 && view_start > 0) {
+        int32_t added;
+        size_t start = fit_tail(view_text, view_start, navtex_font(), w,
+                                NAVTEX_LABEL_MAX_H / 2, &added);
+        if (start < view_start) {
+            lv_coord_t old_y = lv_obj_get_scroll_y(obj);
+            view_set_window(start);
+            lv_obj_scroll_to_y(obj, old_y + added, LV_ANIM_OFF);
+            y += added;
+            max_y = lv_obj_get_scroll_y(obj) + lv_obj_get_scroll_bottom(obj);
+        }
+    }
+
     if (y > max_y)
         y = max_y;
     if (y < 0)
@@ -1244,7 +1408,14 @@ static void view_open(int index)
     lv_obj_set_style_text_font(view_label, navtex_font(), 0);
     lv_obj_set_style_text_color(view_label, lv_color_white(), 0);
     lv_obj_set_style_text_line_space(view_label, 0, 0);
-    lv_label_set_text_static(view_label, text[0] ? text : "(empty file)");
+    view_text = text;
+    view_len = strlen(text);
+    view_start = view_end = 0;
+    view_cut = '\0';
+    if (view_len)
+        view_set_window(0);             /* as much of it as fits */
+    else
+        lv_label_set_text_static(view_label, "(empty file)");
 
     lv_obj_add_event_cb(view_scroll, view_key_cb, LV_EVENT_KEY, NULL);
     lv_obj_add_event_cb(view_scroll, key_cb, LV_EVENT_KEY, NULL);   /* VOL */
