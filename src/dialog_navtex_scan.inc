@@ -20,10 +20,11 @@
  *      above the middle between them.  A broad signal (radar, noise,
  *      pulses) is flat there and does not pass.  If not, on to the next
  *      frequency;
- *   3. if so, up to 5 s for the decoder to lock, then up to 4 s for
+ *   3. if so, up to 5 s for the decoder to lock, then up to 10 s for
  *      SCAN_GOOD characters received correctly (clean or from the repeated
- *      copy) with no more than a third lost or guessed: a lock on
- *      something that only looks like SITOR-B gives random characters.
+ *      copy), at least twice as many as the lost or guessed ones: a lock
+ *      on something that only looks like SITOR-B gives random characters.
+ *      A lock lost in a fade may come back within 3 s.
  *
  * The scan stops on such a signal, at the end of the list, when the
  * frequency is changed by hand, or when Scan is pressed again.  It never
@@ -32,7 +33,9 @@
 
 #define SCAN_MEASURE_MS     300
 #define SCAN_LOCK_MS        5000    /* for the decoder to lock */
-#define SCAN_TEXT_MS        4000    /* after the lock, for good characters */
+#define SCAN_TEXT_MS        10000   /* after the lock, for good characters (the
+                                     * decoder prints them 1.5 s late) */
+#define SCAN_RELOCK_MS      3000    /* a lock lost: this long to lock again */
 #define SCAN_GOOD           12
 /* The weaker tone over the median of 550-1450 Hz, and over the middle
  * between the tones.  0.3 s of synthetic audio (tests/navtex/sitorb_gen):
@@ -69,6 +72,8 @@ static char scan_wait_label[16] = "Wait\n0.7 s";
 /* from the decoder (DSP thread) */
 static volatile bool scan_synced = false;
 static volatile bool scan_unsynced = false;
+static uint32_t scan_unsync_since;          /* lv_tick when the lock was lost */
+static bool scan_unsync_seen = false;
 static volatile int scan_good = 0, scan_bad = 0;   /* characters since the lock */
 
 /* tone measurement, filled by scan_audio() in the DSP thread */
@@ -229,8 +234,8 @@ static void scan_q_cb(int c, int quality, void *user)
 {
     if (quality == NAVTEX_Q_EVENT) {
         if (c == NAVTEX_EV_SYNC_ON) {
-            scan_good = scan_bad = 0;
             scan_synced = true;
+            scan_unsynced = false;
         } else if (c == NAVTEX_EV_SYNC_OFF) {
             scan_unsynced = true;
         }
@@ -345,6 +350,8 @@ static void scan_poll(void)
     /* a lock after the wait: then the characters decide */
     if ((scan_state == SCAN_MEASURE || scan_state == SCAN_CONFIRM) && scan_synced) {
         scan_unsynced = false;
+        scan_unsync_seen = false;
+        scan_good = scan_bad = 0;
         scan_state = SCAN_TEXT;
         scan_since = lv_tick_get();
         t = 0;
@@ -392,7 +399,20 @@ static void scan_poll(void)
                 scan_stop(NULL);
                 scan_resume = true;         /* the next Scan goes on from here */
                 msg_update_text_fmt("Scan: SITOR-B signal on %s kHz", k);
-            } else if (scan_unsynced || t >= SCAN_TEXT_MS || bad > SCAN_GOOD) {
+                break;
+            }
+            /* a lost lock: on only if it does not come back */
+            bool gone = false;
+            if (scan_unsynced) {
+                if (!scan_unsync_seen) {
+                    scan_unsync_seen = true;
+                    scan_unsync_since = lv_tick_get();
+                }
+                gone = lv_tick_elaps(scan_unsync_since) >= SCAN_RELOCK_MS;
+            } else {
+                scan_unsync_seen = false;
+            }
+            if (gone || t >= SCAN_TEXT_MS || (bad >= 2 * SCAN_GOOD && bad > good)) {
                 fprintf(stderr, "NAVTEX SCAN: %s kHz lock without text (%d good / %d lost), on\n",
                         k, good, bad);
                 if (!scan_step()) {
