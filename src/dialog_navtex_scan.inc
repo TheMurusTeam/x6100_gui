@@ -8,10 +8,9 @@
  *
  * The frequencies of the list ("Freq.", dialog_navtex_freq.inc) up to the
  * highest, each once and in order of frequency (fewer clicks of the band
- * relays): from the lowest (490 kHz) the first time after the app opens, at
- * the end of the list or after a frequency change by hand; after a stop on
- * a signal or with the button, from the frequency where it stopped.  On
- * each one:
+ * relays): from the lowest (490 kHz) the first time after the app opens,
+ * after the end of the list and on a long press of Scan; otherwise on from
+ * the frequency where it stopped.  On each one:
  *
  *   1. Wait: the time the radio needs after a frequency change (relays,
  *      audio, spectrum); 0.5 to 1.5 s, chosen with the "Wait" button;
@@ -77,9 +76,11 @@ static int scan_cnt[2];
 static int scan_blocks = 0;
 
 static void scan_cb(button_data_t *d);
+static void scan_hold_cb(button_data_t *d);
 static void scan_wait_cb(button_data_t *d);
 
-static button_data_t btn_scan = { .type = BTN_TEXT, .label = scan_btn_label, .press = scan_cb };
+static button_data_t btn_scan = { .type = BTN_TEXT, .label = scan_btn_label, .press = scan_cb,
+                               .hold = scan_hold_cb };
 static button_data_t btn_scan_wait = { .type = BTN_TEXT, .label = scan_wait_label, .press = scan_wait_cb };
 
 /* ---- settings ------------------------------------------------------------------- */
@@ -280,6 +281,16 @@ static void scan_cb(button_data_t *d)
     scan_start();
 }
 
+/* long press: a new scan from the lowest frequency, also during a scan */
+static void scan_hold_cb(button_data_t *d)
+{
+    (void)d;
+    scan_stop(NULL);
+    scan_resume = false;
+    if (nf_frame) nf_close();
+    scan_start();
+}
+
 /* every UI tick */
 static void scan_poll(void)
 {
@@ -288,7 +299,7 @@ static void scan_poll(void)
     /* a frequency change not made by the scan ends it */
     if (cparam_i_get(cfg.cur.fg_freq()) != scan_dial) {
         scan_stop("Scan stopped: frequency changed");
-        scan_resume = false;
+        scan_resume = true;
         return;
     }
 
