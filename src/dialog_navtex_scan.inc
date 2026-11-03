@@ -14,10 +14,11 @@
  *
  *   1. Wait: the time the radio needs after a frequency change (relays,
  *      audio, spectrum); 0.5 to 1.5 s, chosen with the "Wait" button;
- *   2. 0.3 s of audio, its spectrum from 550 to 1450 Hz in 25 Hz steps:
+ *   2. 0.5 s of audio, its spectrum from 550 to 1450 Hz in 25 Hz steps:
  *      two tones 150-175 Hz apart (SITOR-B: 170 Hz) near 1000 Hz (AFC
  *      range included), both well above the median of the spectrum and,
- *      when weak, above the middle between them.  A broad signal (radar, noise,
+ *      when weak, above the middle between them; or one tone 10 dB over
+ *      the median and the other present (a run of one tone).  A broad signal (radar, noise,
  *      pulses) is flat there and does not pass.  If not, on to the next
  *      frequency;
  *   3. if so, up to 8 s for the decoder to lock, then up to 10 s for
@@ -27,15 +28,16 @@
  *      nothing to print).  A lock on something that only looks like
  *      SITOR-B gives random characters.  A lock lost in a fade may come
  *      back within 3 s.
- * Checked on recordings of 518 kHz started every 7 s
- * (tests/navtex/README.md): every start stops on the station.
+ * Checked with tests/navtex/scan_sim on recordings of 518 kHz and of
+ * Istanbul (shifted to 1000 Hz), arriving every 5 s: every arrival during
+ * a transmission stops on the station.
  *
  * The scan stops on such a signal, at the end of the list, when the
  * frequency is changed by hand, or when Scan is pressed again.  It never
  * starts again by itself.
  */
 
-#define SCAN_MEASURE_MS     300
+#define SCAN_MEASURE_MS     500
 #define SCAN_LOCK_MS        8000    /* for the decoder to lock */
 #define SCAN_IDLE_MS        6000    /* locked this long with no bad character:
                                      * a station sending phasing or idle */
@@ -52,6 +54,9 @@
 #define SCAN_DIP_DB         2.0f
 #define SCAN_STRONG_DB      6.0f    /* this strong: no dip needed (real 518 kHz
                                      * recordings: +15 dB with a dip of -1 dB) */
+#define SCAN_ONE_DB         10.0f   /* one tone this strong, the other present:
+                                     * a run of one tone (phasing); plain noise
+                                     * reaches +3 dB at most */
 #define SCAN_FILE           NAVTEX_SAVE_DIR "/scan.txt"
 
 /* Goertzel blocks of 20 ms at 12000 Hz: bins 50 Hz wide, every 25 Hz */
@@ -176,7 +181,7 @@ static int scan_cmp_d(const void *a, const void *b)
 
 /* The best pair of tones: the weaker of the two over the median (*tone_db)
  * and over the middle between them (*dip_db).  false: too little audio. */
-static bool scan_measure_end(float *tone_db, float *dip_db, int *low_hz)
+static bool scan_measure_end(float *tone_db, float *dip_db, int *low_hz, float *one_db)
 {
     double p[SCAN_BINS], sorted[SCAN_BINS];
     int blocks;
@@ -193,6 +198,7 @@ static bool scan_measure_end(float *tone_db, float *dip_db, int *low_hz)
     double med = sorted[SCAN_BINS / 2] + 1e-20;
 
     *tone_db = -99.0f;
+    *one_db = -99.0f;
     *dip_db = 0.0f;
     *low_hz = 0;
     for (int f = SCAN_LOW_MIN; f <= SCAN_LOW_MAX; f += SCAN_BIN_STEP) {
@@ -202,6 +208,8 @@ static bool scan_measure_end(float *tone_db, float *dip_db, int *low_hz)
         double weak = p[l] < hi ? p[l] : hi;
         double mid = (p[l + 3] + p[l + 4]) / 2.0 + 1e-20;   /* +75, +100 Hz */
         float t = 10.0f * log10f((float)(weak / med));
+        float o = 10.0f * log10f((float)((p[l] > hi ? p[l] : hi) / med));
+        if (o > *one_db) *one_db = o;
         if (t > *tone_db) {
             *tone_db = t;
             *dip_db = 10.0f * log10f((float)(weak / mid));
@@ -377,12 +385,13 @@ static void scan_poll(void)
 
         case SCAN_MEASURE:
             if (t >= SCAN_MEASURE_MS) {
-                float tone = -99.0f, dip = 0.0f;
+                float tone = -99.0f, dip = 0.0f, one = -99.0f;
                 int low = 0;
-                bool ok = scan_measure_end(&tone, &dip, &low);
-                fprintf(stderr, "NAVTEX SCAN: %s kHz tones %d/%d Hz %+.1f dB, dip %+.1f dB%s\n", k, low,
-                        low + 170, tone, dip, ok ? "" : " (no audio)");
-                if (ok && tone >= SCAN_TONE_DB && (dip >= SCAN_DIP_DB || tone >= SCAN_STRONG_DB)) {
+                bool ok = scan_measure_end(&tone, &dip, &low, &one);
+                fprintf(stderr, "NAVTEX SCAN: %s kHz tones %d/%d Hz %+.1f dB (stronger %+.1f), dip %+.1f dB%s\n",
+                        k, low, low + 170, tone, one, dip, ok ? "" : " (no audio)");
+                if (ok && ((tone >= SCAN_TONE_DB && (dip >= SCAN_DIP_DB || tone >= SCAN_STRONG_DB)) ||
+                           (one >= SCAN_ONE_DB && tone >= 0.0f))) {
                     scan_state = SCAN_CONFIRM;
                     scan_since = lv_tick_get();
                     msg_update_text_fmt("Scan: %s kHz, a signal: waiting for the lock...", k);
