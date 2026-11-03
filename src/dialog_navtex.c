@@ -30,6 +30,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <math.h>
 #include <pthread.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -101,6 +102,14 @@ static lv_obj_t *nf_frame;
 static void nf_poll(void);
 static void nf_update_label(void);
 static void nf_destroy(void);
+
+/* scan of the list, see dialog_navtex_scan.inc */
+static button_data_t btn_scan, btn_scan_wait;
+static void scan_poll(void);
+static void scan_stop(const char *why);
+static void scan_audio(const float *samples, size_t n);
+static void scan_q_cb(int c, int quality, void *user);
+static void scan_wait_load(void);
 
 static navtex_decoder_t *decoder = NULL;
 static lv_obj_t *scroll = NULL;
@@ -212,7 +221,7 @@ static void info_cb(button_data_t *data);
 static button_data_t btn_info = { .type = BTN_TEXT, .label = "Info", .press = info_cb };
 
 static buttons_page_t btn_page_2 = {
-    .items = { &btn_page2, &btn_browser, NULL, &btn_info, &btn_close }
+    .items = { &btn_page2, &btn_browser, &btn_scan, &btn_info, &btn_close }
 };
 
 static void sitor_page2_cb(button_data_t *data) { (void)data; buttons_load_page(&btn_page_2); }
@@ -466,7 +475,7 @@ static bool reset_decoder(void)
     decoder = navtex_decoder_create(0);
     if (decoder) {
         navtex_decoder_set_char_callback(decoder, char_cb, NULL);
-        navtex_decoder_set_char_q_callback(decoder, nav_char_q_cb, NULL);
+        navtex_decoder_set_char_q_callback(decoder, scan_q_cb, NULL);   /* -> nav_char_q_cb */
         ok = true;
     }
 
@@ -667,6 +676,7 @@ static void ui_timer_cb(lv_timer_t *timer)
     /* NAVTEX mode: characters -> bulletins (also while SITORB is shown) */
     nav_poll();
     nf_poll();
+    scan_poll();
 
     char local[NAVTEX_PENDING_MAX];
     size_t n = 0;
@@ -799,12 +809,14 @@ static void construct_cb(lv_obj_t *parent)
     /* NAVTEX bulletins: their frame, the mode saved last time */
     nav_construct(parent);
     nf_update_label();
+    scan_wait_load();
 
     ui_timer = lv_timer_create(ui_timer_cb, NAVTEX_UI_TIMER_MS, NULL);
 }
 
 static void destruct_cb(void)
 {
+    scan_stop(NULL);
     app_radio_end();        /* 1KO125: mode, zoom and DSP of before */
     if (text_size_obs) {
         param_unsubscribe((Observer *)text_size_obs);
@@ -853,6 +865,8 @@ static void audio_cb(size_t n, float *samples)
     /* Never mix live receiver audio with the WAV test stream. */
     if (test_mode)
         return;
+
+    scan_audio(samples, n);     /* the tones, while the scan measures */
 
     pthread_mutex_lock(&decoder_mutex);
     if (decoder)
@@ -1536,3 +1550,4 @@ static void browser_cb(button_data_t *data)
 
 #include "dialog_navtex_bul.inc"
 #include "dialog_navtex_freq.inc"
+#include "dialog_navtex_scan.inc"

@@ -102,7 +102,7 @@ static button_data_t btn_nav_newer = { .type = BTN_TEXT, .label = "Newer", .pres
 static button_data_t btn_nav_older = { .type = BTN_TEXT, .label = "Older", .press = nav_older_cb };
 
 static buttons_page_t nav_page_1 = { .items = { &btn_nav_p1, &btn_nav_mode, &btn_nav_open, &btn_nav_del, &btn_freq } };
-static buttons_page_t nav_page_2 = { .items = { &btn_nav_p2, NULL, NULL, &btn_info, &btn_close } };
+static buttons_page_t nav_page_2 = { .items = { &btn_nav_p2, NULL, &btn_scan, &btn_info, &btn_close } };
 static buttons_page_t nav_page_detail = { .items = { &btn_nav_pd, &btn_nav_back, &btn_nav_newer, &btn_nav_older, &btn_nav_del } };
 
 /* ---- decoder side ------------------------------------------------------------- */
