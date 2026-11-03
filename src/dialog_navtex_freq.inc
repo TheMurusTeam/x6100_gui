@@ -111,7 +111,7 @@ static button_data_t btn_nf_title  = { .type = BTN_TEXT, .label = "(NAVTEX Freq.
 static button_data_t btn_nf_tune   = { .type = BTN_TEXT, .label = "Tune", .press = nf_tune_cb };
 static button_data_t btn_nf_close  = { .type = BTN_TEXT, .label = "Close\nList", .press = nf_close_cb };
 
-/* Scan: from the frequency above the current one up the list (see
+/* Scan: the list from its lowest frequency up (see
  * dialog_navtex_scan.inc); Wait: while its best value is being found */
 static buttons_page_t nf_page = { .items = { &btn_nf_title, &btn_nf_tune, &btn_scan, &btn_scan_wait, &btn_nf_close } };
 

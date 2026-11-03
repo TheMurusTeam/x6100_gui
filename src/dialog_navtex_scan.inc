@@ -6,8 +6,8 @@
 /*
  * Xiegu X6100 - NAVTEX / SITOR-B scan ("Scan"), included by dialog_navtex.c.
  *
- * The frequencies of the list ("Freq.", dialog_navtex_freq.inc) from the one
- * above the current frequency up to the highest, each once and in order of
+ * The frequencies of the list ("Freq.", dialog_navtex_freq.inc) from the
+ * lowest (490 kHz) up to the highest, always, each once and in order of
  * frequency (fewer clicks of the band relays).  On each one:
  *
  *   1. Wait: the time the radio needs after a frequency change (relays,
@@ -257,11 +257,9 @@ static void scan_start(void)
     }
     scan_wait_load();
     scan_bins_init();
-    scan_hz = nf_channel_hz();
-    if (!scan_step()) {
-        msg_update_text_fmt("Scan: no frequency of the list above this one");
+    scan_hz = 0;                            /* always from the lowest frequency */
+    if (!scan_step())
         return;
-    }
     scan_set_button();
 }
 
