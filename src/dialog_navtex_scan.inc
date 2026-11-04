@@ -16,9 +16,11 @@
  *      audio, spectrum); 0.5 to 1.5 s, chosen with the "Wait" button;
  *   2. 0.5 s of audio, its spectrum from 550 to 1450 Hz in 25 Hz steps:
  *      two tones 150-175 Hz apart (SITOR-B: 170 Hz) near 1000 Hz (AFC
- *      range included), both well above the median of the spectrum and,
- *      when weak, above the middle between them; or one tone 10 dB over
- *      the median and the other present (a run of one tone).  A broad signal (radar, noise,
+ *      range included), both 3 dB above the median of the spectrum; or one
+ *      tone 10 dB over it and the other present (a run of one tone).  A
+ *      broad signal (radar, noise, pulses) is flat there.  The dip between
+ *      the tones is only logged: real signals often have none (a weak
+ *      station of 2026-11-04, +6 dB tones, failed on it one time in five).  A broad signal (radar, noise,
  *      pulses) is flat there and does not pass.  If not, on to the next
  *      frequency;
  *   3. if so, up to 8 s for the decoder to lock, then up to 15 s for
@@ -44,15 +46,11 @@
                                      * only phasing or idle this long: on */
 #define SCAN_RELOCK_MS      3000    /* a lock lost: this long to lock again */
 #define SCAN_GOOD           12
-/* The weaker tone over the median of 550-1450 Hz, and over the middle
- * between the tones.  0.3 s of synthetic audio (tests/navtex/sitorb_gen):
- * SITOR-B at -8 dB SNR (2500 Hz) +4.3 dB and +4.2 dB, at -5 dB +6.6 and
- * +4.7; plain noise, coloured noise and broadband pulses at most +1.6 and
- * +2.0 dB. */
+/* The weaker tone over the median of 550-1450 Hz: SITOR-B at -8 dB SNR
+ * (2500 Hz, synthetic) +4.3 dB, a weak real station +5 to +7 dB; plain
+ * noise at most +1.9 dB in 0.5 s, coloured noise and broadband pulses at
+ * most +1.6 dB. */
 #define SCAN_TONE_DB        3.0f
-#define SCAN_DIP_DB         2.0f
-#define SCAN_STRONG_DB      6.0f    /* this strong: no dip needed (real 518 kHz
-                                     * recordings: +15 dB with a dip of -1 dB) */
 #define SCAN_ONE_DB         10.0f   /* one tone this strong, the other present:
                                      * a run of one tone (phasing); plain noise
                                      * reaches +3 dB at most */
@@ -395,8 +393,7 @@ static void scan_poll(void)
                 bool ok = scan_measure_end(&tone, &dip, &low, &one);
                 fprintf(stderr, "NAVTEX SCAN: %s kHz tones %d/%d Hz %+.1f dB (stronger %+.1f), dip %+.1f dB%s\n",
                         k, low, low + 170, tone, one, dip, ok ? "" : " (no audio)");
-                if (ok && ((tone >= SCAN_TONE_DB && (dip >= SCAN_DIP_DB || tone >= SCAN_STRONG_DB)) ||
-                           (one >= SCAN_ONE_DB && tone >= 0.0f))) {
+                if (ok && (tone >= SCAN_TONE_DB || (one >= SCAN_ONE_DB && tone >= 0.0f))) {
                     scan_state = SCAN_CONFIRM;
                     scan_since = lv_tick_get();
                     msg_update_text_fmt("Scan: %s kHz, a signal: waiting for the lock...", k);

@@ -36,7 +36,7 @@ int main(int argc,char**argv){
  double wait=argc>2?atof(argv[2]):0.7; double step=argc>3?atof(argv[3]):15;
  float coef[NB]; for(int b=0;b<NB;b++) coef[b]=2*cosf(2*M_PI*(550+25*b)/12000);
  srand(1);
- for(double T0=1; T0+16 < n/12000.0; T0+=step){
+ for(double T0=1; T0+1 < n/12000.0; T0+=step){
   sitorb_t*d=sitorb_create(12000,1000,0); sitorb_set_callback(d,cb,NULL);
   float nz[256]; for(int k=0;k<2*12000/256;k++){ for(int i=0;i<256;i++) nz[i]=((rand()/(float)RAND_MAX)-0.5f)*0.01f; sitorb_process(d,nz,256);}
   good=bad=synced=unsynced=0; lock_t=-1;
@@ -49,7 +49,7 @@ int main(int argc,char**argv){
     if(!synced && now>=wait && now<wait+0.5){ for(int k=0;k<nn;k++){float v=x[i+k]; for(int b=0;b<NB;b++){double s=v+coef[b]*s1[b]-s2[b]; s2[b]=s1[b]; s1[b]=s;} if(++bn==240){for(int b=0;b<NB;b++){P[b]+=s1[b]*s1[b]+s2[b]*s2[b]-coef[b]*s1[b]*s2[b]; s1[b]=s2[b]=0;} bn=0; blocks++;}} }
     if(now>=wait+0.5 && !measured){ measured=1; double so[NB]; memcpy(so,P,sizeof so); for(int a=0;a<NB;a++)for(int b=a+1;b<NB;b++) if(so[b]<so[a]){double t=so[a];so[a]=so[b];so[b]=t;} double med=so[NB/2]+1e-20;
       for(int f=850;f<=1000;f+=25){int l=(f-550)/25,h=l+6; double hi=P[h]>P[h+1]?P[h]:P[h+1]; double w=P[l]<hi?P[l]:hi; double mid=(P[l+3]+P[l+4])/2+1e-20; float t=10*log10f(w/med); float st=10*log10f((hi>P[l]?hi:P[l])/med); if(t>tone){tone=t;dip=10*log10f(w/mid);low=f;} if(st>strong) strong=st;}
-      if(!synced && !((tone>=3&&(dip>=2||tone>=6)) || (strong>=10 && tone>=0))) { res="TONE-FAIL"; break; } }
+      if(!synced && !(tone>=3 || (strong>=10 && tone>=0))) { res="TONE-FAIL"; break; } }
     sitorb_process(d,x+i,nn);
     if(synced && !text && now>=wait){ text=1; text_t=now; good=bad=0; unseen=0;}
     if(!text && measured && now>wait+0.5+8){res="NO-LOCK";break;}
