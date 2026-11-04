@@ -8,8 +8,8 @@
  *
  * The frequencies of the list ("Freq.", dialog_navtex_freq.inc) up to the
  * highest, each once and in order of frequency (fewer clicks of the band
- * relays): from the lowest (490 kHz) the first time after the app opens,
- * after the end of the list and on a long press of Scan; otherwise on from
+ * relays), then again from the lowest: from the lowest (490 kHz) the first
+ * time after the app opens and on a long press of Scan; otherwise on from
  * the frequency where it stopped.  On each one:
  *
  *   1. Wait: the time the radio needs after a frequency change (relays,
@@ -34,9 +34,9 @@
  * Istanbul (shifted to 1000 Hz), arriving every 5 s: every arrival during
  * a transmission stops on the station.
  *
- * The scan stops on such a signal, at the end of the list, when the
- * frequency is changed by hand, or when Scan is pressed again.  It never
- * starts again by itself.
+ * The scan stops on such a signal, when the frequency is changed by hand,
+ * or when Scan is pressed again; after the highest frequency it goes on
+ * from the lowest.  Once stopped it never starts again by itself.
  */
 
 #define SCAN_MEASURE_MS     500
@@ -293,12 +293,17 @@ static int32_t scan_next_hz(int32_t hz, int *row)
     return best;
 }
 
-/* on to the next frequency; false at the end of the list */
+/* on to the next frequency, after the highest the lowest; false only
+ * with an empty list */
 static bool scan_step(void)
 {
     int row = -1;
     int32_t hz = scan_next_hz(scan_hz, &row);
-    if (!hz) return false;
+    if (!hz) {
+        hz = scan_next_hz(0, &row);         /* end of the list: from the start */
+        if (!hz) return false;
+        fprintf(stderr, "NAVTEX SCAN: end of the list, again from the lowest frequency\n");
+    }
     scan_hz = hz;
     /* a new decoder for each frequency: its lock (SYNC_ON) is then surely
      * a lock on this one, also when it comes during the wait (a strong
@@ -398,7 +403,7 @@ static void scan_poll(void)
                     scan_since = lv_tick_get();
                     msg_update_text_fmt("Scan: %s kHz, a signal: waiting for the lock...", k);
                 } else if (!scan_step()) {
-                    scan_stop("Scan: end of the list, no SITOR-B signal found");
+                    scan_stop("Scan: no frequency in the list");
                     scan_resume = false;
                 }
             }
@@ -406,7 +411,7 @@ static void scan_poll(void)
 
         case SCAN_CONFIRM:
             if (t >= SCAN_LOCK_MS && !scan_step()) {
-                scan_stop("Scan: end of the list, no SITOR-B signal found");
+                scan_stop("Scan: no frequency in the list");
                 scan_resume = false;
             }
             break;
@@ -435,7 +440,7 @@ static void scan_poll(void)
                 fprintf(stderr, "NAVTEX SCAN: %s kHz lock without text (%d good / %d lost), on\n",
                         k, good, bad);
                 if (!scan_step()) {
-                    scan_stop("Scan: end of the list, no SITOR-B signal found");
+                    scan_stop("Scan: no frequency in the list");
                     scan_resume = false;
                 }
             }

@@ -82,11 +82,11 @@ static const char *const bodies[] = {
     "below the centre frequency, USB-D.\n\n"
     H("SCAN")
     "Scan (page 2, or in the Freq. list) tunes the frequencies of the list one after the "
-    "other up to the highest, and stops on the first SITOR-B signal the decoder locks on, "
-    "or at the end of the list. It never starts again by itself. The first Scan after the "
-    "application opens, and the one after the end of the list, start from the lowest "
-    "frequency (490 kHz); otherwise Scan goes on from where it stopped. A long press of Scan "
-    "starts again from 490 kHz. Press Scan during the scan, or change "
+    "other up to the highest, then again from the lowest, and stops on the first SITOR-B "
+    "signal with a message. Once stopped it never starts again by itself. The first Scan "
+    "after the application opens starts from the lowest frequency (490 kHz); otherwise Scan "
+    "goes on from where it stopped. A long press of Scan starts again from 490 kHz. Press "
+    "Scan during the scan, or change "
     "the frequency, to stop it.\n\n"
     H("COLOURS IN A BULLETIN")
     "Yellow: uncertain character. Red *: lost character. Light blue: position. "
