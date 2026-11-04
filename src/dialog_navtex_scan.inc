@@ -145,7 +145,7 @@ static void scan_wait_cb(button_data_t *d)
     scan_wait = (scan_wait + 1) % SCAN_WAITS;
     scan_wait_update();
     scan_wait_save();
-    msg_update_text_fmt("Detection time %u ms", (unsigned)scan_wait_ms[scan_wait]);
+    msg_update_text_fmt("Wait %u ms", (unsigned)scan_wait_ms[scan_wait]);
 }
 
 /* ---- the tones (DSP thread) ------------------------------------------------------ */
