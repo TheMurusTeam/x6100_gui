@@ -145,7 +145,7 @@ static void scan_wait_cb(button_data_t *d)
     scan_wait = (scan_wait + 1) % SCAN_WAITS;
     scan_wait_update();
     scan_wait_save();
-    msg_update_text_fmt("Scan: wait %u ms after each frequency change", (unsigned)scan_wait_ms[scan_wait]);
+    msg_update_text_fmt("Detection time %u ms", (unsigned)scan_wait_ms[scan_wait]);
 }
 
 /* ---- the tones (DSP thread) ------------------------------------------------------ */
@@ -401,9 +401,9 @@ static void scan_poll(void)
                 if (ok && (tone >= SCAN_TONE_DB || (one >= SCAN_ONE_DB && tone >= 0.0f))) {
                     scan_state = SCAN_CONFIRM;
                     scan_since = lv_tick_get();
-                    msg_update_text_fmt("Scan: %s kHz, a signal: waiting for the lock...", k);
+                    msg_update_text_fmt("Awaiting lock at %s kHz", k);
                 } else if (!scan_step()) {
-                    scan_stop("Scan: no frequency in the list");
+                    scan_stop("No frequency in the list");
                     scan_resume = false;
                 }
             }
@@ -411,7 +411,7 @@ static void scan_poll(void)
 
         case SCAN_CONFIRM:
             if (t >= SCAN_LOCK_MS && !scan_step()) {
-                scan_stop("Scan: no frequency in the list");
+                scan_stop("No frequency in the list");
                 scan_resume = false;
             }
             break;
@@ -422,7 +422,7 @@ static void scan_poll(void)
                 fprintf(stderr, "NAVTEX SCAN: %s kHz locked, %d good / %d lost characters\n", k, good, bad);
                 scan_stop(NULL);
                 scan_resume = true;         /* the next Scan goes on from here */
-                msg_update_text_fmt("Scan: SITOR-B signal on %s kHz", k);
+                msg_update_text_fmt("SITOR-B signal on %s kHz", k);
                 break;
             }
             /* a lost lock: on only if it does not come back */
@@ -440,7 +440,7 @@ static void scan_poll(void)
                 fprintf(stderr, "NAVTEX SCAN: %s kHz lock without text (%d good / %d lost), on\n",
                         k, good, bad);
                 if (!scan_step()) {
-                    scan_stop("Scan: no frequency in the list");
+                    scan_stop("No frequency in the list");
                     scan_resume = false;
                 }
             }
