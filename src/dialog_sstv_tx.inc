@@ -1092,6 +1092,8 @@ static lv_obj_t *tx_rxpic_table = NULL;
 static char **tx_rxpic_files = NULL;
 static size_t tx_rxpic_count = 0, tx_rxpic_cap = 0;
 static int tx_rxpic_selected = -1, tx_rxpic_pending = -1;
+static char tx_rxpic_last[256];             /* 1KO125: the one confirmed, selected again on Back */
+static bool tx_rxpic_restore = false;
 static uint64_t tx_rxpic_pending_since_ms = 0;
 static uint8_t *tx_rxpic_rgb = NULL;            /* picture on the TX canvas (row tx_rxpic_selected) */
 static unsigned int tx_rxpic_w = 0, tx_rxpic_h = 0;
@@ -1246,6 +1248,7 @@ static void tx_rxpic_activate_cb(void *user, int row)
     tx_replay_w = tx_rxpic_w;
     tx_replay_h = tx_rxpic_h;
     tx_rxpic_rgb = NULL;
+    snprintf(tx_rxpic_last, sizeof(tx_rxpic_last), "%s", tx_rxpic_files[row]);
     fprintf(stderr, "SSTV TX UI: REPLAY miniature from %s (%ux%u) -> pictures\n",
             tx_rxpic_files[row], tx_replay_w, tx_replay_h);
 
@@ -1287,8 +1290,13 @@ static void tx_rxpic_selector_build(void)
     }
     lv_obj_add_event_cb(tx_rxpic_table, tx_rxpic_selection_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     tx_list_focus(tx_rxpic_table);
-    ui_list_select(tx_rxpic_table, 0);       /* the newest received picture */
-    tx_rxpic_pending = 0;
+    int row = 0;                             /* the newest received picture */
+    if (tx_rxpic_restore)                    /* Back: the one chosen before */
+        for (size_t i = 0; i < tx_rxpic_count; ++i)
+            if (strcmp(tx_rxpic_files[i], tx_rxpic_last) == 0) { row = (int)i; break; }
+    tx_rxpic_restore = false;
+    ui_list_select(tx_rxpic_table, row);
+    tx_rxpic_pending = row;
     tx_rxpic_pending_since_ms = tx_now_ms() - SSTV_TX_PICTURE_DEBOUNCE_MS;
 }
 
@@ -2663,6 +2671,7 @@ static void tx_back(void)
             break;
         case SSTV_TX_PHASE_SELECT_RX_PICTURE:
             tx_phase = prev;
+            tx_rxpic_restore = true;
             tx_rxpic_selector_build();
             break;
         case SSTV_TX_PHASE_SELECT_CALL:
