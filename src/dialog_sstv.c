@@ -28,6 +28,7 @@
 #include "sstv/sstv_denoise.h"   /* 1KO125 */
 #include "sstv/sstv_dnn.h"       /* 1KO125: ML denoiser */
 #include "sstv/syncgrid.h"       /* 1KO125: Restart confirmed by the line syncs */
+#include "sstv/sstv_ocr.h"       /* 1KO125: callsigns read on a received picture */
 #include "radio.h"
 #include "lock_manager.h"
 #include "tx_info.h"
@@ -106,6 +107,10 @@ static void info_cb(button_data_t *data);   /* 1KO125: Info window, see app_info
 static void audio_cb(size_t n, float *samples);
 static void tx_ui_cb(button_data_t *data);
 static void tx_picture_selector_build(void);
+static void tx_call_ocr_start(void);         /* 1KO125: REPLAY callsign phase */
+static void tx_call_selector_build(void);
+static void tx_call_selector_destroy(void);
+static void tx_call_poll(void);
 static void tx_picture_selector_destroy(void);
 static void tx_picture_selector_refresh(void);
 static void tx_picture_selection_changed_cb(lv_event_t *e);
@@ -251,7 +256,8 @@ typedef enum {
     SSTV_TX_PHASE_SELECT_TEMPLATE,
     SSTV_TX_PHASE_SELECT_TARGET,
     SSTV_TX_PHASE_SELECT_COLORS,
-    SSTV_TX_PHASE_SELECT_RX_PICTURE      /* 1KO125: REPLAY - received picture for the miniature */
+    SSTV_TX_PHASE_SELECT_RX_PICTURE,     /* 1KO125: REPLAY - received picture for the miniature */
+    SSTV_TX_PHASE_SELECT_CALL            /* 1KO125: REPLAY - the callsign, read from that picture */
 } sstv_tx_phase_t;
 
 static sstv_tx_phase_t tx_phase = SSTV_TX_PHASE_NONE;
@@ -891,6 +897,7 @@ static void destruct_cb(void)
     tx_type_selector_destroy();
     tx_picture_selector_destroy();
     tx_rxpic_selector_destroy();   /* 1KO125 */
+    tx_call_selector_destroy();    /* 1KO125 */
     tx_instruction_hide();
     tx_phase = SSTV_TX_PHASE_NONE;
     sstv_browser_close();
@@ -1205,6 +1212,10 @@ static void ui_timer_cb(lv_timer_t *timer)
     if (tx_ui_state == SSTV_TX_UI_SETUP &&
         tx_phase == SSTV_TX_PHASE_SELECT_RX_PICTURE)
         tx_rxpic_load_pending_preview();   /* 1KO125 */
+
+    if (tx_ui_state == SSTV_TX_UI_SETUP &&
+        tx_phase == SSTV_TX_PHASE_SELECT_CALL)
+        tx_call_poll();                    /* 1KO125: the callsigns read */
 
     if (tx_ui_state == SSTV_TX_UI_SETUP &&
         tx_phase == SSTV_TX_PHASE_SELECT_TEMPLATE &&

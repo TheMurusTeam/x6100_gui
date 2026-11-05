@@ -1250,8 +1250,8 @@ static void tx_rxpic_activate_cb(void *user, int row)
             tx_rxpic_files[row], tx_replay_w, tx_replay_h);
 
     tx_rxpic_selector_destroy();
-    tx_phase = SSTV_TX_PHASE_SELECT_PICTURE;
-    tx_picture_selector_build();
+    tx_call_ocr_start();                     /* its callsigns, read while the list shows */
+    tx_call_selector_build();
 }
 
 static void tx_rxpic_selector_build(void)
@@ -1290,6 +1290,226 @@ static void tx_rxpic_selector_build(void)
     ui_list_select(tx_rxpic_table, 0);       /* the newest received picture */
     tx_rxpic_pending = 0;
     tx_rxpic_pending_since_ms = tx_now_ms() - SSTV_TX_PICTURE_DEBOUNCE_MS;
+}
+
+
+/* ---- 1KO125: REPLAY - the callsign to reply to, read from the received picture ---- */
+
+#define SSTV_OCR_MODEL "/usr/share/x6100/sstv_ocr.bin"
+#define SSTV_OCR_CTY   "/usr/share/x6100/cty.dat"
+
+typedef enum { TX_CALL_CURRENT, TX_CALL_EDIT, TX_CALL_SUGGESTED, TX_CALL_INFO } tx_call_kind_t;
+
+static lv_obj_t *tx_call_table = NULL;
+static struct { tx_call_kind_t kind; char call[SSTV_OCR_CALL_LEN]; char label[32]; } tx_call_rows[4 + SSTV_OCR_MAX_SUGG];
+static int tx_call_count = 0;
+static bool tx_call_keyboard = false;       /* the keyboard was opened from this phase */
+
+/* the reading runs in a thread of its own; the model stays loaded */
+static sstv_ocr_t *tx_ocr = NULL;
+static bool tx_ocr_failed = false;
+static pthread_t tx_ocr_thread;
+static bool tx_ocr_thread_valid = false;
+static volatile bool tx_ocr_done = false;
+static bool tx_ocr_shown = false;
+static uint8_t *tx_ocr_rgb = NULL;          /* a copy of the picture, the thread's */
+static unsigned tx_ocr_w, tx_ocr_h;
+static char tx_ocr_own[SSTV_OCR_CALL_LEN];
+static sstv_ocr_result_t tx_ocr_res;
+static int tx_ocr_rc = -1;
+
+static void *tx_ocr_thread_cb(void *arg)
+{
+    (void)arg;
+    struct timespec a, b;
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    if (!tx_ocr && !tx_ocr_failed) {
+        tx_ocr = sstv_ocr_load(SSTV_OCR_MODEL, SSTV_OCR_CTY);
+        tx_ocr_failed = tx_ocr == NULL;
+    }
+    tx_ocr_rc = tx_ocr ? sstv_ocr_read(tx_ocr, tx_ocr_rgb, (int)tx_ocr_w, (int)tx_ocr_h, tx_ocr_own,
+                                       SSTV_OCR_MAX_SUGG, 3, &tx_ocr_res) : -1;
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    fprintf(stderr, "SSTV OCR: %d lines, %d callsigns in %.2f s (%.2f G multiply-adds)\n",
+            tx_ocr_res.n_lines, tx_ocr_res.n_sugg,
+            (b.tv_sec - a.tv_sec) + (b.tv_nsec - a.tv_nsec) / 1e9, tx_ocr_res.macs / 1e9);
+    for (int i = 0; i < tx_ocr_res.n_lines; ++i)
+        fprintf(stderr, "SSTV OCR:   line %d: %s\n", i + 1, tx_ocr_res.line[i].text);
+    tx_ocr_done = true;
+    return NULL;
+}
+
+/* the reading of the REPLAY picture (tx_replay_rgb) */
+static void tx_call_ocr_start(void)
+{
+    if (tx_ocr_thread_valid) {               /* the last one first (at most a few seconds) */
+        pthread_join(tx_ocr_thread, NULL);
+        tx_ocr_thread_valid = false;
+    }
+    memset(&tx_ocr_res, 0, sizeof(tx_ocr_res));
+    tx_ocr_done = false;
+    tx_ocr_shown = false;
+    tx_ocr_rc = -1;
+    free(tx_ocr_rgb);
+    tx_ocr_rgb = NULL;
+    if (!tx_replay_rgb || !tx_replay_w || !tx_replay_h) {
+        tx_ocr_done = true;
+        return;
+    }
+    tx_ocr_rgb = malloc((size_t)tx_replay_w * tx_replay_h * 3);
+    if (!tx_ocr_rgb) {
+        tx_ocr_done = true;
+        return;
+    }
+    memcpy(tx_ocr_rgb, tx_replay_rgb, (size_t)tx_replay_w * tx_replay_h * 3);
+    tx_ocr_w = tx_replay_w;
+    tx_ocr_h = tx_replay_h;
+    snprintf(tx_ocr_own, sizeof(tx_ocr_own), "%s", PARAM_T_GET(cfg.callsign()));
+    tx_ocr_thread_valid = pthread_create(&tx_ocr_thread, NULL, tx_ocr_thread_cb, NULL) == 0;
+    if (!tx_ocr_thread_valid) tx_ocr_done = true;
+}
+
+static void tx_call_rows_fill(void)
+{
+    int n = 0;
+    if (tx_target_callsign[0]) {
+        tx_call_rows[n].kind = TX_CALL_CURRENT;
+        snprintf(tx_call_rows[n].label, sizeof(tx_call_rows[n].label), "Current");
+        snprintf(tx_call_rows[n].call, sizeof(tx_call_rows[n].call), "%s", tx_target_callsign);
+        n++;
+    }
+    tx_call_rows[n].kind = TX_CALL_EDIT;
+    snprintf(tx_call_rows[n].label, sizeof(tx_call_rows[n].label), "Edit callsign...");
+    tx_call_rows[n].call[0] = '\0';
+    n++;
+    if (!tx_ocr_done) {
+        tx_call_rows[n].kind = TX_CALL_INFO;
+        snprintf(tx_call_rows[n].label, sizeof(tx_call_rows[n].label), "Reading...");
+        tx_call_rows[n].call[0] = '\0';
+        n++;
+    } else if (tx_ocr_rc != 0 || tx_ocr_res.n_sugg == 0) {
+        tx_call_rows[n].kind = TX_CALL_INFO;
+        snprintf(tx_call_rows[n].label, sizeof(tx_call_rows[n].label), "%s",
+                 tx_ocr_rc != 0 ? "Not available" : "No callsign found");
+        tx_call_rows[n].call[0] = '\0';
+        n++;
+    } else {
+        for (int i = 0; i < tx_ocr_res.n_sugg; ++i) {
+            tx_call_rows[n].kind = TX_CALL_SUGGESTED;
+            snprintf(tx_call_rows[n].label, sizeof(tx_call_rows[n].label), "%s", i == 0 ? "Suggested" : "");
+            snprintf(tx_call_rows[n].call, sizeof(tx_call_rows[n].call), "%s", tx_ocr_res.sugg[i]);
+            n++;
+        }
+    }
+    tx_call_count = n;
+}
+
+static void tx_call_row_cb(void *user, int index, ui_list_row_t *row)
+{
+    (void)user;
+    if (index < 0 || index >= tx_call_count) return;
+    snprintf(row->cell[0], UI_LIST_CELL_LEN, "%s", tx_call_rows[index].label);
+    snprintf(row->cell[1], UI_LIST_CELL_LEN, "%s", tx_call_rows[index].call);
+    row->muted = tx_call_rows[index].kind == TX_CALL_INFO;
+}
+
+static void tx_call_selector_destroy(void)
+{
+    tx_call_keyboard = false;
+    if (tx_call_table) {
+        lv_group_remove_obj(tx_call_table);
+        lv_obj_del(tx_call_table);
+        tx_call_table = NULL;
+    }
+}
+
+/* the callsign chosen: on to the picture to send */
+static void tx_call_confirmed(void)
+{
+    fprintf(stderr, "SSTV TX UI: REPLAY TO %s -> pictures\n", tx_target_callsign);
+    tx_call_selector_destroy();
+    tx_phase = SSTV_TX_PHASE_SELECT_PICTURE;
+    tx_picture_selector_build();
+}
+
+static void tx_call_activate_cb(void *user, int row)
+{
+    (void)user;
+    if (tx_ui_state != SSTV_TX_UI_SETUP || tx_phase != SSTV_TX_PHASE_SELECT_CALL ||
+        row < 0 || row >= tx_call_count)
+        return;
+    switch (tx_call_rows[row].kind) {
+        case TX_CALL_CURRENT:
+            tx_call_confirmed();
+            break;
+        case TX_CALL_SUGGESTED:
+            snprintf(tx_target_callsign, sizeof(tx_target_callsign), "%s", tx_call_rows[row].call);
+            tx_call_confirmed();
+            break;
+        case TX_CALL_EDIT:
+            /* the keyboard, as SET TARGET CALLSIGN; back here or on */
+            lv_group_remove_obj(tx_call_table);
+            tx_call_keyboard = true;
+            tx_target_keyboard_open_pending = true;
+            break;
+        default:
+            break;                           /* "Reading...", nothing found */
+    }
+}
+
+static void tx_call_selector_build(void)
+{
+    tx_call_selector_destroy();
+    tx_phase = SSTV_TX_PHASE_SELECT_CALL;
+    tx_call_rows_fill();
+
+    if (tx_status()) lv_obj_add_flag(tx_status(), LV_OBJ_FLAG_HIDDEN);
+    tx_instruction_show("Rotate MFK to choose the callsign to reply to. Press MFK to confirm.");
+    tx_canvas_draw_rgb(tx_replay_rgb, tx_replay_w, tx_replay_h);   /* the picture it is read from */
+
+    ui_list_cfg_t cfg = {
+        .width = SSTV_TX_LIST_W,
+        .height = SSTV_TX_LIST_H,
+        .col_count = 2,
+        .cols = {
+            { .x = 8,   .w = 150, .align = UI_LIST_ALIGN_LEFT, .muted = true },
+            { .x = 160, .w = 132, .align = UI_LIST_ALIGN_LEFT },
+        },
+        .row_cb = tx_call_row_cb,
+        .activate_cb = tx_call_activate_cb,
+    };
+    tx_call_table = tx_list_create(&cfg, SSTV_TX_LIST_X, SSTV_TX_LIST_Y);
+    ui_list_set_count(tx_call_table, tx_call_count);
+    tx_list_focus(tx_call_table);
+    /* the first suggestion when there is one, else the first row */
+    int sel = 0;
+    for (int i = 0; i < tx_call_count; ++i)
+        if (tx_call_rows[i].kind == TX_CALL_SUGGESTED) { sel = i; break; }
+    ui_list_select(tx_call_table, sel);
+    tx_ocr_shown = tx_ocr_done;
+}
+
+/* every UI tick in this phase: the reading has ended, its callsigns in the list */
+static void tx_call_poll(void)
+{
+    if (!tx_ocr_done || tx_ocr_shown || !tx_call_table) return;
+    tx_ocr_shown = true;
+    if (tx_ocr_thread_valid) {
+        pthread_join(tx_ocr_thread, NULL);
+        tx_ocr_thread_valid = false;
+    }
+    int sel = ui_list_get_selected(tx_call_table);
+    bool on_info = sel >= 0 && sel < tx_call_count && tx_call_rows[sel].kind == TX_CALL_INFO;
+    tx_call_rows_fill();
+    ui_list_set_count(tx_call_table, tx_call_count);
+    if (on_info) {                           /* the cursor was on "Reading...": the first suggestion */
+        for (int i = 0; i < tx_call_count; ++i)
+            if (tx_call_rows[i].kind == TX_CALL_SUGGESTED || tx_call_rows[i].kind == TX_CALL_INFO) {
+                ui_list_select(tx_call_table, i);
+                break;
+            }
+    }
+    lv_obj_invalidate(tx_call_table);
 }
 
 static void tx_type_selector_destroy(void)
@@ -1608,6 +1828,11 @@ static bool tx_target_keyboard_cancel_cb(void)
 {
     tx_target_keyboard_active=false;
     textarea_window_close();
+    if (tx_call_keyboard) {                  /* 1KO125: back to the callsign list */
+        tx_call_keyboard=false;
+        tx_call_selector_build();
+        return true;
+    }
     tx_type_selector_build();
     return true;
 }
@@ -1628,6 +1853,12 @@ static bool tx_target_keyboard_ok_cb(void)
     }
     tx_target_keyboard_active=false;
     textarea_window_close();
+    if (tx_call_keyboard) {                  /* 1KO125: REPLAY goes on with this callsign */
+        tx_call_keyboard=false;
+        if (tx_target_callsign[0]) tx_call_confirmed();
+        else tx_call_selector_build();
+        return true;
+    }
     tx_type_selector_build();
     return true;
 }
@@ -1642,6 +1873,12 @@ void dialog_sstv_keyboard_dismiss(void)
     if (!tx_target_keyboard_active) return;
     tx_target_keyboard_active=false;
     textarea_window_close();
+    if (tx_call_keyboard) {                  /* 1KO125 */
+        tx_call_keyboard=false;
+        if (tx_ui_state==SSTV_TX_UI_SETUP && tx_phase==SSTV_TX_PHASE_SELECT_CALL)
+            tx_call_selector_build();
+        return;
+    }
     if (tx_ui_state==SSTV_TX_UI_SETUP &&
         tx_phase==SSTV_TX_PHASE_SELECT_TARGET)
         tx_type_selector_build();
@@ -2025,7 +2262,8 @@ static void tx_type_row_cb(void *user, int index, ui_list_row_t *row)
             else
                 snprintf(row->cell[0],UI_LIST_CELL_LEN,"%s TO...",
                          index==1 ? "REPLY" : "REPLAY");
-            row->muted=!tx_target_callsign[0];
+            /* 1KO125: REPLAY chooses its callsign from the received picture */
+            row->muted=index==1 && !tx_target_callsign[0];
             return;
         case 3: text="TX IMAGE ONLY"; break;
         case 4: text="REPEAT LAST TX"; row->muted=!tx_last_valid; break;
@@ -2052,9 +2290,7 @@ static void tx_type_update_help(void)
                 : "You must set a target callsign before using this action";
             break;
         case 2:
-            text=tx_target_callsign[0]
-                ? "Choose a received picture for the miniature, then an image and a text template to reply to the target callsign"
-                : "You must set a target callsign before using this action";
+            text="Choose a received picture, then the callsign read on it (or type it), an image and a text template";
             break;
         case 3:
             text="Choose an image and transmit without any added text";
@@ -2104,9 +2340,9 @@ static void tx_type_activate_cb(void *user, int row)
         return;
     }
 
-    /* REPLY and REPLAY both require a target callsign. */
+    /* REPLY requires a target callsign; REPLAY chooses it later (1KO125) */
     if (row==1 || row==2) {
-        if (!tx_target_callsign[0]) return;
+        if (row==1 && !tx_target_callsign[0]) return;
         tx_message_type=(row==2) ? SSTV_TX_MESSAGE_REPLAY : SSTV_TX_MESSAGE_REPLY;
         tx_type_selector_destroy();
         if (row==2) {                    /* 1KO125: first the received picture for the miniature */
@@ -2202,7 +2438,7 @@ static void tx_type_selector_build(void)
      * SET TARGET CALLSIGN because both are disabled in that state. */
     int initial_row=tx_last_type_selected;
     if (initial_row<0 || initial_row>5) initial_row=0;
-    if ((initial_row==1 || initial_row==2) && !tx_target_callsign[0])
+    if (initial_row==1 && !tx_target_callsign[0])
         initial_row=5;
     if (initial_row==4 && !tx_last_valid)
         initial_row=0;
@@ -2318,6 +2554,7 @@ static void tx_ui_cb(button_data_t *data)
         tx_type_selector_destroy();
         tx_picture_selector_destroy();
         tx_rxpic_selector_destroy();   /* 1KO125 */
+        tx_call_selector_destroy();    /* 1KO125 */
         tx_instruction_hide();
         tx_phase = SSTV_TX_PHASE_NONE;
         if (tx_status())

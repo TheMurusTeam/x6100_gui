@@ -137,7 +137,10 @@ static const char *const bodies[] = {
     "and the cleaned one (_dn.png, marked DN in the browser).\n\n"
     H("TRANSMIT")
     "TX opens the transmit menu: CQ call, reply, replay (reply with a miniature of a received picture, chosen among the saved ones), picture only, "
-    "repeat. Your pictures go in /mnt/sstv/tx_pics, text templates in /mnt/sstv/tx_text, "
+    "repeat. Replay then reads the callsigns written on the received picture and suggests "
+    "them (yours left out); choose one, keep the current callsign or type another. The "
+    "reading is right most of the time, not always: check it. "
+    "Your pictures go in /mnt/sstv/tx_pics, text templates in /mnt/sstv/tx_text, "
     "or upload them from the Web Manager (http://<radio IP>/sstv).\n"
     "While you set up TX the receiver keeps going (the line at the bottom of the picture "
     "tells what it is doing); it stops only when transmission starts, and a picture being "
