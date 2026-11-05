@@ -111,6 +111,8 @@ static void tx_call_ocr_start(void);         /* 1KO125: REPLAY callsign phase */
 static void tx_call_selector_build(void);
 static void tx_call_selector_destroy(void);
 static void tx_call_poll(void);
+static void tx_back(void);                   /* 1KO125: F1 Back in the TX setup */
+static void tx_f1_refresh(void);
 static void tx_picture_selector_destroy(void);
 static void tx_picture_selector_refresh(void);
 static void tx_picture_selection_changed_cb(lv_event_t *e);
@@ -450,6 +452,7 @@ static volatile sstv_cont_event_t cont_event = SSTV_CONT_EV_NONE;  /* -> ui_time
 static volatile sstv_cont_event_t cont_end_reason = SSTV_CONT_EV_NONE;
 
 /* 3-page menu (Info, and Test RX / AUTODETECT if enabled, on page 3). */
+/* 1KO125: during the TX setup F1 is Back (the previous phase), see tx_back() */
 static button_data_t btn_sstv_page_1 = {
     .type = BTN_TEXT, .label = "(SSTV 1:3)", .press = page_2_cb
 };
@@ -499,11 +502,11 @@ static void update_rx_controls(void)
     bool auto_active = live_enabled || live_capturing || live_decode_pending || live_decoding;
     bool cont_active = cont_capturing || cont_decode_pending || cont_decoding;
 
-    /* F1 changes SSTV soft-key page.  Keep it locked for the whole TX
-     * workflow (setup and RF) so the operator cannot leave the TX controls.
-     * Every path that returns to RX calls update_rx_controls(), which enables
-     * F1 again automatically. */
-    buttons_disabled(&btn_sstv_page_1, tx_ui_state != SSTV_TX_UI_RX);
+    /* F1 changes SSTV soft-key page.  During the TX setup it is Back (1KO125,
+     * tx_f1_refresh), locked during RF so the operator cannot leave the TX
+     * controls.  Every path that returns to RX calls update_rx_controls(),
+     * which gives F1 back its page label. */
+    tx_f1_refresh();
 
     if (tx_ui_state != SSTV_TX_UI_RX) {
         buttons_disabled(&btn_start, true);
@@ -1217,6 +1220,8 @@ static void ui_timer_cb(lv_timer_t *timer)
         tx_phase == SSTV_TX_PHASE_SELECT_CALL)
         tx_call_poll();                    /* 1KO125: the callsigns read */
 
+    tx_f1_refresh();                       /* 1KO125: F1 Back follows the phase */
+
     if (tx_ui_state == SSTV_TX_UI_SETUP &&
         tx_phase == SSTV_TX_PHASE_SELECT_TEMPLATE &&
         tx_template_preview_pending) {
@@ -1649,6 +1654,10 @@ static void page_1_cb(button_data_t *data)
 static void page_2_cb(button_data_t *data)
 {
     (void)data;
+    if (tx_ui_state == SSTV_TX_UI_SETUP) {      /* 1KO125: Back */
+        tx_back();
+        return;
+    }
     buttons_load_page(&btn_page_2);
     sstv_browser_update_buttons();
 }

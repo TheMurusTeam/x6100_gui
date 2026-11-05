@@ -2607,3 +2607,77 @@ static void tx_ui_cb(button_data_t *data)
     tx_type_selector_build();
     fprintf(stderr, "SSTV TX UI: entered setup at action selector; receivers keep running\n");
 }
+
+
+/* ---- 1KO125: F1 Back during the TX setup ---- */
+
+/* F1: "(SSTV 1:3)" in RX; "Back" during the TX setup, off in the first phase
+ * (Cancel TX leaves it) and during RF.  Called every tick: redraws only on a change. */
+static void tx_f1_refresh(void)
+{
+    bool setup = tx_ui_state == SSTV_TX_UI_SETUP;
+    const char *label = setup ? "Back" : "(SSTV 1:3)";
+    bool off = tx_ui_state == SSTV_TX_UI_RF ||
+               (setup && (tx_phase == SSTV_TX_PHASE_SELECT_TYPE ||
+                          tx_phase == SSTV_TX_PHASE_SELECT_TARGET ||
+                          tx_phase == SSTV_TX_PHASE_NONE));
+    if (btn_sstv_page_1.label != label) {
+        btn_sstv_page_1.label = label;
+        if (btn_sstv_page_1.disp_btn) buttons_refresh(&btn_sstv_page_1);
+    }
+    if (btn_sstv_page_1.disabled != off) buttons_disabled(&btn_sstv_page_1, off);
+}
+
+/* the phase before this one, as the action chosen goes through them */
+static void tx_back(void)
+{
+    if (tx_ui_state != SSTV_TX_UI_SETUP) return;
+    if (tx_target_keyboard_active || tx_target_keyboard_open_pending) return;
+
+    sstv_tx_phase_t prev;
+    bool replay = tx_message_type == SSTV_TX_MESSAGE_REPLAY;
+    switch (tx_phase) {
+        case SSTV_TX_PHASE_SELECT_RX_PICTURE: prev = SSTV_TX_PHASE_SELECT_TYPE; break;
+        case SSTV_TX_PHASE_SELECT_CALL:       prev = SSTV_TX_PHASE_SELECT_RX_PICTURE; break;
+        case SSTV_TX_PHASE_SELECT_PICTURE:
+            prev = replay ? SSTV_TX_PHASE_SELECT_CALL : SSTV_TX_PHASE_SELECT_TYPE;
+            break;
+        case SSTV_TX_PHASE_SELECT_TEMPLATE:   prev = SSTV_TX_PHASE_SELECT_PICTURE; break;
+        case SSTV_TX_PHASE_SELECT_COLORS:
+            prev = tx_message_type == SSTV_TX_MESSAGE_CQ ? SSTV_TX_PHASE_SELECT_PICTURE
+                                                         : SSTV_TX_PHASE_SELECT_TEMPLATE;
+            break;
+        default: return;                     /* the actions (Cancel TX), the keyboard */
+    }
+
+    tx_color_selector_destroy();
+    tx_template_selector_destroy();
+    tx_picture_selector_destroy();
+    tx_call_selector_destroy();
+    tx_rxpic_selector_destroy();
+    fprintf(stderr, "SSTV TX UI: Back %d -> %d\n", (int)tx_phase, (int)prev);
+
+    switch (prev) {
+        case SSTV_TX_PHASE_SELECT_TYPE:
+            tx_type_selector_build();
+            break;
+        case SSTV_TX_PHASE_SELECT_RX_PICTURE:
+            tx_phase = prev;
+            tx_rxpic_selector_build();
+            break;
+        case SSTV_TX_PHASE_SELECT_CALL:
+            tx_call_selector_build();        /* the callsigns already read */
+            break;
+        case SSTV_TX_PHASE_SELECT_PICTURE:
+            tx_phase = prev;
+            tx_picture_selector_build();
+            break;
+        case SSTV_TX_PHASE_SELECT_TEMPLATE:
+            tx_phase = prev;
+            tx_template_selector_build();
+            break;
+        default:
+            break;
+    }
+    tx_f1_refresh();
+}

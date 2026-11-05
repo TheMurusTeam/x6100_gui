@@ -140,6 +140,7 @@ static const char *const bodies[] = {
     "repeat. Replay then reads the callsigns written on the received picture and suggests "
     "them (yours left out); choose one, keep the current callsign or type another. The "
     "reading is right most of the time, not always: check it. "
+    "After the first choice F1 is Back: it returns to the previous step; Cancel TX leaves. "
     "Your pictures go in /mnt/sstv/tx_pics, text templates in /mnt/sstv/tx_text, "
     "or upload them from the Web Manager (http://<radio IP>/sstv).\n"
     "While you set up TX the receiver keeps going (the line at the bottom of the picture "
