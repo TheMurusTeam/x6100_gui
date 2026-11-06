@@ -1429,7 +1429,8 @@ static void view_open(int index)
     lv_obj_set_style_text_line_space(view_label, 0, 0);
     view_text = text;
     view_len = strlen(text);
-    view_start = view_end = 0;
+    view_start = 0;
+    view_end = view_len;                /* view_set_window puts view_cut back there */
     view_cut = '\0';
     if (view_len)
         view_set_window(0);             /* as much of it as fits */
