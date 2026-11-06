@@ -731,7 +731,6 @@ static void nav_apply_mode(void)
             lv_obj_update_layout(scroll);
             lv_obj_scroll_to_y(scroll, LV_COORD_MAX, LV_ANIM_OFF);
         }
-        browser_update_button();
         buttons_load_page(&btn_page_1);
     }
 }

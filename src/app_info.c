@@ -92,7 +92,8 @@ static const char *const bodies[] = {
     "Yellow: uncertain character. Red *: lost character. Light blue: position. "
     "Green: digits repaired.\n\n"
     H("FILES")
-    "Bulletins and texts: /mnt/navtex\n\n"
+    "Bulletins and texts: /mnt/navtex. In SITOR-B, Save and Clear saves the text shown; "
+    "Sitor-B Browser (page 2) lists those texts, opens and deletes them (a scan stops).\n\n"
     H("MICROPHONE")
     "V/M opens and closes the frequency list. UP/DOWN tune the previous/next frequency.",
 

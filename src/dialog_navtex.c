@@ -83,7 +83,7 @@ static void save_clear_cb(button_data_t *data);
 static void browser_cb(button_data_t *data);
 static void browser_build(void);
 static void browser_close(bool restore_focus);
-static void browser_update_button(void);
+static void browser_buttons(void);
 static void mode_cb(button_data_t *data);
 static void sitor_page2_cb(button_data_t *data);
 static void sitor_page1_cb(button_data_t *data);
@@ -135,6 +135,7 @@ static lv_obj_t *view_label = NULL;
  * NAVTEX_LABEL_MAX_H, moved along by view_key_cb() at its ends */
 static char *view_text = NULL;      /* the whole file, freed with the label */
 static size_t view_len, view_start, view_end;
+static int view_index = -1;          /* the file open, in browser_files */
 static char view_cut = '\0';        /* the character at view_end */
 static void view_set_window(size_t start);
 static navtex_file_t *browser_files = NULL;
@@ -224,6 +225,29 @@ static button_data_t btn_info = { .type = BTN_TEXT, .label = "Info", .press = in
 
 static buttons_page_t btn_page_2 = {
     .items = { &btn_page2, &btn_browser, &btn_save_clear, &btn_info, &btn_close }
+};
+
+/* Browser mode: its own buttons only, until Close Browser */
+static void br_open_cb(button_data_t *data);
+static void br_delete_cb(button_data_t *data);
+static void bv_back_cb(button_data_t *data);
+static void bv_newer_cb(button_data_t *data);
+static void bv_older_cb(button_data_t *data);
+
+static button_data_t btn_br_title = { .type = BTN_TEXT, .label = "(Browser)", .press = NULL };
+static button_data_t btn_br_close = { .type = BTN_TEXT, .label = "Close\nBrowser", .press = browser_cb };
+static button_data_t btn_br_open  = { .type = BTN_TEXT, .label = "Open", .press = br_open_cb };
+static button_data_t btn_br_del   = { .type = BTN_TEXT, .label = "Delete", .press = br_delete_cb };
+static button_data_t btn_bv_title = { .type = BTN_TEXT, .label = "(Message)", .press = NULL };
+static button_data_t btn_bv_back  = { .type = BTN_TEXT, .label = "Back", .press = bv_back_cb };
+static button_data_t btn_bv_newer = { .type = BTN_TEXT, .label = "Newer", .press = bv_newer_cb };
+static button_data_t btn_bv_older = { .type = BTN_TEXT, .label = "Older", .press = bv_older_cb };
+
+static buttons_page_t btn_page_browser = {
+    .items = { &btn_br_title, &btn_br_close, &btn_br_open, &btn_br_del, NULL }
+};
+static buttons_page_t btn_page_view = {
+    .items = { &btn_bv_title, &btn_bv_back, &btn_bv_newer, &btn_bv_older, &btn_br_del }
 };
 
 static void sitor_page2_cb(button_data_t *data) { (void)data; buttons_load_page(&btn_page_2); }
@@ -755,7 +779,6 @@ static void construct_cb(lv_obj_t *parent)
 
     parent_obj = parent;
     browser_open = false;
-    btn_browser.label = "Sitor-B\nBrowser";
 
     test_mode = false;
     test_thread_valid = false;
@@ -1216,11 +1239,21 @@ static void browser_row_cb(void *user, int index, ui_list_row_t *row)
     snprintf(row->cell[3], UI_LIST_CELL_LEN, "%s", f->summary);
 }
 
-static void browser_update_button(void)
+/* The buttons of browser mode: the list, or the message open */
+static void browser_buttons(void)
 {
-    btn_browser.label = browser_open ? "Close\nBrowser" : "Sitor-B\nBrowser";
-    if (btn_browser.disp_btn)
-        buttons_refresh(&btn_browser);
+    if (!browser_open)
+        return;
+    if (view_scroll) {
+        buttons_load_page(&btn_page_view);
+        buttons_disabled(&btn_bv_newer, view_index <= 0);
+        buttons_disabled(&btn_bv_older, (size_t)view_index + 1 >= browser_file_count);
+        buttons_disabled(&btn_br_del, false);
+    } else {
+        buttons_load_page(&btn_page_browser);
+        buttons_disabled(&btn_br_open, browser_file_count == 0);
+        buttons_disabled(&btn_br_del, browser_file_count == 0);
+    }
 }
 
 static void focus_obj(lv_obj_t *obj)
@@ -1256,6 +1289,8 @@ static void view_close(void)
         ui_list_set_count(browser_list, (int)browser_file_count);
         focus_obj(browser_list);
     }
+    view_index = -1;
+    browser_buttons();
 }
 
 static void view_delete_cb(lv_event_t *e)
@@ -1447,6 +1482,8 @@ static void view_open(int index)
         lv_obj_add_flag(browser_list, LV_OBJ_FLAG_HIDDEN);
     }
     focus_obj(view_scroll);
+    view_index = index;
+    browser_buttons();
 
     fprintf(stderr, "NAVTEX BROWSER: opened %s\n", browser_files[index].name);
 }
@@ -1464,6 +1501,7 @@ static void browser_build(void)
     if (browser_open || !parent_obj || !scroll)
         return;
 
+    scan_stop("Scan stopped");               /* it could be neither seen nor stopped */
     browser_refresh();
 
     /* Exactly the panel used by the live NAVTEX text (same geometry and
@@ -1504,7 +1542,7 @@ static void browser_build(void)
     focus_obj(browser_list);
 
     browser_open = true;
-    browser_update_button();
+    browser_buttons();
 }
 
 static void browser_close(bool restore_focus)
@@ -1521,6 +1559,7 @@ static void browser_close(bool restore_focus)
     browser_list = NULL;
     view_scroll = NULL;
     view_label = NULL;
+    view_index = -1;
     browser_free_files();
 
     bool was_open = browser_open;
@@ -1540,8 +1579,8 @@ static void browser_close(bool restore_focus)
         }
     }
 
-    if (restore_focus)
-        browser_update_button();
+    if (restore_focus && was_open)
+        buttons_load_page(&btn_page_2);     /* where Sitor-B Browser is */
 }
 
 static void browser_cb(button_data_t *data)
@@ -1552,6 +1591,71 @@ static void browser_cb(button_data_t *data)
         browser_close(true);
     else
         browser_build();
+}
+
+/* --- browser mode buttons ------------------------------------------- */
+
+static void br_open_cb(button_data_t *data)
+{
+    (void)data;
+    if (browser_list && !view_scroll)
+        view_open(ui_list_get_selected(browser_list));
+}
+
+/* another message of the list, from the one open */
+static void bv_goto(int index)
+{
+    if (!view_scroll || index < 0 || (size_t)index >= browser_file_count)
+        return;
+    view_close();
+    ui_list_select(browser_list, index);
+    view_open(index);
+}
+
+static void bv_back_cb(button_data_t *data)  { (void)data; view_close(); }
+static void bv_newer_cb(button_data_t *data) { (void)data; bv_goto(view_index - 1); }  /* newest first */
+static void bv_older_cb(button_data_t *data) { (void)data; bv_goto(view_index + 1); }
+
+/* Delete, no confirmation (as the NAVTEX bulletins): from the list the next
+ * row is selected; from a message open the next (older) one opens, back to
+ * the list after the last */
+static void br_delete_cb(button_data_t *data)
+{
+    (void)data;
+    if (!browser_list)
+        return;
+    bool open = view_scroll != NULL;
+    int index = open ? view_index : ui_list_get_selected(browser_list);
+    if (index < 0 || (size_t)index >= browser_file_count)
+        return;
+
+    char path[256];
+    snprintf(path, sizeof(path), "%s/%s", NAVTEX_SAVE_DIR, browser_files[index].name);
+    if (unlink(path) != 0) {
+        fprintf(stderr, "NAVTEX BROWSER: unable to delete %s: %s\n", path, strerror(errno));
+        msg_schedule_text_fmt("Unable to delete %s", browser_files[index].name);
+        return;
+    }
+    fprintf(stderr, "NAVTEX BROWSER: deleted %s\n", path);
+
+    if (open)
+        view_close();                       /* rescans the folder */
+    else {
+        browser_refresh();
+        ui_list_set_count(browser_list, (int)browser_file_count);
+    }
+    if (browser_file_count == 0) {
+        browser_buttons();
+        return;
+    }
+    if ((size_t)index < browser_file_count) {
+        ui_list_select(browser_list, index);
+        if (open)
+            view_open(index);
+    } else {
+        ui_list_select(browser_list, (int)browser_file_count - 1);
+    }
+    browser_buttons();
 }
 
 #include "dialog_navtex_bul.inc"
