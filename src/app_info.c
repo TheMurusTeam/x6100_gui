@@ -81,7 +81,7 @@ static const char *const bodies[] = {
     "languages), 4209.5 kHz (HF), a coast station or an HF MSI channel. The dial is set 1 kHz "
     "below the centre frequency, USB-D.\n\n"
     H("SCAN")
-    "Scan (page 2, or in the Freq. list) tunes the frequencies of the list one after the "
+    "Scan (SITOR-B page 1, NAVTEX page 2, or in the Freq. list) tunes the frequencies of the list one after the "
     "other up to the highest, then again from the lowest, and stops on the first SITOR-B "
     "signal with a message. Once stopped it never starts again by itself. The first Scan "
     "after the application opens starts from the lowest frequency (490 kHz); otherwise Scan "

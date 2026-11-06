@@ -215,7 +215,7 @@ static button_data_t btn_browser = {
 };
 
 static buttons_page_t btn_page_1 = {
-    .items = { &btn_page, &btn_mode, &btn_clear, &btn_save_clear, &btn_freq }
+    .items = { &btn_page, &btn_mode, &btn_clear, &btn_scan, &btn_freq }
 };
 
 /* 1KO125: Info window (both modes, F4 of page 2), see app_info.c */
@@ -223,7 +223,7 @@ static void info_cb(button_data_t *data);
 static button_data_t btn_info = { .type = BTN_TEXT, .label = "Info", .press = info_cb };
 
 static buttons_page_t btn_page_2 = {
-    .items = { &btn_page2, &btn_browser, &btn_scan, &btn_info, &btn_close }
+    .items = { &btn_page2, &btn_browser, &btn_save_clear, &btn_info, &btn_close }
 };
 
 static void sitor_page2_cb(button_data_t *data) { (void)data; buttons_load_page(&btn_page_2); }
