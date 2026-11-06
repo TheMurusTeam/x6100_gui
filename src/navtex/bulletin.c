@@ -574,6 +574,25 @@ static int figs_char(char c)
     return 0;
 }
 
+/* plain English words written only with those letters: never digits */
+static bool is_common_word(const char *w, int len)
+{
+    static const char *const words[] = {
+        "AM", "AN", "AT", "IN", "IT", "ON", "OR", "TO", "UP", "WE", "PM", "MAN", "MAY", "NOT",
+        "NOW", "ONE", "OUR", "OUT", "PUT", "TOW", "TWO", "WAY", "WET", "WIN", "WON", "YOU",
+        "ANY", "ARE", "EAT", "TEN", "TOP", "WAR", "AREA", "ITEM", "INTO", "IRON", "MANY",
+        "MEAN", "MEET", "MINE", "MORE", "NAME", "NEAR", "NINE", "NONE", "NOON", "NOTE", "OPEN",
+        "OUTER", "PART", "PIER", "PIPE", "PORT", "POWER", "QUIT", "RATE", "REPORT", "RETURN",
+        "RIOT", "ROUTE", "TIME", "TOWER", "TOWN", "TYPE", "UNIT", "UPON", "WAIT", "WANT",
+        "WATER", "WAYPOINT", "WEAPON", "WERE", "WIRE", "WORE", "WORN", "WRITE", "YEAR",
+        "YOUR", "MOTOR", "NORM", "POINT", "PRIOR", "OPERATE", "OPERATION", "OPERATOR",
+        "IMPORTANT", "ENTER", "ENTRY", "EMPTY", "PROPER", "TERM", "TIMER",
+    };
+    for (size_t i = 0; i < sizeof(words) / sizeof(words[0]); ++i)
+        if ((int)strlen(words[i]) == len && memcmp(words[i], w, (size_t)len) == 0) return true;
+    return false;
+}
+
 static bool is_hemisphere(char c)
 {
     /* N S E W, Turkish K(uzey) G(uney) D(ogu) B(ati) */
@@ -623,7 +642,8 @@ void nb_mark_positions(const nb_bulletin_t *b, char *fixed, uint8_t *mark)
                 if (letters == 1 && is_hemisphere(last)) hemi[w] = true;
             } else if (len == 1 && is_hemisphere(b->text[ws[w]])) {
                 hemi[w] = true;
-            } else if (len >= 2 && letters == figs && figs >= 2 && other == 0) {
+            } else if (len >= 2 && letters == figs && figs >= 2 && other == 0 &&
+                       !is_common_word(b->text + ws[w], len)) {
                 conv[w] = true;
             } else if (len >= 2 && is_hemisphere(b->text[ws[w]]) && b->text[ws[w] + 1] == '-') {
                 hemi[w] = true;                     /* "K-" */
@@ -638,8 +658,21 @@ void nb_mark_positions(const nb_bulletin_t *b, char *fixed, uint8_t *mark)
         if (!nhemi || nnum + nconv < 2 || (digits_real < 3 && nconv < 2)) continue;
         if ((nnum + nconv + nhemi) * 10 < nw * 6 && nnum < 4) continue;
 
+        /* only the words next to the position (a number, a hemisphere or a word
+         * already put back): not every word of a long line ("WE INFORM YOU") */
+        bool ok[64] = { 0 };
+        for (bool more = true; more; ) {
+            more = false;
+            for (int w = 0; w < nw; ++w) {
+                if (!conv[w] || ok[w]) continue;
+                bool l = w > 0 && (num[w - 1] || hemi[w - 1] || ok[w - 1]);
+                bool r = w + 1 < nw && (num[w + 1] || hemi[w + 1] || ok[w + 1]);
+                if (l || r) ok[w] = more = true;
+            }
+        }
+
         for (int w = 0; w < nw; ++w) {
-            if (conv[w]) {
+            if (ok[w]) {
                 for (int k = ws[w]; k < we[w]; ++k) {
                     int f = figs_char(b->text[k]);
                     if (f) { fixed[k] = (char)f; mark[k] = NB_MARK_FIXED; }
