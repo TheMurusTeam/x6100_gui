@@ -14,6 +14,7 @@
 #include "events.h"
 #include "waterfall.h"
 #include "scheduler.h"
+#include "af_scope.h"
 
 static lv_obj_t     *obj;
 static dialog_t     *current_dialog = NULL;
@@ -23,6 +24,7 @@ static bool dialog_is_running();
 void dialog_construct(dialog_t *dialog, lv_obj_t *parent) {
     if (dialog && !dialog->run) {
         scheduler_msg_send(MSG_DIALOG_START, NULL);
+        af_scope_dialog_opening();      /* 1KO125: full-height panels for construct_cb */
         dialog->prev_page = buttons_get_cur_page();
         buttons_unload_page();
         if (dialog->btn_page) {

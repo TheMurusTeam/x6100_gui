@@ -105,6 +105,16 @@ static void audio_cb(size_t n, float *samples)
 static void dialog_start_cb(void *s, lv_msg_t *m) { (void)s; (void)m; dialog_open = true; }
 static void dialog_stop_cb(void *s, lv_msg_t *m)  { (void)s; (void)m; dialog_open = false; }
 
+void af_scope_dialog_opening(void)
+{
+    dialog_open = true;
+    bool w = af_scope_wanted();
+    if (w != wanted_last) {
+        wanted_last = w;
+        if (layout_cb) layout_cb();     /* calls af_scope_set_geometry() */
+    }
+}
+
 /* ---- passband ------------------------------------------------------------ */
 
 /* audio frequencies shown, Hz */

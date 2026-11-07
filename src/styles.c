@@ -516,6 +516,7 @@ void styles_panel_set_height(lv_coord_t h) {
         render_panel_bg(skin_current, panel_bg_w, panel_bg_h);
         lv_style_set_bg_img_src(&style.panels.base, &panel_bg_dsc);
     }
+    lv_obj_report_style_change(&style.panels.base);   /* 1KO125: panels already shown follow */
 
     lv_obj_invalidate(lv_scr_act());
 }

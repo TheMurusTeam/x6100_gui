@@ -37,6 +37,10 @@ void af_scope_set_geometry(bool shown, lv_coord_t y);
 /* Whether the strip is on the screen now */
 bool af_scope_shown(void);
 
+/* From dialog_construct(), before the app builds its screen: the strip goes
+ * and the panels get their full height now, not at MSG_DIALOG_START (later) */
+void af_scope_dialog_opening(void);
+
 /* From the main loop, with spectrum_process() and waterfall_process() */
 bool af_scope_process(void);
 
