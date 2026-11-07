@@ -23,6 +23,7 @@
 #include <vector>
 
 #include <ft8lib/constants.h>
+#include "../ft8/ft2.h"
 
 #include "../common/math.h"
 #include "../settings_types.h"
@@ -125,7 +126,7 @@ class SettingsManager {
     Parameter<int32_t> p_show_meter_values{"show_meter_values", false, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_};
     // 1KO125: S-meter calibration offset in dB (display and CAT)
-    Parameter<int32_t> p_s_meter_offset{"s_meter_offset", 0, -30, 30,
+    Parameter<int32_t> p_s_meter_offset{"s_meter_offset", 0, -10, 10,
         StorageType::GLOBAL, pending_writes_, &global_params_};
 
     // VOX
@@ -141,7 +142,7 @@ class SettingsManager {
     // FT8
     Parameter<int32_t> p_ft8_show_all{"ft8_show_all", true, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_};
-    Parameter<int32_t> p_ft8_protocol{"ft8_protocol", FTX_PROTOCOL_FT8, 0, (int32_t)FTX_PROTOCOL_FT8,
+    Parameter<int32_t> p_ft8_protocol{"ft8_protocol", FTX_PROTOCOL_FT8, 0, FTX_PROTOCOL_FT2,
         StorageType::GLOBAL, pending_writes_, &global_params_};
     Parameter<int32_t> p_ft8_auto{"ft8_auto", true, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_};
@@ -314,6 +315,8 @@ class SettingsManager {
         StorageType::GLOBAL, pending_writes_, {}, &global_params_};
     Parameter<int32_t> p_rtty_reverse{"rtty_reverse", false, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_};
+    Parameter<int32_t> p_rtty_squelch{"rtty_squelch", 0, 0, 90,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // 0: open, the receiver as before the squelch
 
     // CW beacon period (legacy cw field; CW group lives below)
     Parameter<int32_t> p_cw_encoder_period{"cw_encoder_period", 10, {},
@@ -378,6 +381,12 @@ class SettingsManager {
         StorageType::GLOBAL, pending_writes_, &global_params_}; // tuned to custom_hz, not a preset
     Parameter<int32_t> p_js8_custom_hz{"js8_custom_hz", 0, {},
         StorageType::GLOBAL, pending_writes_, {}, &global_params_}; // last custom dial frequency, 0 = none
+
+    // JTTY
+    Parameter<int32_t> p_jtty_serial{"jtty_serial", 1, 1, 131071,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // next serial number sent with %E
+    Parameter<int32_t> p_jtty_tx_freq{"jtty_tx_freq", 1500, 200, 2800,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // our audio offset (tone 0), Hz
 
     // Station identity
     Parameter<std::string> p_qth{"qth", "", {},

@@ -25,6 +25,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     meter.c band_info.cpp tx_info.c tx_level.c tx_player.c
     audio.c mfk.cpp cw.cpp panel.cpp
     rtty.c screenshot.c display.cpp gps.c
+    rtty_tx.c rtty_sql.c rtty_buttons.c digi_qso.c digi_next.c
     ui_list.c app_info.c
     app_radio.c
     dialog.c dialog_swrscan.c
@@ -41,12 +42,21 @@ target_sources(${PROJECT_NAME} PUBLIC
     bt_audio.c
     knobs.cpp lock_manager.c indicators.cpp freq_info.cpp
     dialog_bt.c bt_ctl.c bt_dev.c bt_spp.c
+    # JTTY
+    dialog_jtty.c jtty/jtty_proto.c jtty/jtty_fec.c jtty/jtty_source.c
+    jtty/jtty_demod.c jtty/jtty_rx.c jtty/jtty_mod.c jtty/jtty_pack.c jtty_tx.c jtty_log.c
     # The apps on their way in: each one's sources below its name
     # WSPR
+    dialog_wspr.c wspr_app.c wspr_worker.c wspr_demod.c wspr_fano.c
+    wspr_encode.c wspr_mod.c wspr_spec.c wsprd/wsprd_utils.c wsprd/nhash.c
     # JS8
     dialog_js8.c js8_wf.c js8_clock.c
     # PSK31
+    dialog_psk.c psk_rx.c psk_tx.c psk_spec.c psk_macro.c digi_qso.c digi_menu.c digi_next.c
     # Olivia
+    dialog_olivia.c olivia.c olivia_mod.c olivia_demod.c olivia_rx.c
+    olivia_resamp.c olivia_tx.c olivia_app.c olivia_macro.c
+    psk_spec.c digi_qso.c digi_menu.c digi_next.c
     # WeFax
     dialog_wefax.c wefax/decoder.c wefax/stations.c wefax/wefax_pp.c
     # SSTV

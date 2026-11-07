@@ -28,6 +28,7 @@ extern "C" {
     #include "panel.h"
     #include "voice.h"
     #include "pubsub_ids.h"
+    #include "rtty_buttons.h"
 }
 
 #define STATE_ASSIGNED LV_STATE_USER_1
@@ -314,7 +315,7 @@ static button_data_t btn_nr_level = make_encoder_btn(nr_level_label_getter, CTRL
 /* APP */
 
 static button_data_t btn_rtty = make_app_btn("RTTY", ACTION_APP_RTTY);
-static button_data_t btn_ft8  = make_app_btn("FT8", ACTION_APP_FT8);
+static button_data_t btn_ft8  = make_app_btn("FT8/4/2", ACTION_APP_FT8);
 static button_data_t btn_swr  = make_app_btn("SWR\nScan", ACTION_APP_SWRSCAN);
 static button_data_t btn_gps  = make_app_btn("GPS", ACTION_APP_GPS);
 
@@ -329,17 +330,22 @@ static button_data_t  btn_bt     = make_app_btn("Bluetooth", ACTION_APP_BT);
  * app per line, so they can be merged in any order without touching each
  * other's lines. Their places on the pages are fixed below. */
 /* WSPR */
+static button_data_t  btn_wspr   = make_app_btn("WSPR", ACTION_APP_WSPR);
 /* JS8 */
 static button_data_t  btn_js8    = make_app_btn("JS8", ACTION_APP_JS8);
 /* PSK31 */
+static button_data_t  btn_psk    = make_app_btn("PSK31", ACTION_APP_PSK);
 /* Olivia */
+static button_data_t  btn_olivia = make_app_btn("Olivia", ACTION_APP_OLIVIA);
 /* WeFax */
 static button_data_t  btn_wefax  = make_app_btn("WeFax", ACTION_APP_WEFAX);
 /* SSTV */
 static button_data_t  btn_sstv   = make_app_btn("SSTV", ACTION_APP_SSTV);
 /* Channels */
 static button_data_t  btn_channels = make_action_btn("Channels", ACTION_APP_CHANNELS);
-/* 1KO125 apps, on page 5 */
+/* JTTY */
+static button_data_t  btn_jtty   = make_app_btn("JTTY", ACTION_APP_JTTY);
+/* 1KO125 apps: NavTex and DSC (their PRs #350, #353), FT8 CB, Broadcast */
 static button_data_t  btn_navtex = make_app_btn("Navtex\nSitorB", ACTION_APP_NAVTEX);
 static button_data_t  btn_dsc    = make_app_btn("DSC", ACTION_APP_DSC);
 static button_data_t  btn_ft8cb  = make_app_btn("FT8 CB", ACTION_APP_FT8CB);
@@ -348,8 +354,9 @@ static button_data_t  btn_bcast  = make_app_btn("Broadcast", ACTION_APP_BROADCAS
 /* RTTY */
 static button_data_t btn_rtty_p1 = {
     .type  = BTN_TEXT,
-    .label = "(RTTY 1:1)",
-    .press = NULL,
+    .label = "(RTTY 1:2)",
+    .press = button_next_page_cb,
+    .hold  = button_prev_page_cb,
 };
 static button_data_t btn_rtty_rate = {
     .type  = BTN_TEXT,
@@ -463,12 +470,12 @@ static buttons_page_t page_dfl_1 = {
 };
 
 /* App pages */
-/* 1KO125: 5 pages (page 5 has the 1KO125 apps) */
-static button_data_t btn_app_p1 = make_page_btn("(APP 1:5)", "Application|page 1");
-static button_data_t btn_app_p2 = make_page_btn("(APP 2:5)", "Application|page 2");
-static button_data_t btn_app_p3 = make_page_btn("(APP 3:5)", "Application|page 3");
-static button_data_t btn_app_p4 = make_page_btn("(APP 4:5)", "Application|page 4");
-static button_data_t btn_app_p5 = make_page_btn("(APP 5:5)", "Application|page 5");
+static button_data_t btn_app_p1 = make_page_btn("(APP 1:6)", "Application|page 1");
+static button_data_t btn_app_p2 = make_page_btn("(APP 2:6)", "Application|page 2");
+static button_data_t btn_app_p3 = make_page_btn("(APP 3:6)", "Application|page 3");
+static button_data_t btn_app_p4 = make_page_btn("(APP 4:6)", "Application|page 4");
+static button_data_t btn_app_p5 = make_page_btn("(APP 5:6)", "Application|page 5");
+static button_data_t btn_app_p6 = make_page_btn("(APP 6:6)", "Application|page 6");
 
 static buttons_page_t page_app_1 = {
     {&btn_app_p1, &btn_rtty, &btn_ft8, &btn_swr, &btn_gps}
@@ -481,18 +488,45 @@ static buttons_page_t page_app_2 = {
 static buttons_page_t page_app_3 = {
     {&btn_app_p3, &btn_wifi, &btn_bt, &btn_js8, &btn_wefax}
 };
-static buttons_page_t page_app_4 = {
-    {&btn_app_p4, &btn_sstv, &btn_channels}
-};
+/* Each app on its way in adds its button below its own name line, so they
+ * merge in any order (#313). */
+static buttons_page_t page_app_4 = {{
+    &btn_app_p4,
+    &btn_sstv,
+    &btn_channels,
+    /* WSPR */
+    &btn_wspr,
+    /* PSK31 */
+    &btn_psk,
+}};
+static buttons_page_t page_app_5 = {{
+    &btn_app_p5,
+    /* Olivia */
+    &btn_olivia,
+    /* JTTY */
+    &btn_jtty,
+    /* NavTex */
+    &btn_navtex,
+    /* DSC */
+    &btn_dsc,
+}};
 /* 1KO125 */
-static buttons_page_t page_app_5 = {
-    {&btn_app_p5, &btn_navtex, &btn_dsc, &btn_ft8cb, &btn_bcast}
-};
+static buttons_page_t page_app_6 = {{
+    &btn_app_p6,
+    &btn_ft8cb,
+    &btn_bcast,
+}};
 
 /* RTTY */
 
 buttons_page_t buttons_page_rtty = {
     {&btn_rtty_p1, &btn_rtty_rate, &btn_rtty_shift, &btn_rtty_center, &btn_rtty_reverse}
+};
+
+/* Page 2 lives in rtty_buttons.c */
+static buttons_group_t buttons_group_rtty = {
+    &buttons_page_rtty,
+    &buttons_page_rtty_2,
 };
 
 buttons_group_t buttons_group_gen = {
@@ -509,7 +543,8 @@ buttons_group_t buttons_group_app = {
     &page_app_2,
     &page_app_3,
     &page_app_4,
-    &page_app_5,    /* 1KO125 */
+    &page_app_5,
+    &page_app_6,    /* 1KO125 */
 };
 
 buttons_group_t buttons_group_key = {
@@ -544,6 +579,7 @@ static struct {
     {buttons_group_dfn, ARRAY_SIZE(buttons_group_dfn)},
     {buttons_group_dfl, ARRAY_SIZE(buttons_group_dfl)},
     {buttons_group_vm,  ARRAY_SIZE(buttons_group_vm) },
+    {buttons_group_rtty, ARRAY_SIZE(buttons_group_rtty)},
 };
 
 void buttons_init(lv_obj_t *parent) {

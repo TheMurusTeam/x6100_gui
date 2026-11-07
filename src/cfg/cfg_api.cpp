@@ -168,6 +168,7 @@ static ParamInt *cfg_rtty_center(void) { return param_ref<ParamInt>(cfg_instance
 static ParamInt *cfg_rtty_shift(void) { return param_ref<ParamInt>(cfg_instance().p_rtty_shift); }
 static ParamInt *cfg_rtty_rate(void) { return param_ref<ParamInt>(cfg_instance().p_rtty_rate); }
 static ParamInt *cfg_rtty_reverse(void) { return param_ref<ParamInt>(cfg_instance().p_rtty_reverse); }
+static ParamInt *cfg_rtty_squelch(void) { return param_ref<ParamInt>(cfg_instance().p_rtty_squelch); }
 static ParamInt *cfg_cw_encoder_period(void) { return param_ref<ParamInt>(cfg_instance().p_cw_encoder_period); }
 static ParamInt *cfg_ft8_tx_freq(void) { return param_ref<ParamInt>(cfg_instance().p_ft8_tx_freq); }
 static ParamFloat *cfg_ft8_output_gain_offset(void) { return param_ref<ParamFloat>(cfg_instance().p_ft8_output_gain_offset); }
@@ -216,6 +217,8 @@ static ParamInt *cfg_js8_ultra(void) { return param_ref<ParamInt>(cfg_instance()
 static ParamInt *cfg_js8_ghostnet(void) { return param_ref<ParamInt>(cfg_instance().p_js8_ghostnet); }
 static ParamInt *cfg_js8_custom_on(void) { return param_ref<ParamInt>(cfg_instance().p_js8_custom_on); }
 static ParamInt *cfg_js8_custom_hz(void) { return param_ref<ParamInt>(cfg_instance().p_js8_custom_hz); }
+static ParamInt *cfg_jtty_serial(void) { return param_ref<ParamInt>(cfg_instance().p_jtty_serial); }
+static ParamInt *cfg_jtty_tx_freq(void) { return param_ref<ParamInt>(cfg_instance().p_jtty_tx_freq); }
 static ParamInt *cfg_theme(void) { return param_ref<ParamInt>(cfg_instance().p_theme); }
 static ParamInt *cfg_meter_color(void) { return param_ref<ParamInt>(cfg_instance().p_meter_color); }
 static ParamInt *cfg_ft8_info(void) { return param_ref<ParamInt>(cfg_instance().p_ft8_info); }
@@ -421,6 +424,7 @@ extern "C" const cfg_refs_t cfg = {
         .shift = &cfg_rtty_shift,
         .rate = &cfg_rtty_rate,
         .reverse = &cfg_rtty_reverse,
+        .squelch = &cfg_rtty_squelch,
     },
     .network = {
         .wifi_enabled = &cfg_wifi_enabled,
@@ -470,6 +474,10 @@ extern "C" const cfg_refs_t cfg = {
         .ghostnet = &cfg_js8_ghostnet,
         .custom_on = &cfg_js8_custom_on,
         .custom_hz = &cfg_js8_custom_hz,
+    },
+    .jtty = {
+        .serial = &cfg_jtty_serial,
+        .tx_freq = &cfg_jtty_tx_freq,
     },
 };
 

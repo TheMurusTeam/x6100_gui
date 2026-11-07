@@ -6,6 +6,9 @@
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
  */
 #include "rtty.h"
+#include "scheduler.h"
+#include "rtty_sql.h"
+#include "digi_qso.h"
 
 #include "dsp.h"
 #include "audio.h"
@@ -189,6 +192,11 @@ static bool is_mark() {
     return rx_symbol[SYMBOL_LEN / 2];
 }
 
+/* UI thread: a decoded character for the DX call pick-up. */
+static void feed_rx_ui(void *arg) {
+    digi_qso_feed_rx(*(char *)arg);
+}
+
 static void add_symbol(float pwr) {
     for (uint8_t i = 1; i < SYMBOL_LEN; i++) {
         rx_symbol[i - 1]     = rx_symbol[i];
@@ -218,6 +226,13 @@ static void add_symbol(float pwr) {
     /* LV_LOG_USER("%5.1f %i", p_avr, rx_symbol_cur); */
 
     rx_symbol[SYMBOL_LEN - 1] = rx_symbol_cur;
+
+    /* Squelch closed: hold the decoder idle so noise cannot assemble
+     * a frame, and print nothing. See rtty_sql.h. */
+    if (!rtty_squelch_is_open()) {
+        rx_state = RX_STATE_IDLE;
+        return;
+    }
 
     uint8_t correction;
 
@@ -261,6 +276,10 @@ static void add_symbol(float pwr) {
                         char str[2] = {c, 0};
 
                         panel_add_text(str);
+                        /* The DX call is read and set on the UI thread:
+                         * written here, mid-read, a torn call could be
+                         * sent. */
+                        scheduler_put(feed_rx_ui, &c, sizeof(c));
                     }
                 }
                 rx_state = RX_STATE_IDLE;
@@ -300,6 +319,10 @@ void rtty_put_audio_samples(size_t n, float *samples) {
         float pwr1 = 10.0f * log10f(fskdem_get_symbol_energy(demod, 1, 1));
         float pwr  = pwr0 - pwr1;
 
+        /* Squelch: signal presence from the energy of both tones,
+         * whichever of them currently wins. */
+        rtty_sql_feed(pwr0, pwr1);
+
         if (((cur_mode == x6100_mode_usb || cur_mode == x6100_mode_usb_dig) && !param_i_get(cfg.rtty.reverse())) ||
             ((cur_mode == x6100_mode_lsb || cur_mode == x6100_mode_lsb_dig) && param_i_get(cfg.rtty.reverse()))) {
             pwr = -pwr;
@@ -314,6 +337,12 @@ void rtty_put_audio_samples(size_t n, float *samples) {
 }
 
 void rtty_set_state(rtty_state_t x) {
+    if (x == RTTY_RX && state != RTTY_RX) {
+        /* Fresh start: the squelch relearns the band and the decoder
+         * starts from idle. */
+        rtty_sql_reset();
+        rx_state = RX_STATE_IDLE;
+    }
     state = x;
     dsp_audio_set_active(dsp_audio_sub_id, x == RTTY_RX);
 }

@@ -70,8 +70,25 @@ static void panel_update_text_cb(const char *text) {
     if (!buf_write) {
         return;
     }
+    /* Room for the text (and a line break before it): the oldest lines go
+     * first. stpcpy() wrote past the 1 KB buffer when a long TX echo came
+     * on top of a full panel. */
+    size_t need = strlen(text) + 2;
+    if (need >= sizeof(buf)) {
+        return;
+    }
+    while ((size_t)(buf_write - buf) + need >= sizeof(buf)) {
+        char *nl = strchr(buf, '\n');
+
+        if (!nl) {
+            buf[0] = '\0';
+            buf_write = buf;
+            break;
+        }
+        memmove(buf, nl + 1, strlen(nl + 1) + 1);
+        buf_write = buf + strlen(buf);
+    }
     old_write = buf_write;
-    // TODO: check len of text is not exceed width
     buf_write = stpcpy(buf_write, text);
     const lv_font_t *font = lv_obj_get_style_text_font(obj, LV_PART_MAIN);
     if (buf_write - buf >= 2) {
@@ -79,7 +96,14 @@ static void panel_update_text_cb(const char *text) {
         if (strcmp(buf_write - 2, "\n\n") == 0) {
             *buf_write-- = '\0';
         } else {
-            lv_txt_get_size(&text_size, buf, font, 0, 0, LV_COORD_MAX, 0);
+            /* The line being written decides where it wraps, not the
+             * widest line in the panel: with a TX echo wider than the
+             * panel above it, every received character went on a line of
+             * its own. */
+            const char *line = strrchr(buf, '\n');
+
+            line = line ? line + 1 : buf;
+            lv_txt_get_size(&text_size, line, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_RECOLOR);
             if (text_size.x > (lv_obj_get_width(obj) - 20)) {
                 *old_write = '\n';
                 buf_write = stpcpy(old_write + 1, text);
@@ -117,6 +141,10 @@ static void text_size_cb(Subject *subj, void *user_data) {
 lv_obj_t * panel_init(lv_obj_t *parent) {
     obj = lv_label_create(parent);
 
+    /* Recolor markup lets transmitted text be shown in its own colour.
+     * Received text is escaped before it reaches the buffer, so a '#'
+     * off the air cannot be mistaken for a markup tag. */
+    lv_label_set_recolor(obj, true);
     lv_label_set_text_static(obj, buf);
 
     lv_obj_add_style(obj, &style.panels.base, 0);
@@ -151,8 +179,71 @@ void panel_set_height(lv_coord_t h) {
     truncate();
 }
 
+/* '#' starts a recolor tag in LVGL, so anything arriving off the air has
+ * to be doubled or a stray '#' would swallow the rest of the line. */
+static size_t escape_hash(const char *in, char *out, size_t out_sz) {
+    size_t o = 0;
+
+    for (const char *p = in; *p && o + 2 < out_sz; p++) {
+        if (*p == '#') {
+            out[o++] = '#';
+        }
+        out[o++] = *p;
+    }
+    out[o] = '\0';
+    return o;
+}
+
 void panel_add_text(const char * text) {
-    scheduler_put((void(*)(void*))panel_update_text_cb, (void*)text, strlen(text) + 1);
+    char   esc[256];
+    size_t n = escape_hash(text, esc, sizeof(esc));
+
+    scheduler_put((void(*)(void*))panel_update_text_cb, (void*)esc, n + 1);
+}
+
+/* LVGL thread: the sent text on lines of its own, each in its own colour
+ * (LVGL starts every line uncoloured, so a long line wrapped by the label
+ * lost its colour), broken between words where the panel ends. */
+static void panel_tx_text_cb(const char *esc) {
+    const lv_font_t *font = lv_obj_get_style_text_font(obj, LV_PART_MAIN);
+    lv_coord_t       width = lv_obj_get_width(obj) - 20;
+    char             out[640] = "\n";
+    char             line[256] = "";
+    const char      *p = esc;
+
+    while (*p) {
+        const char *end = strchr(p, ' ');
+        size_t      wl = end ? (size_t)(end - p) : strlen(p);
+        char        trial[256];
+        lv_point_t  sz;
+
+        snprintf(trial, sizeof(trial), "%s%s%.*s", line, line[0] ? " " : "", (int)wl, p);
+        lv_txt_get_size(&sz, trial, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_RECOLOR);
+        if (sz.x > width && line[0]) {
+            size_t o = strlen(out);
+            snprintf(out + o, sizeof(out) - o, "#F5C400 %s#\n", line);
+            snprintf(line, sizeof(line), "%.*s", (int)wl, p);
+        } else {
+            snprintf(line, sizeof(line), "%s", trial);
+        }
+        p += wl;
+        while (*p == ' ') {
+            p++;
+        }
+    }
+    if (line[0]) {
+        size_t o = strlen(out);
+        snprintf(out + o, sizeof(out) - o, "#F5C400 %s#\n", line);
+    }
+    panel_update_text_cb(out);
+}
+
+void panel_add_tx_text(const char * text) {
+    char esc[256];
+    size_t n = escape_hash(text, esc, sizeof(esc));
+
+    /* Own lines, own colour: sent text reads clearly against received. */
+    scheduler_put((void(*)(void*))panel_tx_text_cb, (void*)esc, n + 1);
 }
 
 void panel_set_info(const char *text) {

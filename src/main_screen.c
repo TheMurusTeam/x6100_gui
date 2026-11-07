@@ -30,6 +30,8 @@
 #include "main.h"
 #include "panel.h"
 #include "rtty.h"
+#include "rtty_tx.h"
+#include "rtty_buttons.h"
 #include "screenshot.h"
 #include "keyboard.h"
 #include "dialog.h"
@@ -57,11 +59,16 @@
 #include "dialog_bt.h"
 /* The apps on their way in: each one's include below its name */
 /* WSPR */
+#include "dialog_wspr.h"
 /* JS8 */
 /* PSK31 */
+#include "dialog_psk.h"
 /* Olivia */
+#include "dialog_olivia.h"
 /* WeFax */
 /* SSTV */
+#include "dialog_sstv.h"
+#include "dialog_jtty.h"
 #include "display.h"
 #include "buttons.h"
 #include "recorder.h"
@@ -170,8 +177,12 @@ static void next_freq_step(bool up) {
 static void apps_disable() {
     dialog_destruct();
 
+    rtty_tx_stop();
+    rtty_tx_close_input();
+    rtty_sql_timer_stop();
     rtty_set_state(RTTY_OFF);
     app_broadcast_stop();       /* 1KO125 */
+    spectrum_refresh_overlay();     /* RTTY markers off */
     panel_update_visibility(false);
 }
 
@@ -180,9 +191,13 @@ void main_screen_start_app(press_action_t app_action) {
 
     switch (app_action) {
         case ACTION_APP_RTTY:
+            rtty_macros_load();
+            rtty_refresh_macro_labels();
             buttons_load_page(&buttons_page_rtty);
             rtty_set_state(RTTY_RX);
+            spectrum_refresh_overlay();     /* RTTY markers on */
             panel_update_visibility(true);
+            rtty_sql_timer_start();
             voice_say_text_fmt("Teletype window");
             break;
 
@@ -223,6 +238,11 @@ void main_screen_start_app(press_action_t app_action) {
 
         /* The apps on their way in: each one's case below its name */
         /* WSPR */
+        case ACTION_APP_WSPR:
+            dialog_construct(dialog_wspr, obj);
+            voice_say_text_fmt("WSPR window");
+            break;
+
         /* JS8 */
         case ACTION_APP_JS8:
             dialog_construct(dialog_js8, obj);
@@ -230,7 +250,17 @@ void main_screen_start_app(press_action_t app_action) {
             break;
 
         /* PSK31 */
+        case ACTION_APP_PSK:
+            dialog_construct(dialog_psk, obj);
+            voice_say_text_fmt("PSK31 window");
+            break;
+
         /* Olivia */
+        case ACTION_APP_OLIVIA:
+            dialog_construct(dialog_olivia, obj);
+            voice_say_text_fmt("Olivia window");
+            break;
+
         /* WeFax */
         case ACTION_APP_WEFAX:
             dialog_construct(dialog_wefax, obj);
@@ -241,6 +271,12 @@ void main_screen_start_app(press_action_t app_action) {
         case ACTION_APP_SSTV:
             dialog_construct(dialog_sstv, obj);
             voice_say_text_fmt("SSTV window");
+            break;
+
+        /* JTTY */
+        case ACTION_APP_JTTY:
+            dialog_construct(dialog_jtty, obj);
+            voice_say_text_fmt("JTTY window");
             break;
 
         /* 1KO125 */
@@ -332,14 +368,19 @@ void main_screen_action(press_action_t action) {
         case ACTION_APP_WIFI:
         case ACTION_APP_BT:
         /* WSPR */
+        case ACTION_APP_WSPR:
         /* JS8 */
         case ACTION_APP_JS8:
         /* PSK31 */
+        case ACTION_APP_PSK:
         /* Olivia */
+        case ACTION_APP_OLIVIA:
         /* WeFax */
         case ACTION_APP_WEFAX:
         /* SSTV */
         case ACTION_APP_SSTV:
+        /* JTTY */
+        case ACTION_APP_JTTY:
         /* 1KO125 */
         case ACTION_APP_NAVTEX:
         case ACTION_APP_DSC:

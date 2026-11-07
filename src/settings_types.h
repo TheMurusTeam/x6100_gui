@@ -33,7 +33,7 @@ typedef enum {
     /* The ACTION_APP_* values are saved on the card (long-press keys), so
      * each is written out and never reused or changed; a new app takes
      * the next free number. 109 WeFax, 110 NavTex, 111 SSTV (Murus),
-     * 112 JS8, 117 Channels are taken. */
+     * 112 JS8, 117 Channels, 118 JTTY are taken. */
     ACTION_APP_RTTY = 100,
     ACTION_APP_FT8,
     ACTION_APP_SWRSCAN,
@@ -54,16 +54,22 @@ typedef enum {
      * so its number is never stored. */
     ACTION_APP_JS8 = 112,
     /* WSPR */
+    ACTION_APP_WSPR = 113,
     /* PSK31 */
+    ACTION_APP_PSK = 114,
     /* Olivia */
+    ACTION_APP_OLIVIA = 115,
     ACTION_APP_BT = 116,
     /* Channels: Hany's Channel List, also without the hand mic's V/M key */
     ACTION_APP_CHANNELS = 117,
+    /* JTTY: APP menu only, not a long-press action */
+    ACTION_APP_JTTY = 118,
+    /* DSC: APP menu only, not a long-press action (119, as in its PR #353) */
+    ACTION_APP_DSC = 119,
 
-    /* 1KO125 apps without a place in R1CBU: NAVTEX has the number R1CBU
-     * keeps for it, the others are far from the R1CBU numbers */
+    /* 1KO125 apps not in OpenX6100: NavTex has the number kept for it (its
+     * PR #350), the others are far from the OpenX6100 numbers */
     ACTION_APP_NAVTEX = 110,
-    ACTION_APP_DSC = 200,
     ACTION_APP_FT8CB = 201,
     ACTION_APP_BROADCAST = 202,
 } press_action_t;

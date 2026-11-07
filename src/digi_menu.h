@@ -1,6 +1,6 @@
 /*
  *  SPDX-License-Identifier: LGPL-2.1-or-later
- *  Copyright (c) 2026 Krzysztof Myszkowski SP2KMO
+ *  Copyright (c) 2026 Kris SP2KMO
  *  Part of OpenX6100 (github.com/OpenX6100)
  *
  *  Xiegu X6100 LVGL GUI - on-screen list for the digital-mode windows
@@ -16,7 +16,10 @@
 
 #include "lvgl/lvgl.h"
 
-#define DIGI_MENU_MAX 12
+/* Rows a list can hold (it scrolls): every macro of PSK31 and Olivia (12)
+ * and RTTY (16) plus the list's own rows. At 12, macros past the 10th or
+ * 9th couldn't be sent, and PSK31's "New macro..." row sent one. */
+#define DIGI_MENU_MAX 20
 
 /* `item` picked, 0-based. Called after the list is closed. */
 typedef void (*digi_menu_cb_t)(int item, void *ctx);

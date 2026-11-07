@@ -238,6 +238,7 @@ typedef struct {
     ParamInt *(*shift)(void); /* p_rtty_shift */
     ParamInt *(*rate)(void); /* p_rtty_rate */
     ParamInt *(*reverse)(void); /* p_rtty_reverse */
+    ParamInt *(*squelch)(void); /* p_rtty_squelch */
 } cfg_rtty_refs_t;
 
 typedef struct {
@@ -292,6 +293,11 @@ typedef struct {
     ParamInt *(*custom_on)(void); /* p_js8_custom_on */
     ParamInt *(*custom_hz)(void); /* p_js8_custom_hz */
 } cfg_js8_refs_t;
+
+typedef struct {
+    ParamInt *(*serial)(void); /* p_jtty_serial */
+    ParamInt *(*tx_freq)(void); /* p_jtty_tx_freq */
+} cfg_jtty_refs_t;
 
 typedef struct {
     ParamText *(*bind)(void); /* p_encoder_bind */
@@ -457,6 +463,7 @@ typedef struct {
     cfg_keys_refs_t keys;
     cfg_radio_refs_t radio;
     cfg_js8_refs_t js8;
+    cfg_jtty_refs_t jtty;
 } cfg_refs_t;
 
 extern const cfg_refs_t cfg;
