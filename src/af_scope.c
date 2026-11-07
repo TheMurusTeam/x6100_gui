@@ -48,7 +48,7 @@
 #define AF_W            SCREEN_WIDTH    /* 800: the two halves */
 #define AF_HALF         (AF_W / 2)
 #define AF_H            AF_SCOPE_HEIGHT
-#define AF_DB_RANGE     70.0f           /* dB shown above the floor */
+#define AF_DB_MIN       30.0f           /* dB shown at least, floor to top */
 
 /* audio thread -> render */
 static float           ring[AF_RING];
@@ -73,7 +73,7 @@ static float           window[AF_NFFT];
 static float           smooth[AF_NFFT / 2];
 static bool            smooth_valid;
 static float           scope_peak = 0.05f;
-static float           floor_db;
+static float           floor_db, top_db;
 static bool            floor_reset = true;
 
 /* what the labels show, to redraw them only when it changes */
@@ -82,6 +82,12 @@ static bool            lab_tx, lab_auto;
 static bool            labels_dirty = true;
 
 static lv_grad_dsc_t   grad_dsc;
+
+static int cmp_float(const void *a, const void *b)
+{
+    float x = *(const float *)a, y = *(const float *)b;
+    return (x > y) - (x < y);
+}
 
 static void audio_cb(size_t n, float *samples)
 {
@@ -243,13 +249,25 @@ static void render(void)
     int b0 = (int)(from / hz_per_bin), b1 = (int)(to / hz_per_bin) + 1;
     if (b1 > AF_NFFT / 2 - 1) b1 = AF_NFFT / 2 - 1;
 
-    /* the noise floor of the passband, followed slowly so the trace does not jump */
-    float mn = smooth[b0];
-    for (int i = b0 + 1; i <= b1; ++i) mn = fminf(mn, smooth[i]);
-    floor_db = floor_reset ? mn : floor_db + 0.1f * (mn - floor_db);
-    floor_reset = false;
+    /* scale to what is in the passband: the bottom just under the noise (its
+     * 20th percentile, so the filter edges do not pull it down), the top just
+     * over the strongest peak; the peaks then use the whole height.  Top up
+     * at once, down slowly; the bottom follows slowly. */
+    static float sorted[AF_NFFT / 2];
+    int nb = b1 - b0 + 1;
+    memcpy(sorted, smooth + b0, sizeof(float) * (size_t)nb);
+    qsort(sorted, (size_t)nb, sizeof(float), cmp_float);
+    float noise = sorted[nb / 5], peak = sorted[nb - 1];
+    if (floor_reset) {
+        floor_db = noise;
+        top_db = peak;
+        floor_reset = false;
+    } else {
+        floor_db += 0.1f * (noise - floor_db);
+        top_db = peak > top_db ? peak : top_db + 0.03f * (peak - top_db);
+    }
     float lo_db = floor_db - 3.0f;
-    float hi_db = lo_db + AF_DB_RANGE;
+    float hi_db = fmaxf(top_db + 3.0f, lo_db + AF_DB_MIN);
 
     const int sx = AF_HALF, sw = AF_HALF;      /* spectrum columns */
     static float sy[AF_HALF];
