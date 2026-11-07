@@ -64,7 +64,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     # 1KO125 apps
     dialog_navtex.c navtex/decoder.c navtex/sitorb.c navtex/bulletin.c
     app_broadcast.c
-    dialog_dsc.c dsc/dsc_decoder.c dsc/dsc_format.c dsc/dsc_mid.c dsc/dsc_coast.c dsc/dsc_ships.c dsc/dsc_qrcodegen.c dsc/dsc_flags.c
+    dialog_dsc.c dsc/dsc_decoder.c dsc/dsc_format.c dsc/dsc_mid.c dsc/dsc_coast.c dsc/dsc_ships.c dsc/dsc_flags.c
 )
 
 add_subdirectory(fonts)
