@@ -7,16 +7,17 @@
  *
  * Audio: dsp_audio_subscribe_float() at 24 kHz into a ring buffer (audio
  * thread).  Rendered at most every AF_FRAME_MS from af_scope_process() (main
- * loop) straight into the primary plane, rotated as the RF spectrum is:
- * logical x -> physical row 799 - x, logical y in the strip -> physical
- * column.  The texts (frequencies, TX, DNF AUTO) are LVGL labels drawn on
- * the overlay plane above it.
+ * loop) into img[], rotated as the RF spectrum is: logical x -> physical row
+ * 799 - x, logical y -> physical column.  img[] goes onto the primary plane
+ * after the waterfall in every frame the waterfall is drawn, so the views
+ * stay opaque on it.  Their frames and texts (frequencies, TX, DNF AUTO) are
+ * drawn by LVGL on the overlay plane above.
  *
- *   left  400 px: oscilloscope, 20 ms, triggered on a rising zero crossing
- *                 (a steady trace for a tone or a voice), auto gain
- *   right 400 px: spectrum of the passband of the RX filter (the TX filter
- *                 while transmitting), ticks every 500 Hz, the manual notch
- *                 as a band, averaged with Spec. beta
+ *   left  view: oscilloscope, 20 ms, triggered on a rising zero crossing
+ *               (a steady trace for a tone or a voice), auto gain
+ *   right view: spectrum of the passband of the RX filter (the TX filter
+ *               while transmitting), ticks every 500 Hz, the manual notch
+ *               as a band, averaged with Spec. beta
  *
  * In TX the transmitted audio reaches the GUI only through the monitor: with
  * Moni level 0, radio_scope_monitor() sets it to 1 and mutes the speaker for
@@ -28,6 +29,8 @@
 #include "dsp.h"
 #include "radio.h"
 #include "rtty.h"
+#include "waterfall.h"
+#include "broadcast_overlay.h"
 #include "styles.h"
 #include "util.h"
 #include "common/time.h"
@@ -49,9 +52,20 @@
 #define AF_SCOPE_MS     20
 #define AF_SCOPE_N      (AF_RATE * AF_SCOPE_MS / 1000)
 #define AF_FRAME_MS     50              /* 20 frames per second */
-#define AF_W            SCREEN_WIDTH    /* 800: the two halves */
-#define AF_HALF         (AF_W / 2)
+#define AF_VW           250             /* each view */
 #define AF_H            AF_SCOPE_HEIGHT
+#define AF_GAP          6               /* between the views */
+#define AF_MARGIN       4               /* from the right edge of the screen */
+#define AF_PAD          3               /* inside the frame */
+#define AF_W            (2 * AF_VW + AF_GAP)                /* both views */
+#define AF_X            (SCREEN_WIDTH - AF_MARGIN - AF_W)   /* logical x of the left view */
+#define AF_Y            (SCREEN_HEIGHT - BTN_HEIGHT - PANEL_GAP_BOTTOM - AF_H)
+#define AF_IW           (AF_VW - 2 * AF_PAD)               /* drawing width in a view */
+#define AF_SX           (AF_VW + AF_GAP + AF_PAD)          /* first column of the spectrum */
+#define AF_Y0           AF_PAD                             /* drawing rows AF_Y0..AF_Y1 */
+#define AF_Y1           (AF_H - 1 - AF_PAD)
+#define AF_IH           (AF_Y1 - AF_Y0 + 1)
+#define AF_RADIUS       6
 #define AF_DB_MIN       20.0f           /* dB shown at least, floor to top */
 
 /* audio thread -> render */
@@ -61,11 +75,9 @@ static pthread_mutex_t ring_mutex = PTHREAD_MUTEX_INITIALIZER;
 static uint32_t        audio_sub = AUDIO_SUB_INVALID;
 
 /* state */
-static void          (*layout_cb)(void);
 static bool            dialog_open;
-static bool            wanted_last;
 static bool            shown;
-static lv_coord_t      strip_y;
+static uint32_t        img[AF_W * AF_H];   /* the views, rotated: row = AF_W - 1 - x */
 static uint64_t        last_frame;
 static bool            dirty = true;
 static lv_obj_t       *label_obj;
@@ -104,16 +116,6 @@ static void audio_cb(size_t n, float *samples)
 
 static void dialog_start_cb(void *s, lv_msg_t *m) { (void)s; (void)m; dialog_open = true; }
 static void dialog_stop_cb(void *s, lv_msg_t *m)  { (void)s; (void)m; dialog_open = false; }
-
-void af_scope_dialog_opening(void)
-{
-    dialog_open = true;
-    bool w = af_scope_wanted();
-    if (w != wanted_last) {
-        wanted_last = w;
-        if (layout_cb) layout_cb();     /* calls af_scope_set_geometry() */
-    }
-}
 
 /* ---- passband ------------------------------------------------------------ */
 
@@ -159,11 +161,9 @@ static bool notch(int32_t *from, int32_t *to, bool *is_auto)
     return true;
 }
 
-/* ---- drawing on the rotated strip ------------------------------------------ */
+/* ---- drawing on the rotated views ------------------------------------------ */
 
-static uint32_t *fb;                    /* AF_W rows of AF_H pixels */
-
-static inline uint32_t *px(int x, int y) { return &fb[(AF_W - 1 - x) * AF_H + y]; }
+static inline uint32_t *px(int x, int y) { return &img[(AF_W - 1 - x) * AF_H + y]; }
 
 static inline uint32_t blend(uint32_t dst, uint32_t src, uint8_t a)
 {
@@ -177,8 +177,8 @@ static void vspan(int x, int y0, int y1, uint32_t c, uint8_t a)
 {
     if (x < 0 || x >= AF_W) return;
     if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
-    if (y0 < 0) y0 = 0;
-    if (y1 >= AF_H) y1 = AF_H - 1;
+    if (y0 < AF_Y0) y0 = AF_Y0;
+    if (y1 > AF_Y1) y1 = AF_Y1;
     uint32_t *p = px(x, 0);
     for (int y = y0; y <= y1; ++y)
         p[y] = a == 255 ? c : blend(p[y], c, a);
@@ -197,7 +197,7 @@ static void trace(int x0, int n, const float *v, uint32_t c)
 
 static void render(void)
 {
-    memset(fb, 0, sizeof(uint32_t) * AF_W * AF_H);
+    memset(img, 0, sizeof(img));
 
     uint32_t c_line = style.colors.spectrum.line.full;
     uint32_t c_dim  = lv_color_hex(0x404040).full;
@@ -225,21 +225,18 @@ static void render(void)
         if (a[i - 1] < 0.0f && a[i] >= 0.0f && a[i - 2] < -thr) { start = i; break; }
     }
 
-    for (int x = 0; x < AF_HALF - 1; ++x) *px(x, AF_H / 2) = c_dim;   /* zero line */
+    for (int x = 0; x < AF_IW; ++x) *px(AF_PAD + x, AF_H / 2) = c_dim;   /* zero line */
 
-    static float yv[AF_HALF];
-    float gain = (AF_H * 0.45f) / scope_peak;
-    for (int x = 0; x < AF_HALF - 1; ++x) {
-        float pos = start + (float)x * (AF_SCOPE_N - 1) / (AF_HALF - 2);
+    static float yv[AF_IW];
+    float gain = (AF_IH * 0.45f) / scope_peak;
+    for (int x = 0; x < AF_IW; ++x) {
+        float pos = start + (float)x * (AF_SCOPE_N - 1) / (AF_IW - 1);
         int i = (int)pos;
         float f = pos - i, s = a[i];
         if (i + 1 < AF_NFFT) s += f * (a[i + 1] - a[i]);
         yv[x] = AF_H / 2 - s * gain;
     }
-    trace(0, AF_HALF - 1, yv, c_line);
-
-    /* divider */
-    vspan(AF_HALF - 1, 0, AF_H - 1, c_dim, 255);
+    trace(AF_PAD, AF_IW, yv, c_line);
 
     /* ---- spectrum --------------------------------------------------------- */
     for (int i = 0; i < AF_NFFT; ++i)
@@ -285,8 +282,8 @@ static void render(void)
     float lo_db = floor_db - 3.0f;
     float hi_db = fmaxf(top_db + 3.0f, lo_db + AF_DB_MIN);
 
-    const int sx = AF_HALF, sw = AF_HALF;      /* spectrum columns */
-    static float sy[AF_HALF];
+    const int sx = AF_SX, sw = AF_IW;          /* spectrum columns */
+    static float sy[AF_IW];
     for (int x = 0; x < sw; ++x) {
         float hz = from + (float)x * (to - from) / (sw - 1);
         float bf = hz / hz_per_bin;
@@ -298,7 +295,7 @@ static void render(void)
         float t = (v - lo_db) / (hi_db - lo_db);
         if (t < 0.0f) t = 0.0f;
         if (t > 1.0f) t = 1.0f;
-        sy[x] = (1.0f - t) * (AF_H - 1);
+        sy[x] = AF_Y0 + (1.0f - t) * (AF_IH - 1);
     }
 
     /* the notch, under the trace */
@@ -310,23 +307,23 @@ static void render(void)
         if (x0 < 0) x0 = 0;
         if (x1 > sw - 1) x1 = sw - 1;
         for (int x = x0; x <= x1; ++x)
-            vspan(sx + x, 0, AF_H - 1, lv_color_white().full, 128);
+            vspan(sx + x, AF_Y0, AF_Y1, lv_color_white().full, 128);
     }
 
     /* ticks every 500 Hz */
     for (int32_t f = ((from + 499) / 500) * 500; f <= to; f += 500) {
         int x = (int)((float)(f - from) * (sw - 1) / (to - from));
-        for (int y = 0; y < AF_H; y += 3)
+        for (int y = AF_Y0; y <= AF_Y1; y += 3)
             *px(sx + x, y) = c_dim;
     }
 
     if (param_i_get(cfg.ui.spectrum_filled())) {
-        lv_grad_t *g = lv_gradient_get(&grad_dsc, AF_H, 1);
+        lv_grad_t *g = lv_gradient_get(&grad_dsc, AF_IH, 1);
         for (int x = 0; x < sw; ++x) {
             int top = (int)sy[x];
-            if (top < 0) top = 0;
+            if (top < AF_Y0) top = AF_Y0;
             uint32_t *p = px(sx + x, 0);
-            int n = AF_H - top;
+            int n = AF_Y1 + 1 - top;
             for (int i = 0; i < n; ++i)
                 p[top + i] = blend(p[top + i], g->map[n - 1 - i].full, 220);
         }
@@ -352,7 +349,21 @@ static void label_draw_cb(lv_event_t *e)
     d.color = lv_color_hex(0xAAAAAA);
 
     lv_coord_t x0 = o->coords.x1, y0 = o->coords.y1;
-    const int sx = AF_HALF, sw = AF_HALF;
+
+    /* the frames, over the edges of the views */
+    lv_draw_rect_dsc_t r;
+    lv_draw_rect_dsc_init(&r);
+    r.bg_opa = LV_OPA_TRANSP;
+    r.radius = AF_RADIUS;
+    r.border_color = lv_color_hex(0xA0A0A0);
+    r.border_width = 2;
+    r.border_opa = LV_OPA_COVER;
+    lv_area_t f1 = { x0, y0, x0 + AF_VW - 1, y0 + AF_H - 1 };
+    lv_area_t f2 = { x0 + AF_VW + AF_GAP, y0, x0 + AF_W - 1, y0 + AF_H - 1 };
+    lv_draw_rect(ctx, &r, &f1);
+    lv_draw_rect(ctx, &r, &f2);
+
+    const int sx = AF_SX, sw = AF_IW;
     int32_t from = lab_from, to = lab_to;
     if (to <= from) return;
 
@@ -362,7 +373,7 @@ static void label_draw_cb(lv_event_t *e)
         if (x < 14 || x > sw - 14) continue;
         if (f % 1000) snprintf(t, sizeof(t), "%d.5", (int)(f / 1000));
         else snprintf(t, sizeof(t), "%dk", (int)(f / 1000));
-        lv_area_t a = { x0 + sx + x - 14, y0 + AF_H - 16, x0 + sx + x + 14, y0 + AF_H - 1 };
+        lv_area_t a = { x0 + sx + x - 14, y0 + AF_Y1 - 15, x0 + sx + x + 14, y0 + AF_Y1 };
         d.align = LV_TEXT_ALIGN_CENTER;
         lv_draw_label(ctx, &d, &a, t, NULL);
     }
@@ -370,22 +381,20 @@ static void label_draw_cb(lv_event_t *e)
     d.align = LV_TEXT_ALIGN_LEFT;
     if (lab_tx) {
         d.color = lv_color_hex(0xFF4040);
-        lv_area_t a = { x0 + 6, y0 + 2, x0 + 60, y0 + 18 };
+        lv_area_t a = { x0 + AF_PAD + 4, y0 + AF_Y0, x0 + AF_PAD + 60, y0 + AF_Y0 + 16 };
         lv_draw_label(ctx, &d, &a, "TX", NULL);
     }
     if (lab_auto) {
         d.color = lv_color_hex(0xAAAAAA);
-        lv_area_t a = { x0 + sx + 6, y0 + 2, x0 + sx + 120, y0 + 18 };
+        lv_area_t a = { x0 + sx + 4, y0 + AF_Y0, x0 + sx + 120, y0 + AF_Y0 + 16 };
         lv_draw_label(ctx, &d, &a, "DNF AUTO", NULL);
     }
 }
 
 /* ---- API --------------------------------------------------------------------- */
 
-void af_scope_init(lv_obj_t *overlay, void (*cb)(void))
+void af_scope_init(lv_obj_t *overlay)
 {
-    layout_cb = cb;
-
     for (int i = 0; i < AF_NFFT; ++i)
         window[i] = 0.5f - 0.5f * cosf(2.0f * (float)M_PI * i / (AF_NFFT - 1));
     fft_in  = malloc(sizeof(float complex) * AF_NFFT);
@@ -402,30 +411,29 @@ void af_scope_init(lv_obj_t *overlay, void (*cb)(void))
     lv_obj_remove_style_all(label_obj);
     lv_obj_set_style_bg_opa(label_obj, LV_OPA_TRANSP, 0);
     lv_obj_clear_flag(label_obj, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_pos(label_obj, AF_X, AF_Y);
     lv_obj_set_size(label_obj, AF_W, AF_H);
     lv_obj_add_flag(label_obj, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(label_obj, label_draw_cb, LV_EVENT_DRAW_MAIN_END, NULL);
 
     audio_sub = dsp_audio_subscribe_float(audio_cb, AF_RATE);
+    dsp_audio_set_active(audio_sub, false);
 
     lv_msg_subscribe(MSG_DIALOG_START, dialog_start_cb, NULL);
     lv_msg_subscribe(MSG_DIALOG_STOP, dialog_stop_cb, NULL);
-
-    wanted_last = af_scope_wanted();
 }
 
-bool af_scope_wanted(void)
+static bool wanted(void)
 {
-    return param_i_get(cfg.ui.af_scopes()) && !dialog_open && rtty_get_state() == RTTY_OFF;
+    return param_i_get(cfg.ui.af_scopes()) && !dialog_open && rtty_get_state() == RTTY_OFF &&
+           !broadcast_overlay_visible();
 }
 
-void af_scope_set_geometry(bool show, lv_coord_t y)
+static void set_shown(bool show)
 {
     shown = show;
-    strip_y = y;
     dsp_audio_set_active(audio_sub, show);
     if (show) {
-        lv_obj_set_pos(label_obj, 0, y);
         lv_obj_clear_flag(label_obj, LV_OBJ_FLAG_HIDDEN);
         smooth_valid = false;
         floor_reset = true;
@@ -433,47 +441,52 @@ void af_scope_set_geometry(bool show, lv_coord_t y)
         dirty = true;
     } else {
         lv_obj_add_flag(label_obj, LV_OBJ_FLAG_HIDDEN);
+        waterfall_refresh();            /* the waterfall where the views were */
     }
 }
 
-bool af_scope_shown(void)
+/* one view: img[] rows r0.. (AF_VW of them) onto the primary plane */
+static void push_view(int r0)
 {
-    return shown;
+    drm_direct_ctx_t ctx;
+    if (!drm_primary_begin_direct(&ctx, (uint32_t)AF_VW * AF_H))
+        return;
+    memcpy(ctx.buf, &img[r0 * AF_H], sizeof(uint32_t) * AF_VW * AF_H);
+    /* row r of img[] is logical x = AF_X + AF_W - 1 - r: physical row 799 - x */
+    lv_area_t area = { .x1 = AF_Y, .y1 = AF_MARGIN + r0,
+                       .x2 = AF_Y + AF_H - 1, .y2 = AF_MARGIN + r0 + AF_VW - 1 };
+    drm_primary_end_direct(&area);
 }
 
-bool af_scope_process(void)
+bool af_scope_process(bool waterfall_drawn)
 {
-    bool w = af_scope_wanted();
-    if (w != wanted_last) {
-        wanted_last = w;
-        if (layout_cb) layout_cb();     /* calls af_scope_set_geometry() */
-    }
+    bool w = wanted();
+    if (w != shown)
+        set_shown(w);
     /* the transmitted audio comes only through the monitor: on for the TX
-     * while the strip is shown (radio_scope_monitor) */
+     * while the views are shown (radio_scope_monitor) */
     radio_scope_monitor(shown && radio_get_state() == RADIO_TX);
 
     if (!shown)
         return false;
 
     uint64_t now = get_time();
-    if (!dirty && now - last_frame < AF_FRAME_MS)
-        return false;
+    bool due = dirty || now - last_frame >= AF_FRAME_MS;
+    if (!due && !waterfall_drawn)
+        return false;               /* nothing drew over them, nothing new */
 
-    drm_direct_ctx_t ctx;
-    if (!drm_primary_begin_direct(&ctx, (uint32_t)AF_W * AF_H))
-        return false;
-    last_frame = now;
-    dirty = false;
+    if (due) {
+        last_frame = now;
+        dirty = false;
+        grad_dsc.stops[0].color = style.colors.spectrum.low;
+        grad_dsc.stops[1].color = style.colors.spectrum.mid;
+        grad_dsc.stops[2].color = style.colors.spectrum.high;
+        render();
+    }
 
-    grad_dsc.stops[0].color = style.colors.spectrum.low;
-    grad_dsc.stops[1].color = style.colors.spectrum.mid;
-    grad_dsc.stops[2].color = style.colors.spectrum.high;
-
-    fb = (uint32_t *)ctx.buf;
-    render();
-
-    lv_area_t area = { .x1 = strip_y, .y1 = 0, .x2 = strip_y + AF_H - 1, .y2 = AF_W - 1 };
-    drm_primary_end_direct(&area);
+    /* after the waterfall of this frame: opaque on it */
+    push_view(0);                   /* the spectrum, right */
+    push_view(AF_VW + AF_GAP);      /* the oscilloscope, left */
 
     if (labels_dirty) {
         labels_dirty = false;

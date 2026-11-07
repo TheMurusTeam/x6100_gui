@@ -1362,8 +1362,8 @@ lv_obj_t * main_screen(lv_obj_t *overlay_scr) {
     /* Waterfall */
     waterfall = waterfall_init(overlay_scr, y, SCREEN_HEIGHT - y);
 
-    /* 1KO125: AF scopes, shown by apply_main_layout() */
-    af_scope_init(overlay_scr, apply_main_layout);
+    /* 1KO125: AF scopes, floating on the waterfall above the F keys */
+    af_scope_init(overlay_scr);
 
     /* Konbs */
     knobs_init(obj);
@@ -1412,7 +1412,6 @@ lv_obj_t * main_screen(lv_obj_t *overlay_scr) {
     subject_subscribe_delayed((Subject*)cfg.mode.zoom(), update_zoom_on_if_shift_change, NULL);
 
     subject_subscribe_delayed_and_notify((Subject*)cfg.ui.spectrum_height(), on_spectrum_height_change, NULL);
-    subject_subscribe_delayed((Subject*)cfg.ui.af_scopes(), on_spectrum_height_change, NULL);   /* 1KO125 */
 
     return obj;
 }
@@ -1424,15 +1423,11 @@ static void apply_main_layout(void) {
     spectrum_set_geometry(y, h);
     y += h;
 
-    /* 1KO125: the AF scopes take AF_SCOPE_HEIGHT px above the F keys */
-    bool scopes = af_scope_wanted();
-    lv_coord_t wf_h = SCREEN_HEIGHT - y - (scopes ? BTN_HEIGHT + AF_SCOPE_HEIGHT : 0);
+    lv_coord_t wf_h = SCREEN_HEIGHT - y;
 
     waterfall_set_geometry(y, wf_h);
-    af_scope_set_geometry(scopes, y + wf_h);
 
-    lv_coord_t panel_h = wf_h - (BAND_INFO_OFFSET_Y * 2 + BAND_INFO_HEIGHT) -
-                         (scopes ? PANEL_GAP_BOTTOM : BTN_HEIGHT + PANEL_GAP_BOTTOM);
+    lv_coord_t panel_h = wf_h - (BAND_INFO_OFFSET_Y * 2 + BAND_INFO_HEIGHT) - (BTN_HEIGHT + PANEL_GAP_BOTTOM);
     panel_set_height(LV_MAX(panel_h, 1));
 
     msg_align();

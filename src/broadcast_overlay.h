@@ -6,9 +6,14 @@
 
 #pragma once
 
+#include <stdbool.h>
+
 /* Show the stations scheduled now on the current frequency (from
  * broadcast.csv); while the pop-up is up, the next match. */
 void broadcast_overlay_show(void);
+
+/* 1KO125: whether it is on the screen */
+bool broadcast_overlay_visible(void);
 
 /* Save the current frequency as a channel, named after the station shown
  * (or the first one scheduled now). */

@@ -200,8 +200,8 @@ int main(void) {
         scheduler_work();
         next_loop_time = lv_timer_handler() + loop_start_time;
         spectrum_process();
-        waterfall_process();
-        af_scope_process();     /* 1KO125 */
+        bool wf = waterfall_process();
+        af_scope_process(wf);   /* 1KO125: after the waterfall, over it */
         drm_flip();
         sleep_time = next_loop_time - get_time();
         if (sleep_time > 0) {

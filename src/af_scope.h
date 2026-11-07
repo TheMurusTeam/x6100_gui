@@ -3,14 +3,13 @@
  * Copyright (C) 2026 Hany El Imam - 1KO125 firmware for the Xiegu X6100
  */
 /*
- * AF scopes: an oscilloscope (left half) and an AF spectrum (right half) of
- * the receiver audio, or of the transmitted audio while transmitting, in a
- * 100 px strip above the F keys.  Settings > Display > AF scopes.  Hidden
- * while an application is open (Broadcast excepted): the waterfall then goes
- * down to the bottom of the screen as before.
+ * AF scopes: an oscilloscope and an AF spectrum of the receiver audio, or of
+ * the transmitted audio while transmitting, in two 250 x 100 views floating
+ * on the waterfall above the F keys, at its right edge.  Settings > Display >
+ * AF scopes.  Hidden while an application, RTTY or Broadcast Info is shown.
  *
- * Drawn on the primary plane as the RF spectrum and the waterfall are, with
- * their colours, fill and averaging (Spec. beta).
+ * Opaque on the primary plane, as the RF spectrum and the waterfall are,
+ * with their colours, fill and averaging (Spec. beta).
  */
 #ifndef AF_SCOPE_H
 #define AF_SCOPE_H
@@ -24,25 +23,12 @@ extern "C" {
 
 #define AF_SCOPE_HEIGHT 100
 
-/* Once, from main_screen(): overlay is the screen of the LVGL widgets;
- * layout_cb is called when the strip must be shown or hidden. */
-void af_scope_init(lv_obj_t *overlay, void (*layout_cb)(void));
+/* Once, from main_screen(): overlay is the screen of the LVGL widgets */
+void af_scope_init(lv_obj_t *overlay);
 
-/* Whether the strip should be shown now (setting on, no application open) */
-bool af_scope_wanted(void);
-
-/* From the main screen layout: shown at logical y, or hidden */
-void af_scope_set_geometry(bool shown, lv_coord_t y);
-
-/* Whether the strip is on the screen now */
-bool af_scope_shown(void);
-
-/* From dialog_construct(), before the app builds its screen: the strip goes
- * and the panels get their full height now, not at MSG_DIALOG_START (later) */
-void af_scope_dialog_opening(void);
-
-/* From the main loop, with spectrum_process() and waterfall_process() */
-bool af_scope_process(void);
+/* From the main loop, right after waterfall_process() and with what it
+ * returned: the views go over the waterfall drawn in this frame */
+bool af_scope_process(bool waterfall_drawn);
 
 #ifdef __cplusplus
 }
