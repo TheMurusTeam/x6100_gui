@@ -499,7 +499,7 @@ void radio_change_mute() {
  * only through the monitor (MONI); with Moni level 0 it is set to SCOPE_MONI, and the
  * speaker muted, for the TX only.  The settings are not changed: on false
  * both go back to them.  Bluetooth listening keeps its own volume. */
-#define SCOPE_MONI 100   /* TEST: 100 to hear whether the speaker is really muted; then 10 */
+#define SCOPE_MONI 10
 
 void radio_scope_monitor(bool on) {
     static bool active;
