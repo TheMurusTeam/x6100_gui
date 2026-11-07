@@ -265,11 +265,6 @@ dialog_t *dialog_navtex = &dialog;
 
 static void info_cb(button_data_t *data) { (void)data; app_info_open(dialog.obj, APP_INFO_NAVTEX); }
 
-bool dialog_navtex_is_active(void)
-{
-    return dialog.run;
-}
-
 static const lv_font_t *navtex_font(void);
 
 /* Height in pixels of text[0..n) (no newline in it) shown with font in a
