@@ -59,9 +59,13 @@ static void broadcast_overlay_render(void) {
         broadcast_overlay = lv_label_create(lv_layer_top());
         lv_label_set_text(broadcast_overlay, "");
         lv_obj_add_style(broadcast_overlay, &style.panels.base, 0);
-        /* 1KO125: on lv_layer_top(), so above the AF scopes too when shown */
-        lv_obj_set_style_translate_y(broadcast_overlay, -(BTN_HEIGHT + PANEL_GAP_BOTTOM +
-                                     (af_scope_shown() ? AF_SCOPE_HEIGHT : 0)), 0);
+        /* 1KO125: exactly where the RTTY / CW panels are.  They sit on the
+         * waterfall, which ends above the F keys and the AF scopes when the
+         * scopes are shown; this one is on lv_layer_top(), at the bottom of
+         * the screen, so it goes up by that much too. */
+        if (af_scope_shown())
+            lv_obj_set_style_translate_y(broadcast_overlay, -(BTN_HEIGHT + PANEL_GAP_BOTTOM +
+                                         BTN_HEIGHT + AF_SCOPE_HEIGHT), 0);
         lv_obj_add_flag(broadcast_overlay, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
         lv_obj_clear_flag(broadcast_overlay, LV_OBJ_FLAG_SCROLLABLE);
 

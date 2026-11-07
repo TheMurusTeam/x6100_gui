@@ -517,15 +517,7 @@ void styles_panel_set_height(lv_coord_t h) {
         lv_style_set_bg_img_src(&style.panels.base, &panel_bg_dsc);
     }
 
-    lv_obj_report_style_change(&style.panels.base);   /* 1KO125: panels already shown too */
     lv_obj_invalidate(lv_scr_act());
-}
-
-/* 1KO125: the gap between the panels and the bottom of their parent (the
- * waterfall): over the F keys, or just above the AF scopes */
-void styles_panel_set_bottom(lv_coord_t gap) {
-    lv_style_set_translate_y(&style.panels.base, -gap);
-    lv_obj_report_style_change(&style.panels.base);
 }
 
 static void setup_skin_default(skin_t *skin) {
