@@ -19,7 +19,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     channels.c dialog_channels.c broadcast_db.c broadcast_overlay.c cJSON.c
     styles.c spectrum.c radio.c dsp.cpp util.cpp
     app_ports.cpp
-    waterfall.c rotary.cpp keyboard.c kbd_rollover.c encoder.c
+    waterfall.c af_scope.c rotary.cpp keyboard.c kbd_rollover.c encoder.c
     events.c msg.c msg_tiny.c keypad.c
     hkey.c clock.c
     meter.c band_info.cpp tx_info.c tx_level.c tx_player.c
