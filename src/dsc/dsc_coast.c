@@ -6,11 +6,8 @@
 /*
  * Xiegu X6100 - names of DSC coast stations (MMSI 00xxxxxxx).
  *
- * Data: ITU MARS coast station list (https://www.itu.int/mmsapp/coaststation/list),
- * as compiled in SDRangel's coaststations.cpp; entries marked "not ITU" come from
- * that compilation only.  One MMSI often serves a network of sites: those show
- * one site and "+N sites".  Entries marked "YaDDNet" were missing there and
- * come from the YaDDNet coast list (www.yaddnet.org, V6.1, 2026-10-13).
+ * Data: public lists of DSC coast stations (MMSI, name).  One MMSI often
+ * serves a network of sites: those show one site and "+N sites".
  * Generated table - sorted by MMSI.
  */
 #include "dsc_format.h"
@@ -23,46 +20,46 @@ typedef struct { uint32_t mmsi; const char *name; } coast_t;
 
 static const coast_t coast[] = {
     {   2040100u, "MRCC PONTA DELGADA" },
-    {   2040200u, "HORTA" },   /* YaDDNet */
+    {   2040200u, "HORTA" },
     {   2050480u, "MRCC-OOSTENDE RADIO +2 sites" },
     {   2050485u, "ANTWERPEN RADIO" },
     {   2059981u, "MRCC-OOSTENDE RADIO" },
     {   2070810u, "VARNA RADIO" },
-    {   2070811u, "BURGAS RADIO" },   /* YaDDNet */
+    {   2070811u, "BURGAS RADIO" },
     {   2091000u, "CYPRUS RADIO" },
     {   2111240u, "BREMEN RESCUE RADIO" },
     {   2130100u, "MRCC GEORGIA" },
-    {   2130300u, "POTI" },   /* YaDDNet */
+    {   2130300u, "POTI" },
     {   2150100u, "MALTA RADIO" },
     {   2191000u, "LYNGBY RADIO" },
-    {   2240991u, "BARCELONA" },   /* YaDDNet */
-    {   2240992u, "MRSC CORUNA" },   /* YaDDNet */
-    {   2240993u, "FINISTERRE MRCC" },   /* YaDDNet */
-    {   2240994u, "TARIFA MRCC" },   /* YaDDNet */
-    {   2240995u, "LAS PALMAS MRCC" },   /* YaDDNet */
-    {   2240996u, "MRCC BILBAO" },   /* YaDDNet */
-    {   2240997u, "GIJON MRCC" },   /* YaDDNet */
-    {   2240998u, "VIGO MRCC" },   /* YaDDNet */
-    {   2241001u, "ALGECIRAS RADIO" },   /* YaDDNet */
-    {   2241002u, "ALMERIA RADIO" },   /* YaDDNet */
-    {   2241003u, "CARTAGENA RADIO" },   /* YaDDNet */
-    {   2241004u, "MRCC VALENCIA" },   /* YaDDNet */
-    {   2241005u, "MRCC PALMA" },   /* YaDDNet */
-    {   2241006u, "TARRAGONA RADIO" },   /* YaDDNet */
-    {   2241007u, "MRCC TENERIFE RADIO" },   /* YaDDNet */
-    {   2241009u, "MRSC SANTANDER" },   /* YaDDNet */
-    {   2241011u, "MRSC CADIZ" },   /* YaDDNet */
-    {   2241012u, "MRSC HUELVA" },   /* YaDDNet */
-    {   2241015u, "UCA CADIZ" },   /* YaDDNet */
-    {   2241016u, "MRSC CASTELLON" },   /* YaDDNet */
-    {   2241021u, "BILBAO RADIO" },   /* YaDDNet */
+    {   2240991u, "BARCELONA" },
+    {   2240992u, "MRSC CORUNA" },
+    {   2240993u, "FINISTERRE MRCC" },
+    {   2240994u, "TARIFA MRCC" },
+    {   2240995u, "LAS PALMAS MRCC" },
+    {   2240996u, "MRCC BILBAO" },
+    {   2240997u, "GIJON MRCC" },
+    {   2240998u, "VIGO MRCC" },
+    {   2241001u, "ALGECIRAS RADIO" },
+    {   2241002u, "ALMERIA RADIO" },
+    {   2241003u, "CARTAGENA RADIO" },
+    {   2241004u, "MRCC VALENCIA" },
+    {   2241005u, "MRCC PALMA" },
+    {   2241006u, "TARRAGONA RADIO" },
+    {   2241007u, "MRCC TENERIFE RADIO" },
+    {   2241009u, "MRSC SANTANDER" },
+    {   2241011u, "MRSC CADIZ" },
+    {   2241012u, "MRSC HUELVA" },
+    {   2241015u, "UCA CADIZ" },
+    {   2241016u, "MRSC CASTELLON" },
+    {   2241021u, "BILBAO RADIO" },
     {   2241022u, "CORUNA RADIO +3 sites" },
-    {   2241023u, "MALAGA RADIO" },   /* YaDDNet */
+    {   2241023u, "MALAGA RADIO" },
     {   2241024u, "CABO DE GATA RADIO +2 sites" },
-    {   2241025u, "TENERIFE RADIO" },   /* YaDDNet */
+    {   2241025u, "TENERIFE RADIO" },
     {   2241026u, "ARRECIFE RADIO +3 sites" },
-    {   2241078u, "MADRID RADIO" },   /* not ITU */
-    {   2243006u, "LAS PALMAS IFP TRAINING" },   /* YaDDNet */
+    {   2241078u, "MADRID RADIO" },
+    {   2243006u, "LAS PALMAS IFP TRAINING" },
     {   2275000u, "MRCC ETEL" },
     {   2275010u, "MRCC ETEL" },
     {   2275100u, "MRCC GRIS-NEZ" },
@@ -70,73 +67,73 @@ static const coast_t coast[] = {
     {   2275300u, "MRCC CORSEN" },
     {   2275400u, "MRCC LA GARDE" },
     {   2275420u, "MRSC AJACCIO" },
-    {   2279114u, "TEST ANFR SR DONGES" },   /* YaDDNet */
-    {   2288188u, "LE HOMET SIGNAL STATION" },   /* YaDDNet */
-    {   2288217u, "FECAMP SIGNAL STATION" },   /* YaDDNet */
-    {   2288218u, "LA HEVE SIGNAL STATION" },   /* YaDDNet */
-    {   2288219u, "PORT-EN-BESSIN SIGNAL STATION" },   /* YaDDNet */
-    {   2288221u, "BARFLEUR SIGNAL STATION" },   /* YaDDNet */
-    {   2288223u, "AULT SIGNAL STATION" },   /* YaDDNet */
-    {   2288224u, "DIEPPE SIGNAL STATION" },   /* YaDDNet */
-    {   2288225u, "VILLERVILLE SIGNAL STATION" },   /* YaDDNet */
-    {   2288227u, "CAP DE LA HAGUE SIGNAL STN" },   /* YaDDNet */
-    {   2288229u, "POINTE DU ROC SIGNAL STATION" },   /* YaDDNet */
+    {   2279114u, "TEST ANFR SR DONGES" },
+    {   2288188u, "LE HOMET SIGNAL STATION" },
+    {   2288217u, "FECAMP SIGNAL STATION" },
+    {   2288218u, "LA HEVE SIGNAL STATION" },
+    {   2288219u, "PORT-EN-BESSIN SIGNAL STATION" },
+    {   2288221u, "BARFLEUR SIGNAL STATION" },
+    {   2288223u, "AULT SIGNAL STATION" },
+    {   2288224u, "DIEPPE SIGNAL STATION" },
+    {   2288225u, "VILLERVILLE SIGNAL STATION" },
+    {   2288227u, "CAP DE LA HAGUE SIGNAL STN" },
+    {   2288229u, "POINTE DU ROC SIGNAL STATION" },
     {   2300230u, "TURKU RADIO" },
     {   2301000u, "MRCC TURKU" },
     {   2302000u, "MRSC HELSINKI" },
-    {   2303000u, "RAIPPALUOTO RADIO" },   /* YaDDNet */
+    {   2303000u, "RAIPPALUOTO RADIO" },
     {   2311000u, "TORSHAVN RADIO" },
     {   2320001u, "SHETLAND" },
-    {   2320002u, "UK COASTGUARD" },   /* YaDDNet */
-    {   2320003u, "UK COASTGUARD" },   /* YaDDNet */
+    {   2320002u, "UK COASTGUARD" },
+    {   2320003u, "UK COASTGUARD" },
     {   2320004u, "ABERDEEN" },
-    {   2320005u, "FORTH COASTGUARD" },   /* YaDDNet */
-    {   2320006u, "UK COASTGUARD" },   /* YaDDNet */
+    {   2320005u, "FORTH COASTGUARD" },
+    {   2320006u, "UK COASTGUARD" },
     {   2320007u, "HUMBER" },
-    {   2320008u, "YARMOUTH COASTGUARD" },   /* YaDDNet */
-    {   2320009u, "THAMES COASTGUARD" },   /* YaDDNet */
+    {   2320008u, "YARMOUTH COASTGUARD" },
+    {   2320009u, "THAMES COASTGUARD" },
     {   2320010u, "DOVER" },
     {   2320011u, "SOLENT" },
-    {   2320012u, "PORTLAND COASTGUARD" },   /* YaDDNet */
-    {   2320013u, "BRIXHAM COASTGUARD" },   /* YaDDNet */
+    {   2320012u, "PORTLAND COASTGUARD" },
+    {   2320013u, "BRIXHAM COASTGUARD" },
     {   2320014u, "FALMOUTH" },
-    {   2320015u, "UK COASTGUARD" },   /* YaDDNet */
-    {   2320016u, "SWANSEA COASTGUARD" },   /* YaDDNet */
+    {   2320015u, "UK COASTGUARD" },
+    {   2320016u, "SWANSEA COASTGUARD" },
     {   2320017u, "MILFORD HAVEN" },
     {   2320018u, "HOLYHEAD" },
-    {   2320019u, "LIVERPOOL COASTGUARD" },   /* YaDDNet */
-    {   2320020u, "UK COASTGUARD" },   /* YaDDNet */
+    {   2320019u, "LIVERPOOL COASTGUARD" },
+    {   2320020u, "UK COASTGUARD" },
     {   2320021u, "BELFAST" },
-    {   2320022u, "CLYDE COASTGUARD" },   /* YaDDNet */
-    {   2320023u, "UK COASTGUARD" },   /* YaDDNet */
+    {   2320022u, "CLYDE COASTGUARD" },
+    {   2320023u, "UK COASTGUARD" },
     {   2320024u, "STORNOWAY" },
-    {   2320060u, "JERSEY RADIO" },   /* YaDDNet */
+    {   2320060u, "JERSEY RADIO" },
     {   2320063u, "LONDON COASTGUARD" },
-    {   2320064u, "GUERNSEY COASTGUARD" },   /* YaDDNet */
-    {   2320204u, "FAVERSHAM RADIO (MNC)" },   /* YaDDNet */
+    {   2320064u, "GUERNSEY COASTGUARD" },
+    {   2320204u, "FAVERSHAM RADIO (MNC)" },
     {   2361001u, "GIBRALTAR PORT AUTHORITY" },
     {   2371000u, "OLYMPIA RADIO NOC" },
     {   2380100u, "SPLIT RADIO" },
     {   2380200u, "RIJEKA RADIO" },
     {   2380300u, "DUBROVNIK RADIO" },
-    {   2383050u, "MRSC PULA" },   /* YaDDNet */
-    {   2383150u, "MRSC SENJ" },   /* YaDDNet */
-    {   2383350u, "MRSC PLOCE" },   /* YaDDNet */
-    {   2387010u, "RIJEKA RADIO" },   /* YaDDNet */
-    {   2387020u, "MRCC RIJEKA" },   /* YaDDNet */
-    {   2387030u, "MRSC SPLIT" },   /* YaDDNet */
-    {   2387040u, "MRSC SPLIT" },   /* YaDDNet */
-    {   2387100u, "MRSC RIJEKA" },   /* YaDDNet */
-    {   2387400u, "MRSC ZADAR" },   /* YaDDNet */
-    {   2387401u, "MRSC ZADAR" },   /* YaDDNet */
-    {   2387500u, "MRSC SIBENIK" },   /* YaDDNet */
-    {   2387501u, "MRSC SIBENIK" },   /* YaDDNet */
-    {   2387800u, "MRSC DUBROVNIK" },   /* YaDDNet */
-    {   2387801u, "MRSC DUBROVNIK" },   /* YaDDNet */
+    {   2383050u, "MRSC PULA" },
+    {   2383150u, "MRSC SENJ" },
+    {   2383350u, "MRSC PLOCE" },
+    {   2387010u, "RIJEKA RADIO" },
+    {   2387020u, "MRCC RIJEKA" },
+    {   2387030u, "MRSC SPLIT" },
+    {   2387040u, "MRSC SPLIT" },
+    {   2387100u, "MRSC RIJEKA" },
+    {   2387400u, "MRSC ZADAR" },
+    {   2387401u, "MRSC ZADAR" },
+    {   2387500u, "MRSC SIBENIK" },
+    {   2387501u, "MRSC SIBENIK" },
+    {   2387800u, "MRSC DUBROVNIK" },
+    {   2387801u, "MRSC DUBROVNIK" },
     {   2391000u, "ASPROPYRGOS ATTIKIS RADIO" },
     {   2392000u, "PIRAEUS RADIO" },
-    {   2424131u, "TANGER RADIO" },   /* YaDDNet */
-    {   2424133u, "MRCC RABAT" },   /* YaDDNet */
+    {   2424131u, "TANGER RADIO" },
+    {   2424133u, "MRCC RABAT" },
     {   2442000u, "NETHERLANDS COAST GUARD RADIO" },
     {   2470001u, "ROMA RADIO" },
     {   2470002u, "PALERMO RADIO" },
@@ -154,7 +151,7 @@ static const coast_t coast[] = {
     {   2470021u, "MRSC CATANIA" },
     {   2470022u, "MRSC PALERMO" },
     {   2470023u, "MRSC CAGLIARI" },
-    {   2470025u, "MRSC PESCARA" },   /* YaDDNet */
+    {   2470025u, "MRSC PESCARA" },
     {   2470063u, "ALNG TERMINAL" },
     {   2470064u, "ALNG SHORE BASE" },
     {   2470094u, "BOSA" },
@@ -184,22 +181,22 @@ static const coast_t coast[] = {
     {   2500200u, "MRSC VALENTIA RADIO" },
     {   2500300u, "NATIONAL MARITIME OPERATIONS CENTRE (MRCC DUBLIN)" },
     {   2510100u, "REYKJAVIK RADIO +5 sites" },
-    {   2510200u, "VESTMANNAEYJAR RADIO" },   /* YaDDNet */
-    {   2516200u, "REYKJAVIK CG" },   /* YaDDNet */
-    {   2550100u, "MRSC FUNCHAL" },   /* YaDDNet */
+    {   2510200u, "VESTMANNAEYJAR RADIO" },
+    {   2516200u, "REYKJAVIK CG" },
+    {   2550100u, "MRSC FUNCHAL" },
     {   2570000u, "NORWEGIAN COASTAL RADIO NORTH +1 sites" },
-    {   2570100u, "TJOME RADIO" },   /* YaDDNet */
-    {   2570200u, "FARSUND RADIO" },   /* YaDDNet */
+    {   2570100u, "TJOME RADIO" },
+    {   2570200u, "FARSUND RADIO" },
     {   2570300u, "NORWEGIAN COASTAL RADIO, SOUTH" },
-    {   2570400u, "BERGEN RADIO" },   /* YaDDNet */
-    {   2570500u, "FLOROE RADIO" },   /* YaDDNet */
-    {   2570600u, "ORLANDET RADIO" },   /* YaDDNet */
-    {   2570700u, "BODOE RADIO" },   /* YaDDNet */
-    {   2570800u, "VARDO RADIO" },   /* YaDDNet */
-    {   2570900u, "SVALBARD RADIO" },   /* YaDDNet */
-    {   2573550u, "VARDO VTS" },   /* YaDDNet */
-    {   2578230u, "NTNU ALESUND LJ4M" },   /* YaDDNet */
-    {   2610210u, "WITOWO RADIO" },   /* YaDDNet */
+    {   2570400u, "BERGEN RADIO" },
+    {   2570500u, "FLOROE RADIO" },
+    {   2570600u, "ORLANDET RADIO" },
+    {   2570700u, "BODOE RADIO" },
+    {   2570800u, "VARDO RADIO" },
+    {   2570900u, "SVALBARD RADIO" },
+    {   2573550u, "VARDO VTS" },
+    {   2578230u, "NTNU ALESUND LJ4M" },
+    {   2610210u, "WITOWO RADIO" },
     {   2618102u, "POLISH RESCUE RADIO" },
     {   2620001u, "BAR RADIO" },
     {   2620002u, "BAR RADIO" },
@@ -215,28 +212,28 @@ static const coast_t coast[] = {
     {   2633070u, "VIANA DO CASTELO" },
     {   2633090u, "FIGUEIRA DA FOZ" },
     {   2633100u, "PONTA DO ALTAR" },
-    {   2640570u, "CONSTANTA RADIO" },   /* not ITU */
-    {   2640579u, "MRCC CONSTANTA" },   /* YaDDNet */
-    {   2651000u, "MRCC GOTHENBURG" },   /* YaDDNet */
-    {   2652000u, "STOCKHOLM RADIO" },   /* YaDDNet */
+    {   2640570u, "CONSTANTA RADIO" },
+    {   2640579u, "MRCC CONSTANTA" },
+    {   2651000u, "MRCC GOTHENBURG" },
+    {   2652000u, "STOCKHOLM RADIO" },
     {   2653000u, "JRCC SWEDEN" },
-    {   2653300u, "VTS GOTEBORG" },   /* YaDDNet */
-    {   2653500u, "MSI SWEDEN" },   /* YaDDNet */
-    {   2653800u, "SWEDISH MARITIME ADMINISTRATION" },   /* YaDDNet */
-    {   2653900u, "SWEDISH MARITIME ADMINISTRATION" },   /* YaDDNet */
+    {   2653300u, "VTS GOTEBORG" },
+    {   2653500u, "MSI SWEDEN" },
+    {   2653800u, "SWEDISH MARITIME ADMINISTRATION" },
+    {   2653900u, "SWEDISH MARITIME ADMINISTRATION" },
     {   2711000u, "ISTANBUL TURK RADIO +10 sites" },
     {   2712000u, "SAMSUN TURK RADIO +7 sites" },
     {   2713000u, "ANTALYA TURK RADIO +9 sites" },
-    {   2714000u, "CANAKKALE RADIO" },   /* YaDDNet */
+    {   2714000u, "CANAKKALE RADIO" },
     {   2715000u, "IZMIR TURK RADIO" },
-    {   2719000u, "ZONGULDAK RADIO" },   /* YaDDNet */
-    {   2723300u, "VYSOTSK" },   /* YaDDNet */
+    {   2719000u, "ZONGULDAK RADIO" },
+    {   2723300u, "VYSOTSK" },
     {   2723650u, "MARIUPOL RSC" },
-    {   2723659u, "KERCH" },   /* YaDDNet */
+    {   2723659u, "KERCH" },
     {   2723660u, "ODESSA MRCC" },
-    {   2723663u, "FEODOSIA" },   /* YaDDNet */
+    {   2723663u, "FEODOSIA" },
     {   2723672u, "BERDYANSK RADIO" },
-    {   2723678u, "AI-PETRI" },   /* YaDDNet */
+    {   2723678u, "AI-PETRI" },
     {   2731107u, "DIKSON TAO" },
     {   2731108u, "SOCHI AKHUN MTN KRAS" },
     {   2731117u, "PEVEK CHAO" },
@@ -256,8 +253,8 @@ static const coast_t coast[] = {
     {   2733728u, "RADUZHNYY MAGADAN" },
     {   2733730u, "PEVEK CHAO" },
     {   2733733u, "SAKHALIN RADIO SPC +1 sites" },
-    {   2733737u, "PETROPAVLOVSK--KAMCHATSKIY" },   /* YaDDNet */
-    {   2733744u, "MURMANSK RADIO" },   /* YaDDNet */
+    {   2733737u, "PETROPAVLOVSK--KAMCHATSKIY" },
+    {   2733744u, "MURMANSK RADIO" },
     {   2734411u, "NOVOROSSIYSK RADIO MRCC/NOVOROSSIYSK-RADIO-SKC" },
     {   2734412u, "VLADIVOSTOCK RADIO MRCC" },
     {   2734413u, "TUAPSE KRAS/TUAPSE-CENTR" },
@@ -275,7 +272,7 @@ static const coast_t coast[] = {
     {   2734429u, "KHOLMSK RADIO" },
     {   2734441u, "MURMANSK RADIO 30" },
     {   2734442u, "PLASTUN RADIO" },
-    {   2734446u, "TAMAN RADIO" },   /* YaDDNet */
+    {   2734446u, "TAMAN RADIO" },
     {   2734447u, "DE-KASTRI KHAB/DE-KASTRI-RADIOCENTR" },
     {   2734448u, "UGOLNYE KOPI 3-Y CHAO/MARIYA-RADIO" },
     {   2734449u, "TIKSI MRSC" },
@@ -285,85 +282,85 @@ static const coast_t coast[] = {
     {   2734489u, "MAKHACHKALA DAG/MAHACHKALA-RADIOCENTR" },
     {   2750100u, "RIGA RESCUE RADIO" },
     {   2760100u, "JRCC TALLINN" },
-    {   2760120u, "KURESSAARE WEST RADIO" },   /* YaDDNet */
+    {   2760120u, "KURESSAARE WEST RADIO" },
     {   2761000u, "TALLINN RADIO" },
-    {   2761100u, "TALLINN RADIO" },   /* YaDDNet */
-    {   2766190u, "TALLINN VTS (VALASTE)" },   /* YaDDNet */
+    {   2761100u, "TALLINN RADIO" },
+    {   2766190u, "TALLINN VTS (VALASTE)" },
     {   2770090u, "VESSEL TRAFFIC MONITORING" },
     {   2770100u, "VESSEL TRAFFIC MONITORING" },
     {   2770110u, "VESSEL TRAFFIC MONITORING" },
     {   2770120u, "VESSEL TRAFFIC MONITORING" },
     {   2770130u, "VESSEL TRAFFIC MONITORING" },
     {   2770330u, "KLAIPEDA RESCUE RADIO" },
-    {   2780200u, "KOPER" },   /* YaDDNet */
+    {   2780200u, "KOPER" },
     {   3061000u, "JRCC CURACAO/DUTCH CARIBBEAN COAST GUARD" },
-    {   3100001u, "BERMUDA HARBOUR RADIO" },   /* YaDDNet */
-    {   3160010u, "VANCOUVER" },   /* YaDDNet */
+    {   3100001u, "BERMUDA HARBOUR RADIO" },
+    {   3160010u, "VANCOUVER" },
     {   3160011u, "VICTORIA COAST GUARD RADIO" },
-    {   3160012u, "TOFINO" },   /* YaDDNet */
+    {   3160012u, "TOFINO" },
     {   3160013u, "PRINCE RUPERT COAST GUARD RADIO" },
-    {   3160014u, "COMOX" },   /* YaDDNet */
-    {   3160015u, "ST.JOHN (NEW BRUNSWICK)" },   /* YaDDNet */
+    {   3160014u, "COMOX" },
+    {   3160015u, "ST.JOHN (NEW BRUNSWICK)" },
     {   3160016u, "HALIFAX COAST GUARD RADIO" },
     {   3160017u, "SYDNEY COAST GUARD RADIO" },
     {   3160018u, "PORT AUX BASQUES COAST GUARD RADIO" },
     {   3160019u, "PLACENTIA COAST GUARD RADIO" },
-    {   3160020u, "ST JOHN'S (NEWFOUNDLAND)" },   /* YaDDNet */
-    {   3160021u, "ST ANTHONY" },   /* YaDDNet */
+    {   3160020u, "ST JOHN'S (NEWFOUNDLAND)" },
+    {   3160021u, "ST ANTHONY" },
     {   3160022u, "LABRADOR COAST GUARD RADIO" },
     {   3160023u, "IQALUIT COAST GUARD RADIO" },
-    {   3160024u, "INUVIK" },   /* YaDDNet */
-    {   3160025u, "RIVIEREAU RENARD" },   /* YaDDNet */
+    {   3160024u, "INUVIK" },
+    {   3160025u, "RIVIEREAU RENARD" },
     {   3160026u, "LES ESCOUMINS COAST GUARD RADIO" },
     {   3160027u, "QUEBEC COAST GUARD RADIO" },
-    {   3160028u, "MONTREAL" },   /* YaDDNet */
+    {   3160028u, "MONTREAL" },
     {   3160029u, "PRESCOTT COAST GUARD RADIO" },
     {   3160030u, "SARNIA COAST GUARD RADIO" },
-    {   3160031u, "THUNDER BAY" },   /* YaDDNet */
-    {   3160175u, "HEBRON OIL PLATFORM CKR759" },   /* YaDDNet */
+    {   3160031u, "THUNDER BAY" },
+    {   3160175u, "HEBRON OIL PLATFORM CKR759" },
     {   3311000u, "AASIAAT RADIO" },
-    {   3313000u, "AASIAAT RADIO" },   /* YaDDNet */
-    {   3314000u, "ANGMAGSSALIK RADIO" },   /* YaDDNet */
-    {   3450010u, "CERRILLO NOPALTEPEC" },   /* YaDDNet */
+    {   3313000u, "AASIAAT RADIO" },
+    {   3314000u, "ANGMAGSSALIK RADIO" },
+    {   3450010u, "CERRILLO NOPALTEPEC" },
     {   3450110u, "TAMPICO, TAMAULIPAS RADIO" },
-    {   3450172u, "MATAMOROS" },   /* YaDDNet */
-    {   3450173u, "MEZQUITAL" },   /* YaDDNet */
-    {   3450174u, "SAN BLAS" },   /* YaDDNet */
+    {   3450172u, "MATAMOROS" },
+    {   3450173u, "MEZQUITAL" },
+    {   3450174u, "SAN BLAS" },
     {   3450210u, "ENSENADA, BAJA CALIFORNIA RADIO" },
-    {   3450272u, "ISLADE CEDROS" },   /* YaDDNet */
-    {   3450273u, "ISLA GUADALUPE" },   /* YaDDNet */
-    {   3450274u, "SAN FELIPE" },   /* YaDDNet */
+    {   3450272u, "ISLADE CEDROS" },
+    {   3450273u, "ISLA GUADALUPE" },
+    {   3450274u, "SAN FELIPE" },
     {   3450310u, "VERACRUZ, VERACRUZ RADIO" },
     {   3450320u, "COATZACOALCOS, VERACRUZ RADIO" },
-    {   3450372u, "TUXPAN" },   /* YaDDNet */
-    {   3450471u, "LA PAZ" },   /* YaDDNet */
-    {   3450472u, "PUERTO CORTEZ" },   /* YaDDNet */
-    {   3450473u, "LOS CABOS" },   /* YaDDNet */
-    {   3450474u, "SANTA ROSALIA" },   /* YaDDNet */
-    {   3450475u, "ISLA SOCORRO" },   /* YaDDNet */
-    {   3450671u, "GUAYMAS" },   /* YaDDNet */
-    {   3450672u, "PUERTO PENASCO" },   /* YaDDNet */
+    {   3450372u, "TUXPAN" },
+    {   3450471u, "LA PAZ" },
+    {   3450472u, "PUERTO CORTEZ" },
+    {   3450473u, "LOS CABOS" },
+    {   3450474u, "SANTA ROSALIA" },
+    {   3450475u, "ISLA SOCORRO" },
+    {   3450671u, "GUAYMAS" },
+    {   3450672u, "PUERTO PENASCO" },
     {   3450710u, "CIUDAD DEL CARMEN, CAMPECHE RADIO" },
-    {   3450772u, "LERMA" },   /* YaDDNet */
+    {   3450772u, "LERMA" },
     {   3450810u, "MAZATLAN, SINALOA RADIO" },
-    {   3450872u, "TOPOLOBAMPO" },   /* YaDDNet */
+    {   3450872u, "TOPOLOBAMPO" },
     {   3450910u, "PROGRESO, YUCATAN RADIO" },
-    {   3450974u, "CAYO ARCAS" },   /* YaDDNet */
+    {   3450974u, "CAYO ARCAS" },
     {   3451110u, "COZUMEL, QUINTANA ROO RADIO" },
     {   3451120u, "CHETUMAL, QUINTANA ROO RADIO" },
-    {   3451171u, "ISLA MUJERES" },   /* YaDDNet */
-    {   3451174u, "ISLA HOLBOX" },   /* YaDDNet */
-    {   3451175u, "ISLA CONTOY" },   /* YaDDNet */
-    {   3451176u, "PLAYA LINDA" },   /* YaDDNet */
+    {   3451171u, "ISLA MUJERES" },
+    {   3451174u, "ISLA HOLBOX" },
+    {   3451175u, "ISLA CONTOY" },
+    {   3451176u, "PLAYA LINDA" },
     {   3451210u, "PUERTO VALLARTA, JALISCO RADIO" },
     {   3451410u, "MANZANILLO, COLIMA RADIO" },
-    {   3451472u, "ISLA CLARION" },   /* YaDDNet */
+    {   3451472u, "ISLA CLARION" },
     {   3451610u, "LAZARO CARDENAS, MICHOACAN RADIO" },
     {   3451810u, "ACAPULCO, GUERRERO RADIO" },
-    {   3452071u, "SALINA CRUZ" },   /* YaDDNet */
-    {   3452072u, "HUATULCO" },   /* YaDDNet */
-    {   3452271u, "PUERTO MADERO" },   /* YaDDNet */
-    {   3452272u, "PAREDON" },   /* YaDDNet */
+    {   3452071u, "SALINA CRUZ" },
+    {   3452072u, "HUATULCO" },
+    {   3452271u, "PUERTO MADERO" },
+    {   3452272u, "PAREDON" },
     {   3621001u, "BRIGAND HILL +4 sites" },
     {   3621111u, "COAST GUARD CONTROL" },
     {   3621112u, "COAST GUARD CONTROL" },
@@ -374,54 +371,54 @@ static const coast_t coast[] = {
     {   3621119u, "COAST GUARD CONTROL" },
     {   3621120u, "COAST GUARD CONTROL" },
     {   3660003u, "MOBILE, ALABAMA RADIO / WLO" },
-    {   3660093u, "HOUSTON RADIO" },   /* YaDDNet */
-    {   3669891u, "JACKSONVILLE" },   /* YaDDNet */
+    {   3660093u, "HOUSTON RADIO" },
+    {   3669891u, "JACKSONVILLE" },
     {   3669899u, "KODIAK RADIO" },
-    {   3669901u, "BOSTON" },   /* YaDDNet */
-    {   3669902u, "WOODS HOLE RADIO" },   /* YaDDNet */
-    {   3669903u, "CAPE MAY RADIO" },   /* YaDDNet */
-    {   3669905u, "DELAWARE BAY" },   /* YaDDNet */
-    {   3669906u, "NORTH CAROLINA" },   /* YaDDNet */
-    {   3669907u, "CHARLESTON" },   /* YaDDNet */
-    {   3669908u, "NEW ORLEANS" },   /* YaDDNet */
-    {   3669909u, "HUMBOLT BAY" },   /* YaDDNet */
-    {   3669911u, "NORTH BEND" },   /* YaDDNet */
-    {   3669912u, "LOS ANGELES/LONGBEACH" },   /* YaDDNet */
-    {   3669913u, "SAN DIEGO" },   /* YaDDNet */
-    {   3669914u, "MOBILE" },   /* YaDDNet */
-    {   3669915u, "HOUSTON/GALVESTON" },   /* YaDDNet */
-    {   3669916u, "CORPUS CHRISTI" },   /* YaDDNet */
-    {   3669917u, "ST.PETERSBURG" },   /* YaDDNet */
-    {   3669918u, "KEY WEST RADIO" },   /* YaDDNet */
-    {   3669919u, "MIAMI" },   /* YaDDNet */
-    {   3669920u, "FORT MACON RADIO" },   /* YaDDNet */
-    {   3669921u, "NORTHERN NEW ENGLAND" },   /* YaDDNet */
-    {   3669922u, "HAMPTON ROADS" },   /* YaDDNet */
-    {   3669925u, "MAYPORT RADIO" },   /* YaDDNet */
-    {   3669926u, "SAN FRANCISCO" },   /* YaDDNet */
-    {   3669928u, "SOUTHEASTERN NEW ENGLAND" },   /* YaDDNet */
-    {   3669929u, "NEW YORK RADIO" },   /* YaDDNet */
-    {   3669930u, "DETROIT" },   /* YaDDNet */
-    {   3669931u, "LONG ISLAND" },   /* YaDDNet */
-    {   3669932u, "CHINCOTEAGUE RADIO" },   /* YaDDNet */
-    {   3669933u, "LAKE MICHIGAN" },   /* YaDDNet */
-    {   3669934u, "PORTLAND RADIO" },   /* YaDDNet */
-    {   3669935u, "SAULT STE MARIE" },   /* YaDDNet */
-    {   3669937u, "COLUMBIA RIVER" },   /* YaDDNet */
-    {   3669938u, "PUGET SOUND" },   /* YaDDNet */
-    {   3669939u, "HONOLULU" },   /* YaDDNet */
-    {   3669960u, "BUFFALO" },   /* YaDDNet */
-    {   3669961u, "BALTIMORE" },   /* YaDDNet */
-    {   3669985u, "PT ROBINSON" },   /* YaDDNet */
+    {   3669901u, "BOSTON" },
+    {   3669902u, "WOODS HOLE RADIO" },
+    {   3669903u, "CAPE MAY RADIO" },
+    {   3669905u, "DELAWARE BAY" },
+    {   3669906u, "NORTH CAROLINA" },
+    {   3669907u, "CHARLESTON" },
+    {   3669908u, "NEW ORLEANS" },
+    {   3669909u, "HUMBOLT BAY" },
+    {   3669911u, "NORTH BEND" },
+    {   3669912u, "LOS ANGELES/LONGBEACH" },
+    {   3669913u, "SAN DIEGO" },
+    {   3669914u, "MOBILE" },
+    {   3669915u, "HOUSTON/GALVESTON" },
+    {   3669916u, "CORPUS CHRISTI" },
+    {   3669917u, "ST.PETERSBURG" },
+    {   3669918u, "KEY WEST RADIO" },
+    {   3669919u, "MIAMI" },
+    {   3669920u, "FORT MACON RADIO" },
+    {   3669921u, "NORTHERN NEW ENGLAND" },
+    {   3669922u, "HAMPTON ROADS" },
+    {   3669925u, "MAYPORT RADIO" },
+    {   3669926u, "SAN FRANCISCO" },
+    {   3669928u, "SOUTHEASTERN NEW ENGLAND" },
+    {   3669929u, "NEW YORK RADIO" },
+    {   3669930u, "DETROIT" },
+    {   3669931u, "LONG ISLAND" },
+    {   3669932u, "CHINCOTEAGUE RADIO" },
+    {   3669933u, "LAKE MICHIGAN" },
+    {   3669934u, "PORTLAND RADIO" },
+    {   3669935u, "SAULT STE MARIE" },
+    {   3669937u, "COLUMBIA RIVER" },
+    {   3669938u, "PUGET SOUND" },
+    {   3669939u, "HONOLULU" },
+    {   3669960u, "BUFFALO" },
+    {   3669961u, "BALTIMORE" },
+    {   3669985u, "PT ROBINSON" },
     {   3669990u, "SAN FRANCISCO" },
     {   3669991u, "RCC BOSTON" },
     {   3669992u, "RCC SAN JUAN" },
     {   3669993u, "HONOLULU" },
-    {   3669994u, "GUAM RADIO" },   /* YaDDNet */
-    {   3669995u, "CHESAPEAKE" },   /* YaDDNet */
+    {   3669994u, "GUAM RADIO" },
+    {   3669995u, "CHESAPEAKE" },
     {   3669997u, "RCC MIAMI" },
     {   3669998u, "RCC NEW ORLEANS" },
-    {   3669999u, "USCG GROUP CALL" },   /* YaDDNet */
+    {   3669999u, "USCG GROUP CALL" },
     {   3751001u, "ST. VINCENT AND THE GRENADINES COAST GUARD" },
     {   4030000u, "JEDDAH RADIO +16 sites" },
     {   4121100u, "TIANJIN RADIO" },
@@ -445,12 +442,12 @@ static const coast_t coast[] = {
     {   4123200u, "SHANTOU RADIO" },
     {   4123300u, "ZHANJIANG RADIO" },
     {   4123400u, "BEIHAI RADIO" },
-    {   4123500u, "HAIKOU RADIO" },   /* YaDDNet */
+    {   4123500u, "HAIKOU RADIO" },
     {   4123600u, "BASUO RADIO" },
     {   4123700u, "SANYA RADIO" },
     {   4125725u, "ZHANJIANG RADIO" },
     {   4126620u, "JIANGYIN RADIO" },
-    {   4162019u, "CHILUNG KEELUNG RADIO" },   /* YaDDNet */
+    {   4162019u, "CHILUNG KEELUNG RADIO" },
     {   4192201u, "MRSC DAMAN" },
     {   4192202u, "MRSC PORBANDAR" },
     {   4192203u, "MRCC MUMBAI +3 sites" },
@@ -517,9 +514,9 @@ static const coast_t coast[] = {
     {   4237000u, "BAKU TRAFFIC CONTROL" },
     {   4238000u, "BAKU TRAFFIC CONTROL" },
     {   4239000u, "BAKU TRAFFIC CONTROL" },
-    {   4280001u, "HAIFA RADIO" },   /* not ITU */
-    {   4280002u, "ASHOD" },   /* YaDDNet */
-    {   4280003u, "EILAT" },   /* YaDDNet */
+    {   4280001u, "HAIFA RADIO" },
+    {   4280002u, "ASHOD" },
+    {   4280003u, "EILAT" },
     {   4310001u, "TOKYO COAST GUARD RADIO" },
     {   4310101u, "HOKKAIDO COAST GUARD RADIO" },
     {   4310201u, "SHIOGAMA COAST GUARD RADIO" },
@@ -533,7 +530,7 @@ static const coast_t coast[] = {
     {   4311001u, "KAGOSHIMA COAST GUARD RADIO" },
     {   4311101u, "OKINAWA COAST GUARD RADIO" },
     {   4381234u, "AQABA COASTAL RADIO STATION/JYO - AQABA PORT CONTROL/JYP" },
-    {   4400001u, "INCHON" },   /* YaDDNet */
+    {   4400001u, "INCHON" },
     {   4400002u, "SEOUL RADIO" },
     {   4400003u, "INCHEON RADIO" },
     {   4400004u, "INCHEON RADIO" },
@@ -544,7 +541,7 @@ static const coast_t coast[] = {
     {   4400105u, "PUSAN RADIO" },
     {   4400106u, "PUSAN RADIO" },
     {   4400201u, "GUNSAN RADIO" },
-    {   4400301u, "MOKPO" },   /* YaDDNet */
+    {   4400301u, "MOKPO" },
     {   4400304u, "MOKPO RADIO" },
     {   4400305u, "YEOSU RADIO" },
     {   4400306u, "YEOSU RADIO" },
@@ -557,7 +554,7 @@ static const coast_t coast[] = {
     {   4400403u, "ULREUNG RADIO" },
     {   4400404u, "ULREUNG RADIO" },
     {   4400501u, "GUNSAN RADIO" },
-    {   4400601u, "KANGNUNG" },   /* YaDDNet */
+    {   4400601u, "KANGNUNG" },
     {   4400602u, "KANGNUNG RADIO" },
     {   4400603u, "KANGNUNG RADIO" },
     {   4400604u, "KANGNUNG RADIO" },
@@ -623,19 +620,19 @@ static const coast_t coast[] = {
     {   4403408u, "WHOPO/SUHYUP" },
     {   4403501u, "GUNSAN RADIO" },
     {   4403701u, "JEJU RADIO" },
-    {   4450781u, "CRS HAMHUNG" },   /* YaDDNet */
-    {   4451021u, "NAMPHO" },   /* YaDDNet */
-    {   4472188u, "KUWAIT" },   /* not ITU */
-    {   4501000u, "BEIRUT RADIO" },   /* YaDDNet */
+    {   4450781u, "CRS HAMHUNG" },
+    {   4451021u, "NAMPHO" },
+    {   4472188u, "KUWAIT" },
+    {   4501000u, "BEIRUT RADIO" },
     {   4550191u, "MRCC MALE" },
     {   4610013u, "OMAN COAST RADIO/A4A20 (MUSCAT)" },
     {   4610014u, "OMAN COAST RADIO/A4A21 (SALALAH)" },
     {   4610015u, "OMAN COAST RADIO/A4A22 (KHASAB)" },
     {   4610016u, "OMAN COAST RADIO/A4A23 (ASHKARAH)" },
-    {   4634052u, "GAWADAR" },   /* YaDDNet */
-    {   4634056u, "ORMARA" },   /* YaDDNet */
-    {   4634060u, "MRCC KARACHI" },   /* not ITU */
-    {   4661001u, "MESAIEED PORT" },   /* YaDDNet */
+    {   4634052u, "GAWADAR" },
+    {   4634056u, "ORMARA" },
+    {   4634060u, "MRCC KARACHI" },
+    {   4661001u, "MESAIEED PORT" },
     {   4661010u, "DOHA RADIO" },
     {   4680011u, "LATTAKIA RADIO" },
     {   4680012u, "TARTOUS RADIO" },
@@ -646,18 +643,18 @@ static const coast_t coast[] = {
     {   4773500u, "MRCC HONG KONG" },
     {   5030001u, "JRCC AUSTRALIA" },
     {   5030126u, "MELBOURNE (SANDRINGHAM)" },
-    {   5036000u, "MARINE RADIO KORDIA" },   /* YaDDNet */
-    {   5038803u, "SYDNEY INSTITUTE TECH BASE STATION" },   /* YaDDNet */
-    {   5038808u, "AMC COLLEGE LAUNCESTON TAS" },   /* YaDDNet */
-    {   5038815u, "HMAS CERBERUS CRIB POINT" },   /* YaDDNet */
-    {   5038818u, "HUNTER TAFE BASESTATION NSW" },   /* YaDDNet */
-    {   5038819u, "SEAMECEG TAFE BASESTATION VIC" },   /* YaDDNet */
-    {   5039901u, "ELECTROTECH SYDNEY TEST 1" },   /* YaDDNet */
+    {   5036000u, "MARINE RADIO KORDIA" },
+    {   5038803u, "SYDNEY INSTITUTE TECH BASE STATION" },
+    {   5038808u, "AMC COLLEGE LAUNCESTON TAS" },
+    {   5038815u, "HMAS CERBERUS CRIB POINT" },
+    {   5038818u, "HUNTER TAFE BASESTATION NSW" },
+    {   5038819u, "SEAMECEG TAFE BASESTATION VIC" },
+    {   5039901u, "ELECTROTECH SYDNEY TEST 1" },
     {   5060100u, "YANGON RADIO" },
     {   5060200u, "MYEIK RADIO" },
     {   5061411u, "MRCC AYEYARWADY" },
     {   5120010u, "TAUPO MARITIME RADIO" },
-    {   5201100u, "SUVA" },   /* YaDDNet */
+    {   5201100u, "SUVA" },
     {   5250000u, "JAKARTA RADIO / PKX" },
     {   5250001u, "SURABAYA RADIO / PKD" },
     {   5250002u, "MAKASSAR RADIO / PKF" },
@@ -673,7 +670,7 @@ static const coast_t coast[] = {
     {   5250012u, "BATU AMPAR RADIO" },
     {   5250013u, "PANJANG RADIO / PKC4" },
     {   5250014u, "BENOA RADIO / PKD5" },
-    {   5250015u, "DILI" },   /* YaDDNet */
+    {   5250015u, "DILI" },
     {   5250016u, "PONTIANAK RADIO / PKS" },
     {   5250017u, "TARAKAN RADIO / PKO" },
     {   5250018u, "PANTOLOAN RADIO" },
@@ -740,7 +737,7 @@ static const coast_t coast[] = {
     {   5251583u, "JEPARA RADIO" },
     {   5259991u, "KWANDANG RADIO" },
     {   5330001u, "GUNUNG JERAI" },
-    {   5330002u, "PERMATANG PAUH" },   /* YaDDNet */
+    {   5330002u, "PERMATANG PAUH" },
     {   5330003u, "GUNUNG BRINCHANG" },
     {   5330004u, "ULU KALI" },
     {   5330005u, "GUNUNG LEDANG" },
@@ -771,7 +768,7 @@ static const coast_t coast[] = {
     {   5330200u, "STESEN PENERIMAAN SEMANTAN" },
     {   5401000u, "MRCC NOUMEA" },
     {   5461000u, "MRCC PAPEETE" },
-    {   5530001u, "PORT MORESBY RADIO" },   /* YaDDNet */
+    {   5530001u, "PORT MORESBY RADIO" },
     {   5630002u, "SINGAPORE PORT OPERATIONS CONTROL" },
     {   5671000u, "BANGKOK RADIO" },
     {   5741010u, "MONG CAI RADIO" },
@@ -810,51 +807,51 @@ static const coast_t coast[] = {
     {   6052112u, "DELLYS RADIO" },
     {   6052113u, "TENES RADIO" },
     {   6053814u, "ANNABA RADIO" },
-    {   6053815u, "BEJAIA RADIO" },   /* YaDDNet */
-    {   6053816u, "SKIKDA RADIO" },   /* YaDDNet */
-    {   6054112u, "DELLYS" },   /* YaDDNet */
+    {   6053815u, "BEJAIA RADIO" },
+    {   6053816u, "SKIKDA RADIO" },
+    {   6054112u, "DELLYS" },
     {   6054117u, "ORAN RADIO" },
     {   6054118u, "MOSTAGANEM RADIO" },
     {   6054119u, "GHAZAOUET RADIO" },
-    {   6100001u, "COTONOU" },   /* YaDDNet */
-    {   6170000u, "SAO VICENTE" },   /* YaDDNet */
+    {   6100001u, "COTONOU" },
+    {   6170000u, "SAO VICENTE" },
     {   6191000u, "ABIDJAN RADIO +5 sites" },
     {   6211000u, "DJIBOUTI RADIO" },
     {   6221111u, "ALEXANDRIA RADIO" },
     {   6221112u, "KOSSEIR RADIO" },
     {   6221113u, "PORT SAID RADIO" },
-    {   6221120u, "ISMAILIA RADIO" },   /* YaDDNet */
-    {   6270000u, "TEMA" },   /* YaDDNet */
-    {   6340000u, "MOMBASA RADIO" },   /* YaDDNet */
+    {   6221120u, "ISMAILIA RADIO" },
+    {   6270000u, "TEMA" },
+    {   6340000u, "MOMBASA RADIO" },
     {   6341000u, "RMRCC MOMBASA" },
     {   6452700u, "MAURITIUS RADIO" },
     {   6459022u, "NCG" },
-    {   6501000u, "MAPUTO" },   /* YaDDNet */
-    {   6502000u, "INHAMBANE" },   /* YaDDNet */
-    {   6503000u, "BEIRA" },   /* YaDDNet */
-    {   6504000u, "QUELIMANE" },   /* YaDDNet */
-    {   6505000u, "ANGOCHE" },   /* YaDDNet */
-    {   6506000u, "NACALA" },   /* YaDDNet */
-    {   6507000u, "PEMBA" },   /* YaDDNet */
-    {   6540000u, "NOUAKCHOTT RADIO" },   /* YaDDNet */
+    {   6501000u, "MAPUTO" },
+    {   6502000u, "INHAMBANE" },
+    {   6503000u, "BEIRA" },
+    {   6504000u, "QUELIMANE" },
+    {   6505000u, "ANGOCHE" },
+    {   6506000u, "NACALA" },
+    {   6507000u, "PEMBA" },
+    {   6540000u, "NOUAKCHOTT RADIO" },
     {   6601000u, "MRCC REUNION" },
-    {   6623950u, "PORT SUDAN RADIO" },   /* YaDDNet */
-    {   6630002u, "SAINT-LOUIS" },   /* YaDDNet */
-    {   6630003u, "FASS BOYE" },   /* YaDDNet */
-    {   6630004u, "CAYAR" },   /* YaDDNet */
-    {   6630005u, "MRCC DAKAR" },   /* YaDDNet */
-    {   6630006u, "KAFOUNTINE" },   /* YaDDNet */
-    {   6630007u, "JOAL" },   /* YaDDNet */
-    {   6630008u, "CAP SKIRRING" },   /* YaDDNet */
+    {   6623950u, "PORT SUDAN RADIO" },
+    {   6630002u, "SAINT-LOUIS" },
+    {   6630003u, "FASS BOYE" },
+    {   6630004u, "CAYAR" },
+    {   6630005u, "MRCC DAKAR" },
+    {   6630006u, "KAFOUNTINE" },
+    {   6630007u, "JOAL" },
+    {   6630008u, "CAP SKIRRING" },
     {   6631008u, "MRCC DAKAR" },
     {   7010001u, "BUENOS AIRES PREFECTURA NAVAL RADIO" },
     {   7010003u, "MAR DEL PLATA PREFECTURA NAVAL RADIO" },
-    {   7010005u, "BAHIA BLANCA" },   /* YaDDNet */
+    {   7010005u, "BAHIA BLANCA" },
     {   7010006u, "SAN BLAS PREFECTURA NAVAL RADIO" },
     {   7010008u, "COMODORO RIVADAVIA PREFECTURA NAVAL RADIO" },
-    {   7010009u, "PUERTO DESEADO" },   /* YaDDNet */
+    {   7010009u, "PUERTO DESEADO" },
     {   7010010u, "RIO GALLEGOS PREFECTURA NAVAL RADIO" },
-    {   7010011u, "USHUAIA" },   /* YaDDNet */
+    {   7010011u, "USHUAIA" },
     {   7010111u, "ARGENTINA RADIO" },
     {   7010221u, "MAR DEL PLATA RADIO" },
     {   7100001u, "RIO DE JANEIRO (SANTA CRUZ)" },
@@ -921,7 +918,7 @@ static const coast_t coast[] = {
     {   7354755u, "SALINAS RADIO" },
     {   7354756u, "PUERTO BOLIVAR RADIO" },
     {   7354757u, "PUERTO AYORA RADIO" },
-    {   7354758u, "BAQUERIZO MORENO" },   /* YaDDNet */
+    {   7354758u, "BAQUERIZO MORENO" },
     {   7600120u, "ZORRITOS RADIO" },
     {   7600121u, "PAITA RADIO" },
     {   7600122u, "TALARA RADIO" },

@@ -14,9 +14,9 @@ others are ignored) into the compact binary file read by src/dsc/dsc_ships.c:
 All integers little endian.  Usage (once, from the x6100_gui folder):
 
   python3 src/dsc/make_ships_db.py vessels.csv rootfs/usr/share/x6100/dsc_ships.bin \
-          [yadd_mmsi_ship.txt] [yadd_mmsi_special.txt] [yadd_mmsi_coast.txt]
+          [extra_ships.txt] [extra_special.txt] [extra_coast.txt]
 
-The optional YaDDNet lists (www.yaddnet.org) only add MMSIs that vessels.csv
+The optional extra lists only add MMSIs that vessels.csv
 does not have, and fill a missing call sign / ship type of a known MMSI with
 the same name.  Three formats, recognised by their content:
 
@@ -65,8 +65,8 @@ def ship_mmsi(m):
     return len(m) == 9 and m.isdigit() and m[0] in "234567"
 
 
-def add_yadd(ships, path):
-    """YaDDNet list: add new MMSIs, complete known ones; returns (added, completed)"""
+def add_extra(ships, path):
+    """extra list: add new MMSIs, complete known ones; returns (added, completed)"""
     added = completed = 0
     with open(path, encoding="utf-8", errors="replace") as f:
         lines = f.read().splitlines()
@@ -107,7 +107,7 @@ def add_yadd(ships, path):
 
 def main():
     if len(sys.argv) < 3:
-        sys.exit("usage: make_ships_db.py vessels.csv out.bin [yadd lists...]")
+        sys.exit("usage: make_ships_db.py vessels.csv out.bin [extra lists...]")
     csv.field_size_limit(1 << 24)
     ships = {}
     rows = bad = no_mmsi = no_name = 0
@@ -141,7 +141,7 @@ def main():
 
     base_n = len(ships)
     for extra in sys.argv[3:]:
-        a, c = add_yadd(ships, extra)
+        a, c = add_extra(ships, extra)
         print("DSC ships: %s: %d new MMSIs, %d records completed" % (extra, a, c))
     if len(sys.argv) > 3:
         print("DSC ships: %d from vessels.csv, %d in total" % (base_n, len(ships)))
