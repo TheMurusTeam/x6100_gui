@@ -496,9 +496,11 @@ void radio_change_mute() {
 }
 
 /* 1KO125: the AF scopes during TX.  The transmitted audio reaches the GUI
- * only through the monitor (MONI); with Moni level 0 it is set to 1, and the
+ * only through the monitor (MONI); with Moni level 0 it is set to SCOPE_MONI, and the
  * speaker muted, for the TX only.  The settings are not changed: on false
  * both go back to them.  Bluetooth listening keeps its own volume. */
+#define SCOPE_MONI 100   /* TEST: 100 to hear whether the speaker is really muted; then 10 */
+
 void radio_scope_monitor(bool on) {
     static bool active;
     if (on == active)
@@ -508,7 +510,7 @@ void radio_scope_monitor(bool on) {
     active = on;
 
     pthread_mutex_lock(&vol_sink_mux);
-    WITH_RADIO_LOCK(x6100_control_moni_set(on ? 1 : (uint8_t)param_i_get(cfg.moni())));
+    WITH_RADIO_LOCK(x6100_control_moni_set(on ? SCOPE_MONI : (uint8_t)param_i_get(cfg.moni())));
     if (!vol_sink && !mute) {
         WITH_RADIO_LOCK(x6100_control_rxvol_set(on ? 0 : (uint8_t)param_i_get(cfg.volume())));
     }
