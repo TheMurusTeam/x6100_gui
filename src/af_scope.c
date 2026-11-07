@@ -17,6 +17,10 @@
  *   right 400 px: spectrum of the passband of the RX filter (the TX filter
  *                 while transmitting), ticks every 500 Hz, the manual notch
  *                 as a band, averaged with Spec. beta
+ *
+ * In TX the transmitted audio reaches the GUI only through the monitor: with
+ * Moni level 0, radio_scope_monitor() sets it to 1 and mutes the speaker for
+ * the TX only, without changing the settings.
  */
 #include "af_scope.h"
 
@@ -434,6 +438,10 @@ bool af_scope_process(void)
         wanted_last = w;
         if (layout_cb) layout_cb();     /* calls af_scope_set_geometry() */
     }
+    /* the transmitted audio comes only through the monitor: on for the TX
+     * while the strip is shown (radio_scope_monitor) */
+    radio_scope_monitor(shown && radio_get_state() == RADIO_TX);
+
     if (!shown)
         return false;
 
