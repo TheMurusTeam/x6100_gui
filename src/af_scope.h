@@ -34,6 +34,9 @@ bool af_scope_wanted(void);
 /* From the main screen layout: shown at logical y, or hidden */
 void af_scope_set_geometry(bool shown, lv_coord_t y);
 
+/* Whether the strip is on the screen now */
+bool af_scope_shown(void);
+
 /* From the main loop, with spectrum_process() and waterfall_process() */
 bool af_scope_process(void);
 

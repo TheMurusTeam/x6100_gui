@@ -1434,6 +1434,7 @@ static void apply_main_layout(void) {
     lv_coord_t panel_h = wf_h - (BAND_INFO_OFFSET_Y * 2 + BAND_INFO_HEIGHT) -
                          (scopes ? PANEL_GAP_BOTTOM : BTN_HEIGHT + PANEL_GAP_BOTTOM);
     panel_set_height(LV_MAX(panel_h, 1));
+    styles_panel_set_bottom(scopes ? PANEL_GAP_BOTTOM : BTN_HEIGHT + PANEL_GAP_BOTTOM);
 
     msg_align();
     msg_tiny_align();

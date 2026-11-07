@@ -162,3 +162,4 @@ void styles_update_meter_colors(meter_color_t mc);
 /* Resize the panel background: updates the shared panel style geometry and
  * re-renders the pre-computed gradient bitmap for the current skin. */
 void styles_panel_set_height(lv_coord_t h);
+void styles_panel_set_bottom(lv_coord_t gap);   /* 1KO125 */

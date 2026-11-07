@@ -48,7 +48,7 @@
 #define AF_W            SCREEN_WIDTH    /* 800: the two halves */
 #define AF_HALF         (AF_W / 2)
 #define AF_H            AF_SCOPE_HEIGHT
-#define AF_DB_MIN       30.0f           /* dB shown at least, floor to top */
+#define AF_DB_MIN       20.0f           /* dB shown at least, floor to top */
 
 /* audio thread -> render */
 static float           ring[AF_RING];
@@ -418,6 +418,11 @@ void af_scope_set_geometry(bool show, lv_coord_t y)
     } else {
         lv_obj_add_flag(label_obj, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+bool af_scope_shown(void)
+{
+    return shown;
 }
 
 bool af_scope_process(void)
