@@ -1,0 +1,632 @@
+diff --git a/src/x6100_webserver/apps.py b/src/x6100_webserver/apps.py
+index c8a1579..b7ec907 100644
+--- a/src/x6100_webserver/apps.py
++++ b/src/x6100_webserver/apps.py
+@@ -4,6 +4,7 @@ import json
+ import os
+ import pathlib
+ import subprocess
++from urllib.parse import quote_plus
+ 
+ import bottle
+ 
+@@ -18,6 +19,13 @@ bottle.TEMPLATE_PATH += [
+ 
+ STATIC_PATH = resources.files('x6100_webserver').joinpath('static')
+ 
++SSTV_PICS_PATH = pathlib.Path('/mnt/sstv/tx_pics')
++SSTV_TEXT_PATH = pathlib.Path('/mnt/sstv/tx_text')
++SSTV_MAX_PNG_SIZE = 500 * 1024
++SSTV_MAX_PNG_WIDTH = 800
++SSTV_MAX_PNG_HEIGHT = 600
++SSTV_MAX_TEMPLATE_SIZE = 16 * 1024
++
+ 
+ # Bands API
+ 
+@@ -148,6 +156,179 @@ def files(filepath=""):
+                 files.append(item.relative_to(path))
+         return bottle.template('files', dirs=dirs, files=files)
+ 
++# SSTV resources routes
++
++def _sstv_safe_name(filename, suffix):
++    if not filename:
++        raise ValueError("Missing filename")
++    name = pathlib.Path(filename).name
++    if (name != filename or name in (".", "..") or name.startswith(".")
++            or not name.lower().endswith(suffix)):
++        raise ValueError(f"Only {suffix} files are allowed")
++    return name
++
++
++def _sstv_read_upload(upload, max_size):
++    data = upload.file.read(max_size + 1)
++    if len(data) > max_size:
++        raise ValueError("File is too large")
++    return data
++
++
++def _sstv_write_file(directory, filename, data):
++    directory.mkdir(parents=True, exist_ok=True)
++    tmp = directory / (filename + ".upload")
++    target = directory / filename
++    try:
++        with tmp.open("wb") as fp:
++            fp.write(data)
++            fp.flush()
++            os.fsync(fp.fileno())
++        tmp.replace(target)
++        os.sync()
++    finally:
++        if tmp.exists():
++            tmp.unlink()
++
++
++@app.get('/sstv')
++def sstv():
++    SSTV_PICS_PATH.mkdir(parents=True, exist_ok=True)
++    SSTV_TEXT_PATH.mkdir(parents=True, exist_ok=True)
++    pics = sorted((p.name for p in SSTV_PICS_PATH.iterdir()
++                   if p.is_file() and not p.name.startswith('.')
++                   and p.suffix.lower() == '.png'), key=str.lower)
++    templates = sorted((p.name for p in SSTV_TEXT_PATH.iterdir()
++                        if p.is_file() and not p.name.startswith('.')
++                        and p.name.lower().endswith('.sstvtxt')), key=str.lower)
++    return bottle.template('sstv', pics=pics, templates=templates,
++                           status=bottle.request.query.get('status', ''),
++                           error=bottle.request.query.get('error', ''))
++
++
++
++@app.get('/sstv/image/<filename:path>')
++def sstv_image(filename):
++    try:
++        name = _sstv_safe_name(filename, '.png')
++    except ValueError:
++        bottle.abort(404)
++    return bottle.static_file(name, root=str(SSTV_PICS_PATH))
++
++
++@app.post('/sstv/upload/image')
++def sstv_upload_image():
++    upload = bottle.request.files.get('file')
++    try:
++        if upload is None:
++            raise ValueError("Choose a PNG file first")
++        name = _sstv_safe_name(upload.filename, '.png')
++        data = _sstv_read_upload(upload, SSTV_MAX_PNG_SIZE)
++        if (len(data) < 24 or data[:8] != b'\x89PNG\r\n\x1a\n'
++                or data[12:16] != b'IHDR'):
++            raise ValueError("The selected file is not a valid PNG")
++        width = int.from_bytes(data[16:20], 'big')
++        height = int.from_bytes(data[20:24], 'big')
++        if width < 1 or height < 1:
++            raise ValueError("The PNG has invalid dimensions")
++        if width > SSTV_MAX_PNG_WIDTH or height > SSTV_MAX_PNG_HEIGHT:
++            raise ValueError("Maximum image dimensions are 800x600 pixels")
++        if width < height:
++            raise ValueError("The image must use landscape orientation")
++        _sstv_write_file(SSTV_PICS_PATH, name, data)
++        bottle.redirect('/sstv?status=Image+uploaded')
++    except (ValueError, OSError) as e:
++        bottle.redirect('/sstv?error=' + quote_plus(str(e)))
++
++
++@app.post('/sstv/create/template')
++def sstv_create_template():
++    try:
++        template_name = (bottle.request.forms.get('template_name') or '').strip()
++        middle = (bottle.request.forms.get('middle') or '').strip()
++        bottom = (bottle.request.forms.get('bottom') or '').strip()
++
++        if not template_name:
++            raise ValueError("Enter a template name")
++        if template_name.lower().endswith('.sstvtxt'):
++            template_name = template_name[:-8]
++        if not template_name:
++            raise ValueError("Enter a template name")
++        if pathlib.Path(template_name).name != template_name or template_name in ('.', '..'):
++            raise ValueError("Invalid template name")
++        if any(c in template_name for c in ('/', '\\', '\x00')):
++            raise ValueError("Invalid template name")
++
++        filename = template_name + '.sstvtxt'
++        filename = _sstv_safe_name(filename, '.sstvtxt')
++        if (SSTV_TEXT_PATH / filename).exists():
++            raise ValueError("A template with this name already exists")
++
++        # The firmware appends the configured local callsign to 'bottom'.
++        # Keep exactly one separating space when the user entered bottom text.
++        if bottom:
++            bottom += ' '
++
++        obj = {"middle": middle, "bottom": bottom}
++        data = (json.dumps(obj, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
++        if len(data) > SSTV_MAX_TEMPLATE_SIZE:
++            raise ValueError("Template is too large")
++        _sstv_write_file(SSTV_TEXT_PATH, filename, data)
++        bottle.redirect('/sstv?status=Template+created')
++    except (ValueError, OSError) as e:
++        bottle.redirect('/sstv?error=' + quote_plus(str(e)))
++
++
++@app.post('/sstv/upload/template')
++def sstv_upload_template():
++    upload = bottle.request.files.get('file')
++    try:
++        if upload is None:
++            raise ValueError("Choose an SSTVTXT file first")
++        name = _sstv_safe_name(upload.filename, '.sstvtxt')
++        data = _sstv_read_upload(upload, SSTV_MAX_TEMPLATE_SIZE)
++        try:
++            obj = json.loads(data.decode('utf-8'))
++        except (UnicodeDecodeError, json.JSONDecodeError):
++            raise ValueError("The template is not valid UTF-8 JSON")
++        if not isinstance(obj, dict):
++            raise ValueError("The template must contain a JSON object")
++        for key in ('middle', 'bottom'):
++            if key in obj and obj[key] is not None and not isinstance(obj[key], str):
++                raise ValueError(f'"{key}" must be a string')
++        _sstv_write_file(SSTV_TEXT_PATH, name, data)
++        bottle.redirect('/sstv?status=Template+uploaded')
++    except (ValueError, OSError) as e:
++        bottle.redirect('/sstv?error=' + quote_plus(str(e)))
++
++
++def _sstv_delete(directory, filename, suffix):
++    name = _sstv_safe_name(filename, suffix)
++    path = directory / name
++    if not path.is_file():
++        raise ValueError("File not found")
++    path.unlink()
++    os.sync()
++
++
++@app.post('/sstv/delete/image')
++def sstv_delete_image():
++    try:
++        _sstv_delete(SSTV_PICS_PATH, bottle.request.forms.get('filename'), '.png')
++        bottle.redirect('/sstv?status=Image+deleted')
++    except (ValueError, OSError) as e:
++        bottle.redirect('/sstv?error=' + quote_plus(str(e)))
++
++
++@app.post('/sstv/delete/template')
++def sstv_delete_template():
++    try:
++        _sstv_delete(SSTV_TEXT_PATH, bottle.request.forms.get('filename'), '.sstvtxt')
++        bottle.redirect('/sstv?status=Template+deleted')
++    except (ValueError, OSError) as e:
++        bottle.redirect('/sstv?error=' + quote_plus(str(e)))
++
++
+ # Timezone routes
+ 
+ 
+diff --git a/src/x6100_webserver/static/css/base.css b/src/x6100_webserver/static/css/base.css
+index 33ae9dd..aaf4f14 100644
+--- a/src/x6100_webserver/static/css/base.css
++++ b/src/x6100_webserver/static/css/base.css
+@@ -34,3 +34,156 @@ th.hdr.name {
+ #digital_modes {
+     min-width: 100%;
+ }
++
++
++.sstv-section {
++    margin-bottom: 2rem;
++}
++
++.sstv-files {
++    width: 100%;
++}
++
++.sstv-files td:first-child {
++    word-break: break-all;
++}
++
++.sstv-action {
++    width: 1%;
++    white-space: nowrap;
++    text-align: right;
++}
++
++.sstv-action form {
++    margin: 0;
++}
++
++.sstv-status {
++    font-weight: bold;
++}
++
++.sstv-error {
++    font-weight: bold;
++}
++
++
++.sstv-template-editor {
++    max-width: 42rem;
++}
++
++.sstv-template-editor label {
++    display: block;
++    margin-bottom: 1rem;
++}
++
++.sstv-template-editor input[type="text"] {
++    width: 100%;
++}
++
++.sstv-template-editor input:disabled {
++    opacity: 0.65;
++    cursor: not-allowed;
++}
++
++.sstv-bottom-row {
++    display: flex;
++    align-items: center;
++    gap: 0.6rem;
++}
++
++.sstv-bottom-row input {
++    flex: 1 1 auto;
++}
++
++.sstv-callsign-placeholder {
++    flex: 0 0 auto;
++    white-space: nowrap;
++    font-family: monospace;
++}
++
++
++.sstv-thumbnail {
++    width: 90px;
++    padding-top: 4px;
++    padding-bottom: 4px;
++}
++
++.sstv-thumbnail img {
++    display: block;
++    width: 80px;
++    height: 60px;
++    object-fit: contain;
++}
++
++.sstv-filename {
++    word-break: break-all;
++}
++
++.sstv-template-row td {
++    padding-top: 0.25rem !important;
++    padding-bottom: 0.25rem !important;
++    line-height: 1.2;
++}
++
++.sstv-template-row button {
++    margin-top: 0 !important;
++    margin-bottom: 0 !important;
++    padding-top: 0.2rem !important;
++    padding-bottom: 0.2rem !important;
++}
++
++
++.sstv-photo-editor {
++    margin-top: 1.5rem;
++    max-width: 42rem;
++}
++
++.sstv-photo-editor h4 {
++    margin-bottom: 0.5rem;
++}
++
++#sstv-photo-workspace {
++    margin-top: 1rem;
++}
++
++#sstv-photo-canvas {
++    display: block;
++    width: min(100%, 320px);
++    height: auto;
++    aspect-ratio: 5 / 4;
++    border: 1px solid currentColor;
++    touch-action: none;
++    cursor: grab;
++}
++
++#sstv-photo-canvas:active {
++    cursor: grabbing;
++}
++
++#sstv-photo-workspace label {
++    display: block;
++    margin-top: 0.8rem;
++    max-width: 320px;
++}
++
++#sstv-photo-zoom,
++#sstv-photo-name {
++    width: 100%;
++}
++
++#sstv-photo-zoom {
++    accent-color: #0066cc;
++}
++
++#sstv-photo-zoom::-webkit-slider-thumb {
++    background: #0066cc;
++}
++
++#sstv-photo-zoom::-moz-range-thumb {
++    background: #0066cc;
++    border-color: #0066cc;
++}
++
++#sstv-photo-message {
++    margin-left: 0.6rem;
++}
+diff --git a/src/x6100_webserver/views/base.html b/src/x6100_webserver/views/base.html
+index 5e14b64..e0e7de2 100644
+--- a/src/x6100_webserver/views/base.html
++++ b/src/x6100_webserver/views/base.html
+@@ -35,6 +35,7 @@
+         <a href="/bands">Bands</a>
+         <a href="/digital_modes">Digital modes</a>
+         <a href="/files/">File browser</a>
++        <a href="/sstv">SSTV</a>
+         <a href="/time">Time Editor</a>
+       </nav>
+     </header>
+diff --git a/x6100-webserver-v0.0.4/src/x6100_webserver/views/sstv.html b/src/x6100_webserver/views/sstv.html
+new file mode 100644
+index 0000000..598596a
+--- /dev/null
++++ b/src/x6100_webserver/views/sstv.html
+@@ -0,0 +1,247 @@
++% rebase('base.html', title='SSTV Resources')
++<h2>SSTV Resources</h2>
++<p>Manage images and text templates used by the SSTV transmitter.</p>
++
++% if status:
++<p class="sstv-status">{{status}}</p>
++% end
++% if error:
++<p class="sstv-error">{{error}}</p>
++% end
++
++<section class="sstv-section">
++  <h3>TX Images</h3>
++  % if pics:
++  <table class="sstv-files">
++    <tbody>
++    % for item in pics:
++      <tr class="sstv-image-row">
++        <td class="sstv-thumbnail"><img src="/sstv/image/{{item}}" alt="{{item}}"></td>
++        <td class="sstv-filename">{{item}}</td>
++        <td class="sstv-action">
++          <form method="post" action="/sstv/delete/image" onsubmit="return confirm('Delete this image?');">
++            <input type="hidden" name="filename" value="{{item}}">
++            <button type="submit">Delete</button>
++          </form>
++        </td>
++      </tr>
++    % end
++    </tbody>
++  </table>
++  % else:
++  <p>No uploaded PNG images.</p>
++  % end
++
++  <div class="sstv-photo-editor">
++    <h3>Create new TX Image</h3>
++    <p>Choose a photo, adjust the crop, then save as 320x256 PNG to the radio.</p>
++    <input type="file" id="sstv-photo-input" accept="image/*">
++
++    <div id="sstv-photo-workspace" hidden>
++      <canvas id="sstv-photo-canvas" width="320" height="256"></canvas>
++      <small>Drag the image to adjust the crop.</small>
++
++      <label for="sstv-photo-zoom">Zoom
++        <input type="range" id="sstv-photo-zoom" min="1" max="3" step="0.01" value="1">
++      </label>
++
++      <label for="sstv-photo-name">Filename
++        <input type="text" id="sstv-photo-name" maxlength="64" placeholder="sstv-image">
++      </label>
++
++      <button type="button" id="sstv-photo-save">Save to Radio</button>
++      <span id="sstv-photo-message" role="status"></span>
++    </div>
++  </div>
++
++  <script>
++  (() => {
++    const input = document.getElementById('sstv-photo-input');
++    const workspace = document.getElementById('sstv-photo-workspace');
++    const canvas = document.getElementById('sstv-photo-canvas');
++    const ctx = canvas.getContext('2d');
++    const zoom = document.getElementById('sstv-photo-zoom');
++    const nameInput = document.getElementById('sstv-photo-name');
++    const saveButton = document.getElementById('sstv-photo-save');
++    const message = document.getElementById('sstv-photo-message');
++
++    let image = null;
++    let objectUrl = null;
++    let baseScale = 1;
++    let offsetX = 0;
++    let offsetY = 0;
++    let dragging = false;
++    let pointerX = 0;
++    let pointerY = 0;
++
++    function clampOffsets() {
++      if (!image) return;
++      const scale = baseScale * Number(zoom.value);
++      const w = image.naturalWidth * scale;
++      const h = image.naturalHeight * scale;
++      const maxX = Math.max(0, (w - canvas.width) / 2);
++      const maxY = Math.max(0, (h - canvas.height) / 2);
++      offsetX = Math.max(-maxX, Math.min(maxX, offsetX));
++      offsetY = Math.max(-maxY, Math.min(maxY, offsetY));
++    }
++
++    function draw() {
++      if (!image) return;
++      clampOffsets();
++      const scale = baseScale * Number(zoom.value);
++      const w = image.naturalWidth * scale;
++      const h = image.naturalHeight * scale;
++      const x = (canvas.width - w) / 2 + offsetX;
++      const y = (canvas.height - h) / 2 + offsetY;
++      ctx.clearRect(0, 0, canvas.width, canvas.height);
++      ctx.drawImage(image, x, y, w, h);
++    }
++
++    function defaultName(filename) {
++      const dot = filename.lastIndexOf('.');
++      const stem = dot > 0 ? filename.slice(0, dot) : filename;
++      const safe = stem.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
++      return safe || 'sstv-image';
++    }
++
++    input.addEventListener('change', () => {
++      const file = input.files && input.files[0];
++      if (!file) return;
++      message.textContent = '';
++      if (objectUrl) URL.revokeObjectURL(objectUrl);
++      objectUrl = URL.createObjectURL(file);
++      const candidate = new Image();
++      candidate.onload = () => {
++        image = candidate;
++        baseScale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
++        offsetX = 0;
++        offsetY = 0;
++        zoom.value = '1';
++        nameInput.value = defaultName(file.name);
++        workspace.hidden = false;
++        draw();
++      };
++      candidate.onerror = () => {
++        image = null;
++        workspace.hidden = true;
++        message.textContent = 'Unsupported image format.';
++      };
++      candidate.src = objectUrl;
++    });
++
++    zoom.addEventListener('input', draw);
++
++    canvas.addEventListener('pointerdown', (event) => {
++      if (!image) return;
++      dragging = true;
++      pointerX = event.clientX;
++      pointerY = event.clientY;
++      canvas.setPointerCapture(event.pointerId);
++    });
++    canvas.addEventListener('pointermove', (event) => {
++      if (!dragging) return;
++      offsetX += event.clientX - pointerX;
++      offsetY += event.clientY - pointerY;
++      pointerX = event.clientX;
++      pointerY = event.clientY;
++      draw();
++    });
++    const stopDrag = () => { dragging = false; };
++    canvas.addEventListener('pointerup', stopDrag);
++    canvas.addEventListener('pointercancel', stopDrag);
++
++    saveButton.addEventListener('click', () => {
++      if (!image) return;
++      let filename = nameInput.value.trim();
++      if (!filename) {
++        message.textContent = 'Enter a filename.';
++        return;
++      }
++      filename = filename.replace(/\.png$/i, '');
++      if (!/^[A-Za-z0-9_-]+$/.test(filename)) {
++        message.textContent = 'Use only letters, numbers, hyphens and underscores in the filename.';
++        return;
++      }
++      message.textContent = 'Preparing image...';
++      saveButton.disabled = true;
++      canvas.toBlob((blob) => {
++        if (!blob) {
++          message.textContent = 'Could not create PNG image.';
++          saveButton.disabled = false;
++          return;
++        }
++        const form = new FormData();
++        form.append('file', blob, filename + '.png');
++        fetch('/sstv/upload/image', { method: 'POST', body: form })
++          .then((response) => {
++            if (!response.ok) throw new Error();
++            window.location.href = response.url || '/sstv';
++          })
++          .catch(() => {
++            message.textContent = 'Upload failed.';
++            saveButton.disabled = false;
++          });
++      }, 'image/png');
++    });
++  })();
++  </script>
++</section>
++
++<section class="sstv-section">
++  <h3>Create Reply Template</h3>
++  <p>Create a new template for your SSTV replies. The target callsign and your callsign are added automatically by the radio.</p>
++
++  <form method="post" action="/sstv/create/template" class="sstv-template-editor">
++    <label>Top text
++      <input type="text" value="Reserved for target callsign" disabled>
++    </label>
++
++    <label>Middle text
++      <input type="text" name="middle" placeholder="TNX FOR QSO" maxlength="80">
++    </label>
++
++    <label>Bottom text
++      <span class="sstv-bottom-row">
++        <input type="text" name="bottom" placeholder="73 DE" maxlength="80">
++        <span class="sstv-callsign-placeholder">&lt;MY CALLSIGN&gt;</span>
++      </span>
++    </label>
++
++    <label>Template name
++      <input type="text" name="template_name" placeholder="qso-reply" maxlength="64" required>
++    </label>
++
++    <button type="submit">Create Template</button>
++  </form>
++</section>
++
++<section class="sstv-section">
++  <h3>Text Templates</h3>
++  % if templates:
++  <table class="sstv-files">
++    <tbody>
++    % for item in templates:
++      <tr class="sstv-template-row">
++        <td>{{item}}</td>
++        <td class="sstv-action">
++          <form method="post" action="/sstv/delete/template" onsubmit="return confirm('Delete this template?');">
++            <input type="hidden" name="filename" value="{{item}}">
++            <button type="submit">Delete</button>
++          </form>
++        </td>
++      </tr>
++    % end
++    </tbody>
++  </table>
++  % else:
++  <p>No SSTV text templates.</p>
++  % end
++
++  <form method="post" action="/sstv/upload/template" enctype="multipart/form-data">
++    <label>Upload SSTVTXT template
++      <input type="file" name="file" accept=".sstvtxt,application/json" required>
++    </label>
++    <button type="submit">Upload</button>
++  </form>
++  <small>Maximum file size: 16 KB. The file must contain valid JSON.</small>
++</section>
