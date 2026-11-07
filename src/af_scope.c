@@ -200,7 +200,9 @@ static void render(void)
     for (int i = AF_NFFT - 4 * AF_SCOPE_N; i < AF_NFFT; ++i)
         pk = fmaxf(pk, fabsf(a[i]));
     scope_peak = pk > scope_peak ? pk : scope_peak * 0.9f + pk * 0.1f;
-    if (scope_peak < 0.002f) scope_peak = 0.002f;
+    /* not below -34 dBFS: silence stays a flat line instead of its noise
+     * being raised to full height */
+    if (scope_peak < 0.02f) scope_peak = 0.02f;
 
     /* the last rising zero crossing that leaves a whole window after it */
     float thr = scope_peak * 0.1f;
