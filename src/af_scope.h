@@ -6,7 +6,8 @@
  * AF scopes: an oscilloscope and an AF spectrum of the receiver audio, or of
  * the transmitted audio while transmitting, in two 250 x 100 views floating
  * on the waterfall above the F keys, at its right edge.  Settings > Display >
- * AF scopes.  Hidden while an application, RTTY or Broadcast Info is shown.
+ * AF scopes.  Hidden while an application, the RTTY / CW decoder panel or
+ * Broadcast Info is shown.
  *
  * Opaque on the primary plane, as the RF spectrum and the waterfall are,
  * with their colours, fill and averaging (Spec. beta).

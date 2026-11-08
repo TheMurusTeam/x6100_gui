@@ -28,7 +28,7 @@
 #include "globals.h"
 #include "dsp.h"
 #include "radio.h"
-#include "rtty.h"
+#include "panel.h"
 #include "waterfall.h"
 #include "broadcast_overlay.h"
 #include "styles.h"
@@ -425,7 +425,7 @@ void af_scope_init(lv_obj_t *overlay)
 
 static bool wanted(void)
 {
-    return param_i_get(cfg.ui.af_scopes()) && !dialog_open && rtty_get_state() == RTTY_OFF &&
+    return param_i_get(cfg.ui.af_scopes()) && !dialog_open && !panel_is_visible() &&
            !broadcast_overlay_visible();
 }
 

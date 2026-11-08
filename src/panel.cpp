@@ -255,6 +255,11 @@ void panel_hide() {
     scheduler_msg_send(MSG_PANEL_HIDE, NULL);
 }
 
+/* 1KO125: the AF scopes hide while it is shown */
+bool panel_is_visible(void) {
+    return obj && !lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN);
+}
+
 void panel_clear() {
     if (lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN) == false) {
         buf[0] = '\0';
