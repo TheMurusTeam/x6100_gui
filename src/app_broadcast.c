@@ -20,15 +20,17 @@
  *                  goes to the next one of the list at once, and measures
  *                  the next span after the last one.  The list is forgotten
  *                  when the VFO is moved, after 2 minutes, or with another
- *                  mode.  At the end of the band Scan stops; pressed again,
- *                  it goes on with the next band from its first channel.
+ *                  mode.  At the end of the band the scan goes on by itself
+ *                  with the next band from its first channel (after the
+ *                  last band, the first one); it stops after a whole round
+ *                  of the bands with no station.
  *                  Long press: the band again from its first channel.
  *                  Pressed during a measure: stop
  *          Info   what EiBi says about the current frequency
  *
  * Microphone: V/M opens and closes the band list, DOWN is Scan, UP scans
- * down the band the same way (at its start, on with the previous band from
- * its last channel).  The mode before the application is given back when it
+ * down the band the same way (at its start, on by itself with the previous
+ * band from its last channel).  The mode before the application is given back when it
  * closes; inside it the dial is always AM.  Wait, RF Level and AF Level are
  * kept in /mnt/broadcast_scan.txt (defaults 0.7 s, 10 dB, 4 dB).
  *   page 2  Wait, RF Level (carrier), AF Level (modulation), Close
@@ -382,8 +384,7 @@ static int bc_list_n = 0;
 static int bc_list_pos = -1;        /* the station of the list we are on */
 static uint32_t bc_list_time;
 static int32_t bc_list_dial;        /* the dial on that station */
-static bool bc_at_end = false;      /* the last scan reached the end of the band */
-static int bc_end_dir = 1;          /* ... going this way */
+static int bc_hops = 0;             /* bands ended in a row with no station */
 
 static void bc_list_forget(void)
 {
@@ -400,18 +401,25 @@ static void bc_go_station(int i)
     bc_show(bc_list[i]);
 }
 
+static void bc_band_edge(int dir);
+static void bc_scan_start(int dir);
+
+/* the end of the band (its start going down): on with the next band, from
+ * its first channel (going down, the previous band from its last one) */
 static void bc_end_of_band(void)
 {
+    int dir = bc_dir;
     bc_stop(NULL);
     bc_list_forget();
-    bc_at_end = true;
-    bc_end_dir = bc_dir;
-    int other = (bc_band + bc_dir + BC_BANDS) % BC_BANDS;
-    if (bc_dir > 0)
-        msg_update_text_fmt("%s: end of the band. Scan: %s", bc_bands[bc_band].name, bc_bands[other].name);
-    else
-        msg_update_text_fmt("%s: start of the band. Scan down: %s", bc_bands[bc_band].name,
-                            bc_bands[other].name);
+    if (++bc_hops > BC_BANDS) {             /* a whole round, no station */
+        bc_hops = 0;
+        msg_update_text_fmt("Scan stopped: no station in any band, mode %s", bc_mode_names[bc_mode]);
+        return;
+    }
+    bc_band = (bc_band + dir + BC_BANDS) % BC_BANDS;
+    bc_save();
+    bc_band_edge(dir);
+    bc_scan_start(dir);
 }
 
 static void bc_check_span(void)
@@ -458,6 +466,7 @@ static void bc_check_span(void)
             (long)bc_base, (long)(bc_width / 2), frames, checked, bc_list_n);
 
     if (bc_list_n) {
+        bc_hops = 0;
         bc_list_time = lv_tick_get();
         bc_go_station(0);
         return;
@@ -524,12 +533,10 @@ static void bc_scan_start(int dir)
         return;
     }
     bc_dir = dir;
-    bc_at_end = false;
     bc_list_forget();
     bc_build_channels();
-    if (bc_nch == 0) {
-        msg_update_text_fmt("%s: no channel to look at in mode %s", bc_bands[bc_band].name,
-                            bc_mode_names[bc_mode]);
+    if (bc_nch == 0) {                      /* none in this mode: the next band */
+        bc_end_of_band();
         return;
     }
     int32_t cur = cparam_i_get(cfg.cur.fg_freq());
@@ -560,7 +567,6 @@ static void bc_band_edge(int dir)
 {
     bc_stop(NULL);
     bc_list_forget();
-    bc_at_end = false;
     bc_dir = dir;
     bc_tune(dir > 0 ? bc_bands[bc_band].lo : bc_bands[bc_band].hi);
     bc_from_band_start = true;
@@ -574,13 +580,7 @@ static void bc_scan_next(int dir)
         msg_update_text_fmt("Choose a band first");
         return;
     }
-    if (bc_at_end && bc_end_dir == dir) {
-        bc_band = (bc_band + dir + BC_BANDS) % BC_BANDS;
-        bc_save();
-        bc_band_edge(dir);
-        bc_scan_start(dir);
-        return;
-    }
+    bc_hops = 0;
     bool on_list = bc_list_n && bc_list_pos >= 0 && dir == bc_dir &&
                    cparam_i_get(cfg.cur.fg_freq()) == bc_list_dial;
     bool fresh = on_list && lv_tick_elaps(bc_list_time) < BC_LIST_MS;
@@ -612,7 +612,6 @@ static void bc_mode_cb(button_data_t *d)
     (void)d;
     bc_mode = (bc_mode + 1) % 3;
     bc_list_forget();
-    bc_at_end = false;
     bc_labels();
     bc_save();
 }
@@ -636,6 +635,7 @@ static void bc_scan_hold_cb(button_data_t *d)
         msg_update_text_fmt("Choose a band first");
         return;
     }
+    bc_hops = 0;
     bc_band_edge(1);
     bc_scan_start(1);
 }
