@@ -67,6 +67,7 @@
 #define AF_IH           (AF_Y1 - AF_Y0 + 1)
 #define AF_RADIUS       6
 #define AF_DB_MIN       20.0f           /* dB shown at least, floor to top */
+#define AF_SCALE_MIN    3000            /* the spectrum shows 0 Hz to this at least */
 #define AF_NOTCH_TOP    200             /* the notch arrow: its top, Hz, always this wide */
 
 /* audio thread -> render */
@@ -257,11 +258,16 @@ static void render(void)
         lpf_block(smooth, db, param_i_get(cfg.ui.spectrum_beta()) * 0.01f, AF_NFFT / 2);
     }
 
-    int32_t from, to;
+    /* the filter (lo..hi) on a fixed scale: from 0 Hz to 3 kHz, or to the
+     * filter's top (the next 500 Hz) when it is wider */
+    int32_t lo, hi;
     bool tx;
-    passband(&from, &to, &tx);
+    passband(&lo, &hi, &tx);
+    int32_t from = 0, to = (hi + 499) / 500 * 500;
+    if (to < AF_SCALE_MIN) to = AF_SCALE_MIN;
+    if (to > AF_RATE / 2) to = AF_RATE / 2;
     float hz_per_bin = (float)AF_RATE / AF_NFFT;
-    int b0 = (int)(from / hz_per_bin), b1 = (int)(to / hz_per_bin) + 1;
+    int b0 = (int)(lo / hz_per_bin), b1 = (int)(hi / hz_per_bin) + 1;
     if (b1 > AF_NFFT / 2 - 1) b1 = AF_NFFT / 2 - 1;
 
     /* scale to what is in the passband: the bottom just under the noise (its
@@ -397,7 +403,8 @@ static void label_draw_cb(lv_event_t *e)
     }
 
     char t[16];
-    for (int32_t f = ((from + 499) / 500) * 500; f <= to; f += 500) {
+    int32_t step = to - from > AF_SCALE_MIN ? 1000 : 500;   /* labels apart */
+    for (int32_t f = ((from + step - 1) / step) * step; f <= to; f += step) {
         int x = (int)((float)(f - from) * (sw - 1) / (to - from));
         if (x < 14 || x > sw - 14) continue;
         if (f % 1000) snprintf(t, sizeof(t), "%d.5", (int)(f / 1000));
