@@ -21,7 +21,7 @@ every X6100 firmware, so that every owner of this radio can use them.
 
 ## 1KO125 firmware for the Xiegu X6100
 
-An alternative firmware for the Xiegu X6100, based on
+A development platform for the Xiegu X6100, based on
 [R1CBU x6100_gui](https://github.com/OpenX6100/x6100_gui) (the LVGL GUI of
 the X6100 by Oleg Belousov R1CBU, Georgy Dyuldin R2RFE and contributors),
 with receiving and digital-mode applications added by Hany El Imam 1KO125.
