@@ -67,6 +67,8 @@
 #define AF_IH           (AF_Y1 - AF_Y0 + 1)
 #define AF_RADIUS       6
 #define AF_DB_MIN       20.0f           /* dB shown at least, floor to top */
+#define AF_CAGE_W       3               /* the filter cage: line width */
+#define AF_CAGE_TOP     (AF_Y0 + 18)    /* its top, under the TX / DNF AUTO labels */
 
 /* audio thread -> render */
 static float           ring[AF_RING];
@@ -184,6 +186,31 @@ static void vspan(int x, int y0, int y1, uint32_t c, uint8_t a)
         p[y] = a == 255 ? c : blend(p[y], c, a);
 }
 
+/* a dot of the filter cage, AF_CAGE_W pixels wide, kept inside columns sx0..sx1 */
+static void cage_dot(int x, int y, int sx0, int sx1, uint32_t c)
+{
+    for (int dx = -(AF_CAGE_W / 2); dx < AF_CAGE_W - AF_CAGE_W / 2; ++dx) {
+        int xx = x + dx;
+        if (xx < sx0 || xx > sx1) continue;
+        uint32_t *p = px(xx, 0);
+        for (int dy = -(AF_CAGE_W / 2); dy < AF_CAGE_W - AF_CAGE_W / 2; ++dy) {
+            int yy = y + dy;
+            if (yy >= AF_Y0 && yy <= AF_Y1) p[yy] = c;
+        }
+    }
+}
+
+/* a line of the filter cage */
+static void cage_line(float x0, float y0, float x1, float y1, int sx0, int sx1, uint32_t c)
+{
+    int n = (int)ceilf(fmaxf(fabsf(x1 - x0), fabsf(y1 - y0)));
+    if (n < 1) n = 1;
+    for (int i = 0; i <= n; ++i) {
+        float t = (float)i / n;
+        cage_dot((int)lrintf(x0 + t * (x1 - x0)), (int)lrintf(y0 + t * (y1 - y0)), sx0, sx1, c);
+    }
+}
+
 /* a trace: continuous between neighbouring columns */
 static void trace(int x0, int n, const float *v, uint32_t c)
 {
@@ -255,11 +282,18 @@ static void render(void)
         lpf_block(smooth, db, param_i_get(cfg.ui.spectrum_beta()) * 0.01f, AF_NFFT / 2);
     }
 
-    int32_t from, to;
+    /* the filter (lo..hi) and, around it, a part of the spectrum outside it on
+     * both sides: 15 % of its width, at least 150 Hz (none below 0 Hz) */
+    int32_t lo, hi;
     bool tx;
-    passband(&from, &to, &tx);
+    passband(&lo, &hi, &tx);
+    int32_t margin = (hi - lo) * 15 / 100;
+    if (margin < 150) margin = 150;
+    int32_t from = lo - margin, to = hi + margin;
+    if (from < 0) from = 0;
+    if (to > AF_RATE / 2) to = AF_RATE / 2;
     float hz_per_bin = (float)AF_RATE / AF_NFFT;
-    int b0 = (int)(from / hz_per_bin), b1 = (int)(to / hz_per_bin) + 1;
+    int b0 = (int)(lo / hz_per_bin), b1 = (int)(hi / hz_per_bin) + 1;
     if (b1 > AF_NFFT / 2 - 1) b1 = AF_NFFT / 2 - 1;
 
     /* scale to what is in the passband: the bottom just under the noise (its
@@ -298,17 +332,9 @@ static void render(void)
         sy[x] = AF_Y0 + (1.0f - t) * (AF_IH - 1);
     }
 
-    /* the notch, under the trace */
     int32_t n_from, n_to;
     bool n_auto = false;
-    if (!tx && notch(&n_from, &n_to, &n_auto)) {
-        int x0 = (int)((float)(n_from - from) * (sw - 1) / (to - from));
-        int x1 = (int)((float)(n_to - from) * (sw - 1) / (to - from));
-        if (x0 < 0) x0 = 0;
-        if (x1 > sw - 1) x1 = sw - 1;
-        for (int x = x0; x <= x1; ++x)
-            vspan(sx + x, AF_Y0, AF_Y1, lv_color_white().full, 128);
-    }
+    bool n_on = !tx && notch(&n_from, &n_to, &n_auto) && n_from > lo && n_to < hi;
 
     /* ticks every 500 Hz */
     for (int32_t f = ((from + 499) / 500) * 500; f <= to; f += 500) {
@@ -329,6 +355,29 @@ static void render(void)
         }
     }
     trace(sx, sw, sy, c_line);
+
+    /* the filter cage, over the spectrum: sloping sides (vertical at 0 Hz),
+     * a V down to the bottom at the manual notch */
+    {
+        float k = (float)(sw - 1) / (to - from);
+        float skirt = fmaxf(40.0f, 0.06f * (hi - lo));
+        float xl = sx + (lo - from) * k, xh = sx + (hi - from) * k;
+        float top = AF_CAGE_TOP, bot = AF_Y1;
+        uint32_t c = lv_color_hex(0xAAAAAA).full;
+        int s0 = sx, s1 = sx + sw - 1;
+        cage_line(lo > 0 ? xl - skirt * k : xl, bot, xl, top, s0, s1, c);
+        if (n_on) {
+            float xa = sx + (n_from - from) * k, xb = sx + (n_to - from) * k;
+            float xc = (xa + xb) / 2;
+            cage_line(xl, top, xa, top, s0, s1, c);
+            cage_line(xa, top, xc, bot, s0, s1, c);
+            cage_line(xc, bot, xb, top, s0, s1, c);
+            cage_line(xb, top, xh, top, s0, s1, c);
+        } else {
+            cage_line(xl, top, xh, top, s0, s1, c);
+        }
+        cage_line(xh, top, xh + skirt * k, bot, s0, s1, c);
+    }
 
     /* labels to redraw? */
     if (from != lab_from || to != lab_to || tx != lab_tx || n_auto != lab_auto) {
