@@ -67,6 +67,8 @@
 #define AF_IH           (AF_Y1 - AF_Y0 + 1)
 #define AF_RADIUS       6
 #define AF_DB_MIN       20.0f           /* dB shown at least, floor to top */
+#define AF_LINE_W       2               /* the notch arrow: as the frames */
+#define AF_NOTCH_TOP    100             /* its top, Hz: always this wide */
 
 /* audio thread -> render */
 static float           ring[AF_RING];
@@ -156,8 +158,8 @@ static bool notch(int32_t *from, int32_t *to, bool *is_auto)
     }
     int32_t c = param_i_get(cfg.dsp.dnf_center());
     int32_t w = param_i_get(cfg.dsp.dnf_width());
-    *from = c - w;
-    *to = c + w;
+    *from = c - w / 2;              /* dnf_width: its bandwidth */
+    *to = c + w - w / 2;
     return true;
 }
 
@@ -182,6 +184,23 @@ static void vspan(int x, int y0, int y1, uint32_t c, uint8_t a)
     uint32_t *p = px(x, 0);
     for (int y = y0; y <= y1; ++y)
         p[y] = a == 255 ? c : blend(p[y], c, a);
+}
+
+/* a line AF_LINE_W pixels wide, kept inside columns sx0..sx1 */
+static void line(float x0, float y0, float x1, float y1, int sx0, int sx1, uint32_t c)
+{
+    int n = (int)ceilf(fmaxf(fabsf(x1 - x0), fabsf(y1 - y0)));
+    if (n < 1) n = 1;
+    for (int i = 0; i <= n; ++i) {
+        float t = (float)i / n;
+        int x = (int)lrintf(x0 + t * (x1 - x0)), y = (int)lrintf(y0 + t * (y1 - y0));
+        for (int dx = 0; dx < AF_LINE_W; ++dx) {
+            if (x + dx < sx0 || x + dx > sx1) continue;
+            uint32_t *p = px(x + dx, 0);
+            for (int dy = 0; dy < AF_LINE_W; ++dy)
+                if (y + dy >= AF_Y0 && y + dy <= AF_Y1) p[y + dy] = c;
+        }
+    }
 }
 
 /* a trace: continuous between neighbouring columns */
@@ -298,17 +317,9 @@ static void render(void)
         sy[x] = AF_Y0 + (1.0f - t) * (AF_IH - 1);
     }
 
-    /* the notch, under the trace */
     int32_t n_from, n_to;
     bool n_auto = false;
-    if (!tx && notch(&n_from, &n_to, &n_auto)) {
-        int x0 = (int)((float)(n_from - from) * (sw - 1) / (to - from));
-        int x1 = (int)((float)(n_to - from) * (sw - 1) / (to - from));
-        if (x0 < 0) x0 = 0;
-        if (x1 > sw - 1) x1 = sw - 1;
-        for (int x = x0; x <= x1; ++x)
-            vspan(sx + x, AF_Y0, AF_Y1, lv_color_white().full, 128);
-    }
+    bool n_on = !tx && notch(&n_from, &n_to, &n_auto);
 
     /* ticks every 500 Hz */
     for (int32_t f = ((from + 499) / 500) * 500; f <= to; f += 500) {
@@ -329,6 +340,21 @@ static void render(void)
         }
     }
     trace(sx, sw, sy, c_line);
+
+    /* the notch: an arrow, outline only, from the top of the view (always
+     * AF_NOTCH_TOP Hz wide) down to the bottom (as wide as the notch) */
+    if (n_on) {
+        float k = (float)(sw - 1) / (to - from);
+        float xc = sx + ((n_from + n_to) / 2.0f - from) * k;
+        float ht = AF_NOTCH_TOP / 2.0f * k, hb = (n_to - n_from) / 2.0f * k;
+        float yt = AF_Y0, yb = AF_Y1 - (AF_LINE_W - 1);
+        uint32_t c = lv_color_hex(0xA0A0A0).full;
+        int s0 = sx, s1 = sx + sw - 1;
+        line(xc - ht, yt, xc + ht, yt, s0, s1, c);
+        line(xc - ht, yt, xc - hb, yb, s0, s1, c);
+        line(xc + ht - (AF_LINE_W - 1), yt, xc + hb - (AF_LINE_W - 1), yb, s0, s1, c);
+        line(xc - hb, yb, xc + hb, yb, s0, s1, c);
+    }
 
     /* labels to redraw? */
     if (from != lab_from || to != lab_to || tx != lab_tx || n_auto != lab_auto) {
