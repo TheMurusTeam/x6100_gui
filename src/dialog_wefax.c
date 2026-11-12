@@ -1309,6 +1309,7 @@ static void *save_fax_worker(void *arg)
     png_structp png_ptr = NULL;
     png_infop info_ptr = NULL;
     uint8_t *out_row = NULL;
+    char tmp_path[sizeof(job->path) + 8] = "";
 
     if (!job) {
         goto done;
@@ -1319,7 +1320,10 @@ static void *save_fax_worker(void *arg)
         goto done;
     }
 
-    fp = fopen(job->path, "wb");
+    /* Written as NAME.png.rx.tmp and renamed when complete: a power-off
+     * during the save leaves no broken NAME.png for the browser to show. */
+    snprintf(tmp_path, sizeof(tmp_path), "%s.rx.tmp", job->path);
+    fp = fopen(tmp_path, "wb");
     if (!fp) {
         printf("WEFAX SAVE: fopen failed: %s\n", strerror(errno));
         goto done;
@@ -1419,10 +1423,12 @@ static void *save_fax_worker(void *arg)
     png_ptr = NULL;
     info_ptr = NULL;
 
-    if (fclose(fp) != 0) {
+    fflush(fp);
+    fsync(fileno(fp));      /* as the slant file: a failure here is not fatal */
+    if (fclose(fp) != 0 || rename(tmp_path, job->path) != 0) {
         fp = NULL;
-        remove(job->path);
-        printf("WEFAX SAVE: fclose failed\n");
+        remove(tmp_path);
+        printf("WEFAX SAVE: fclose/rename failed\n");
         goto done;
     }
     fp = NULL;
@@ -1457,7 +1463,7 @@ static void *save_fax_worker(void *arg)
     if (fp) {
         fclose(fp);
         if (job) {
-            remove(job->path);
+            remove(tmp_path);
         }
     }
 
@@ -1913,6 +1919,16 @@ static void fax_browser_refresh(void)
 
         const char *name = entry->d_name;
         size_t len = strlen(name);
+
+        /* a .tmp left by a power-off during a save: gone once it is old
+         * (a save in course is seconds old) */
+        if (len > 4 && strcmp(name + len - 4, ".tmp") == 0) {
+            char        tmp[512];
+            struct stat st;
+            snprintf(tmp, sizeof(tmp), "%s/%s", FAX_SAVE_DIR, name);
+            if (stat(tmp, &st) == 0 && time(NULL) - st.st_mtime > 600) unlink(tmp);
+            continue;
+        }
 
         if (len < 5 || strcmp(name + len - 4, ".png") != 0) {
             continue;
@@ -2672,6 +2688,8 @@ static bool fax_browser_save_edited_png(void)
     free(out_row);
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
+    fflush(fp);
+    fsync(fileno(fp));      /* as the slant file: a failure here is not fatal */
     if (fclose(fp) != 0) {
         remove(temp_path);
         printf("WEFAX BROWSER SAVE: fclose failed\n");

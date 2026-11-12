@@ -341,13 +341,15 @@ static button_data_t  btn_olivia = make_app_btn("Olivia", ACTION_APP_OLIVIA);
 static button_data_t  btn_wefax  = make_app_btn("WeFax", ACTION_APP_WEFAX);
 /* SSTV */
 static button_data_t  btn_sstv   = make_app_btn("SSTV", ACTION_APP_SSTV);
+/* NavTex */
+static button_data_t  btn_navtex = make_app_btn("Navtex\nSitorB", ACTION_APP_NAVTEX);
 /* Channels */
 static button_data_t  btn_channels = make_action_btn("Channels", ACTION_APP_CHANNELS);
 /* JTTY */
 static button_data_t  btn_jtty   = make_app_btn("JTTY", ACTION_APP_JTTY);
-/* 1KO125 apps: NavTex and DSC (their PRs #350, #353), FT8 CB, Broadcast */
-static button_data_t  btn_navtex = make_app_btn("Navtex\nSitorB", ACTION_APP_NAVTEX);
+/* DSC */
 static button_data_t  btn_dsc    = make_app_btn("DSC", ACTION_APP_DSC);
+/* 1KO125 apps not in OpenX6100: FT8 CB, Broadcast */
 static button_data_t  btn_ft8cb  = make_app_btn("FT8 CB", ACTION_APP_FT8CB);
 static button_data_t  btn_bcast  = make_app_btn("Broadcast", ACTION_APP_BROADCAST);
 
