@@ -67,8 +67,7 @@
 #define AF_IH           (AF_Y1 - AF_Y0 + 1)
 #define AF_RADIUS       6
 #define AF_DB_MIN       20.0f           /* dB shown at least, floor to top */
-#define AF_LINE_W       2               /* the notch arrow: as the frames */
-#define AF_NOTCH_TOP    100             /* its top, Hz: always this wide */
+#define AF_NOTCH_TOP    200             /* the notch arrow: its top, Hz, always this wide */
 
 /* audio thread -> render */
 static float           ring[AF_RING];
@@ -97,6 +96,7 @@ static bool            floor_reset = true;
 /* what the labels show, to redraw them only when it changes */
 static int32_t         lab_from = -1, lab_to = -1;
 static bool            lab_tx, lab_auto;
+static int32_t         lab_n_from = -1, lab_n_to = -1;   /* the notch arrow; -1: none */
 static bool            labels_dirty = true;
 
 static lv_grad_dsc_t   grad_dsc;
@@ -184,23 +184,6 @@ static void vspan(int x, int y0, int y1, uint32_t c, uint8_t a)
     uint32_t *p = px(x, 0);
     for (int y = y0; y <= y1; ++y)
         p[y] = a == 255 ? c : blend(p[y], c, a);
-}
-
-/* a line AF_LINE_W pixels wide, kept inside columns sx0..sx1 */
-static void line(float x0, float y0, float x1, float y1, int sx0, int sx1, uint32_t c)
-{
-    int n = (int)ceilf(fmaxf(fabsf(x1 - x0), fabsf(y1 - y0)));
-    if (n < 1) n = 1;
-    for (int i = 0; i <= n; ++i) {
-        float t = (float)i / n;
-        int x = (int)lrintf(x0 + t * (x1 - x0)), y = (int)lrintf(y0 + t * (y1 - y0));
-        for (int dx = 0; dx < AF_LINE_W; ++dx) {
-            if (x + dx < sx0 || x + dx > sx1) continue;
-            uint32_t *p = px(x + dx, 0);
-            for (int dy = 0; dy < AF_LINE_W; ++dy)
-                if (y + dy >= AF_Y0 && y + dy <= AF_Y1) p[y + dy] = c;
-        }
-    }
 }
 
 /* a trace: continuous between neighbouring columns */
@@ -341,24 +324,13 @@ static void render(void)
     }
     trace(sx, sw, sy, c_line);
 
-    /* the notch: an arrow, outline only, from the top of the view (always
-     * AF_NOTCH_TOP Hz wide) down to the bottom (as wide as the notch) */
-    if (n_on) {
-        float k = (float)(sw - 1) / (to - from);
-        float xc = sx + ((n_from + n_to) / 2.0f - from) * k;
-        float ht = AF_NOTCH_TOP / 2.0f * k, hb = (n_to - n_from) / 2.0f * k;
-        float yt = AF_Y0, yb = AF_Y1 - (AF_LINE_W - 1);
-        uint32_t c = lv_color_hex(0xA0A0A0).full;
-        int s0 = sx, s1 = sx + sw - 1;
-        line(xc - ht, yt, xc + ht, yt, s0, s1, c);
-        line(xc - ht, yt, xc - hb, yb, s0, s1, c);
-        line(xc + ht - (AF_LINE_W - 1), yt, xc + hb - (AF_LINE_W - 1), yb, s0, s1, c);
-        line(xc - hb, yb, xc + hb, yb, s0, s1, c);
-    }
 
     /* labels to redraw? */
-    if (from != lab_from || to != lab_to || tx != lab_tx || n_auto != lab_auto) {
+    if (!n_on) n_from = n_to = -1;
+    if (from != lab_from || to != lab_to || tx != lab_tx || n_auto != lab_auto ||
+        n_from != lab_n_from || n_to != lab_n_to) {
         lab_from = from; lab_to = to; lab_tx = tx; lab_auto = n_auto;
+        lab_n_from = n_from; lab_n_to = n_to;
         labels_dirty = true;
     }
 }
@@ -392,6 +364,37 @@ static void label_draw_cb(lv_event_t *e)
     const int sx = AF_SX, sw = AF_IW;
     int32_t from = lab_from, to = lab_to;
     if (to <= from) return;
+
+    /* the notch: an arrow made by the top of the frame, which leaves it
+     * AF_NOTCH_TOP Hz wide and comes back after it, down to the bottom of
+     * the spectrum, as wide as the notch there */
+    if (lab_n_from >= 0) {
+        float k = (float)(sw - 1) / (to - from);
+        float xc = x0 + sx + ((lab_n_from + lab_n_to) / 2.0f - from) * k;
+        float ht = AF_NOTCH_TOP / 2.0f * k, hb = (lab_n_to - lab_n_from) / 2.0f * k;
+        lv_coord_t xl = (lv_coord_t)lrintf(xc - ht), xr = (lv_coord_t)lrintf(xc + ht);
+        lv_coord_t bl = (lv_coord_t)lrintf(xc - hb), br = (lv_coord_t)lrintf(xc + hb);
+        lv_coord_t vl = x0 + sx, vr = x0 + sx + sw - 1;      /* inside the frame */
+        if (xl < vl) xl = vl;
+        if (xr > vr) xr = vr;
+        lv_coord_t yb = y0 + AF_Y1;
+
+        lv_draw_rect_dsc_t gap;                               /* the frame's gap */
+        lv_draw_rect_dsc_init(&gap);
+        gap.bg_color = lv_color_black();
+        gap.bg_opa = LV_OPA_COVER;
+        lv_area_t ga = { xl + 1, y0, xr - 1, y0 + 1 };
+        if (ga.x2 >= ga.x1) lv_draw_rect(ctx, &gap, &ga);
+
+        lv_draw_line_dsc_t l;
+        lv_draw_line_dsc_init(&l);
+        l.color = r.border_color;
+        l.width = r.border_width;
+        lv_point_t tl = { xl, y0 }, tr = { xr, y0 }, pl = { bl, yb }, pr = { br, yb };
+        lv_draw_line(ctx, &l, &tl, &pl);
+        lv_draw_line(ctx, &l, &tr, &pr);
+        lv_draw_line(ctx, &l, &pl, &pr);
+    }
 
     char t[16];
     for (int32_t f = ((from + 499) / 500) * 500; f <= to; f += 500) {
