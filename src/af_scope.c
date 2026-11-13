@@ -15,12 +15,13 @@
  *
  *   left  view: oscilloscope, 20 ms, triggered on a rising zero crossing
  *               (a steady trace for a tone or a voice), auto gain
- *   right view: spectrum of the passband of the RX filter (the TX filter
- *               while transmitting), ticks every 500 Hz, the manual notch
- *               as a band, averaged with Spec. beta
+ *   right view: spectrum from 0 Hz to 3 kHz, or to the top of the RX filter
+ *               (the TX filter while transmitting) when it is wider, ticks
+ *               every 500 Hz, the manual notch as an arrow made by the
+ *               frame, averaged with Spec. beta
  *
  * In TX the transmitted audio reaches the GUI only through the monitor: with
- * Moni level 0, radio_scope_monitor() sets it to 1 and mutes the speaker for
+ * Moni level 0, radio_scope_monitor() sets it to 10 and mutes the speaker for
  * the TX only, without changing the settings.
  */
 #include "af_scope.h"
