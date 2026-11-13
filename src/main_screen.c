@@ -14,6 +14,7 @@
 #include "styles.h"
 #include "spectrum.h"
 #include "waterfall.h"
+#include "af_scope.h"
 #include "util.h"
 #include "radio.h"
 #include "events.h"
@@ -1324,6 +1325,9 @@ lv_obj_t * main_screen(lv_obj_t *overlay_scr) {
 
     /* Waterfall */
     waterfall = waterfall_init(overlay_scr, y, SCREEN_HEIGHT - y);
+
+    /* AF scopes, floating on the waterfall above the F keys */
+    af_scope_init(overlay_scr);
 
     /* Konbs */
     knobs_init(obj);

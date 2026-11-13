@@ -192,6 +192,7 @@ typedef struct {
     ParamInt *(*spectrum_3d)(void); /* p_spectrum_3d */
     ParamInt *(*spectrum_3d_size)(void); /* p_spectrum_3d_size */
     ParamInt *(*band_plan_region)(void); /* p_band_plan_region */
+    ParamInt *(*af_scopes)(void); /* p_af_scopes */
 
     ParamInt *(*waterfall_center_line)(void); /* p_waterfall_center_line */
 

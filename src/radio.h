@@ -57,6 +57,7 @@ x6100_vfo_t radio_toggle_vfo();
 uint16_t radio_change_vol(int16_t df);
 
 void radio_change_mute();
+void radio_scope_monitor(bool on);     /* AF scopes in TX */
 
 /* Bluetooth listening (bt_audio.c): while fn is set the radio's own
  * speaker stays silent and every volume change - VOL knob, Volume

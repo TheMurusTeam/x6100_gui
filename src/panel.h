@@ -23,6 +23,7 @@ void panel_set_height(lv_coord_t h);
 
 void panel_hide();
 void panel_clear();
+bool panel_is_visible(void);    /* the RTTY or CW decoder panel */
 void panel_update_visibility(bool clear);
 void panel_add_text(const char * text);
 

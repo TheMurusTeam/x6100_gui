@@ -447,6 +447,22 @@ static void make_spectrum_3d(SettingsPage &page) {
 
 /***** WATERFALL CENTER LINE *****/
 
+/* AF oscilloscope and spectrum above the F keys */
+static void make_af_scopes(SettingsPage &page) {
+    lv_obj_t *obj;
+
+    page.label("AF scopes");
+
+    obj = page.cell(4, 3, SMALL_3);
+
+    obj = page.switch_bool(obj, *cfg.ui.af_scopes(), "AF scopes");
+    lv_obj_add_event_cb(obj, settings_change_bg_opa_cb, LV_EVENT_FOCUSED, &page);
+    lv_obj_add_event_cb(obj, settings_change_bg_opa_cb, LV_EVENT_DEFOCUSED, &page);
+    lv_obj_set_width(obj, SMALL_3 - 30);
+
+    page.row++;
+}
+
 static void make_waterfall_line(SettingsPage &page) {
     lv_obj_t *obj;
 
@@ -791,6 +807,7 @@ void make_ui_page(SettingsPage &page) {
     page.delimiter();
 
     make_waterfall_line(page);
+    make_af_scopes(page);
     page.delimiter();
 
     make_digi_text(page);

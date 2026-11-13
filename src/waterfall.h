@@ -27,6 +27,7 @@ void waterfall_data(const float *data_buf, uint16_t size, bool tx, uint32_t base
 /* Pause/resume waterfall frame delivery (e.g. while FT8 owns the screen). The
  * DSP keeps running the FFT, S-meter and noise floor. */
 void waterfall_set_enabled(bool enabled);
+void waterfall_refresh(void);   /* all again next frame */
 
 /* Direct-render entry point. Call from the main loop between lv_timer_handler()
  * and drm_flip(). Renders the waterfall into the DRM primary back-buffer when new

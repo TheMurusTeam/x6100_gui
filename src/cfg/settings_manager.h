@@ -285,6 +285,9 @@ class SettingsManager {
         StorageType::GLOBAL, pending_writes_, &global_params_}; // 0 Auto (QTH Grid), 1-3 ITU region
     Parameter<int32_t> p_spectrum_3d_size{"spectrum_3d_size", 50, 35, 55,
         StorageType::GLOBAL, pending_writes_, &global_params_};
+    /* AF oscilloscope and spectrum above the F keys (af_scope.c) */
+    Parameter<int32_t> p_af_scopes{"af_scopes", false, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_};
 
     // Waterfall
     Parameter<int32_t> p_waterfall_center_line{"waterfall_center_line", true, 0, 1,

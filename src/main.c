@@ -28,6 +28,7 @@
 #include "keyboard.h"
 #include "spectrum.h"
 #include "waterfall.h"
+#include "af_scope.h"
 #include "keypad.h"
 #include "audio.h"
 #include "cw.h"
@@ -199,7 +200,8 @@ int main(void) {
         scheduler_work();
         next_loop_time = lv_timer_handler() + loop_start_time;
         spectrum_process();
-        waterfall_process();
+        bool wf = waterfall_process();
+        af_scope_process(wf);   /* after the waterfall, over it */
         drm_flip();
         sleep_time = next_loop_time - get_time();
         if (sleep_time > 0) {

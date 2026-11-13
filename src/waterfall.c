@@ -143,6 +143,11 @@ void waterfall_set_geometry(lv_coord_t y, lv_coord_t h) {
     __atomic_store_n(&s_cond_dirty, 1, __ATOMIC_RELEASE);
 }
 
+/* draw it all again next frame (the AF scopes were over it) */
+void waterfall_refresh(void) {
+    __atomic_store_n(&s_cond_dirty, 1, __ATOMIC_RELEASE);
+}
+
 void waterfall_set_enabled(bool enabled) {
     dsp_frame_set_active(waterfall_sub_id, enabled);
 }
