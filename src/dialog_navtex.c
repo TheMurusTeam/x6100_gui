@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <stdio.h>
