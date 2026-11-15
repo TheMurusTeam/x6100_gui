@@ -817,13 +817,19 @@ static void q_reset(int w, int h)
     lv_obj_clean(q_seg_bar);
     lv_bar_set_value(q_bar, 0, LV_ANIM_OFF);
     lv_label_set_text(q_label, "");
-    if (sstv_browser_open) {                    /* shown when the browser closes */
-        sstv_browser_q_was_hidden = !q_rgb;
-        lv_obj_add_flag(q_box, LV_OBJ_FLAG_HIDDEN);
-    } else if (q_rgb) {
-        lv_obj_clear_flag(q_box, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_add_flag(q_box, LV_OBJ_FLAG_HIDDEN);
+}
+
+/* Shown exactly while a picture is received in Auto RX with the progress
+ * bar showing it: hidden at its end (final decode, denoise, listening),
+ * on Stop, under the browser and the TX panel.  Called by ui_timer_cb(). */
+static void q_sync_visibility(void)
+{
+    if (!q_box) return;
+    bool show = q_rgb && live_capturing && progress_bar &&
+                !lv_obj_has_flag(progress_bar, LV_OBJ_FLAG_HIDDEN) && !sstv_browser_open;
+    if (show == lv_obj_has_flag(q_box, LV_OBJ_FLAG_HIDDEN)) {
+        if (show) lv_obj_clear_flag(q_box, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(q_box, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -852,7 +858,7 @@ static void q_band_done(int i)
         for (int k = 0; k < q_nbands; ++k) sum += q_band[k];
         int mean = (int)(sum / q_nbands + 0.5f);
         lv_bar_set_value(q_bar, mean, LV_ANIM_OFF);
-        lv_label_set_text_fmt(q_label, "Q %d%%", mean);
+        lv_label_set_text_fmt(q_label, "Avg. quality %d%%", mean);
     }
 }
 
