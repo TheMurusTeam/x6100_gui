@@ -67,7 +67,8 @@
  * Set to 1 to collect real recordings for debugging/regression tests. */
 #define SSTV_SAVE_DEBUG_WAV 0
 #define SSTV_SAVE_DIR "/mnt/sstv"
-#define SSTV_CONF_FILE "/mnt/sstv.conf"   /* 1KO125: denoise=0 off, 1 classic, 2 ML */
+#define SSTV_CONF_FILE "/mnt/sstv.conf"   /* 1KO125: denoise=0 off, 1 classic, 2 ML; garbage=0 keep, 1 discard */
+#define SSTV_GARBAGE_DIR SSTV_SAVE_DIR "/garbage"   /* 1KO125: pictures found to be garbage */
 #define SSTV_DNN_FILE  "/usr/share/x6100/sstv_dnn.bin"   /* 1KO125: ML denoiser model */
 #define SSTV_IMAGE_H 330
 #define SSTV_IMAGE_W 440
@@ -92,6 +93,7 @@ static void destruct_cb(void);
 static void close_cb(button_data_t *data);
 static void restart_cb(button_data_t *data);
 static void denoise_cb(button_data_t *data);   /* 1KO125: Denoise OFF / CLASSIC / ML */
+static void garbage_cb(button_data_t *data);   /* 1KO125: Keep / Discard garbage */
 static void denoise_load(void);
 static sstv_dnn_t *denoise_model(void);
 static void key_cb(lv_event_t *e);
@@ -211,6 +213,7 @@ static uint32_t unsupported_vis_reported_ms = 0;
 static unsigned live_capture_starts = 0;         /* Auto RX captures started (VIS found) */
 static sstv_autodetect_state_t autodetect_last_ui_state = SSTV_AUTODETECT_IDLE;
 static char saved_overlay_name[96];
+static volatile bool saved_overlay_garbage = false;   /* 1KO125: it went to SSTV_GARBAGE_DIR */
 static lv_color_t sstv_buffer[SSTV_CANVAS_W * SSTV_CANVAS_H];
 static lv_color_t tx_buffer[SSTV_CANVAS_W * SSTV_CANVAS_H];   /* 1KO125: TX panel canvas */
 static uint8_t test_rgb[SSTV_MAX_W * SSTV_MAX_H * 3];
@@ -342,6 +345,7 @@ static volatile bool live_restart_enabled = true;
  * (CLASSIC) or by the neural network of sstv/sstv_dnn.c (ML) */
 enum { DENOISE_OFF, DENOISE_CLASSIC, DENOISE_ML };
 static volatile int denoise_mode = DENOISE_CLASSIC;
+static volatile bool garbage_discard = false;   /* 1KO125: garbage pictures to SSTV_GARBAGE_DIR */
 static const char *const denoise_labels[] = { "Denoise\nOFF", "Denoise\nCLASSIC", "Denoise\nML" };
 /* set by the decoder thread while it cleans the picture: the UI shows it */
 static volatile int denoise_running = DENOISE_OFF;
@@ -472,12 +476,14 @@ static button_data_t btn_restart = { .type = BTN_TEXT, .label = "Auto RX\nRestar
 static button_data_t btn_close = { .type = BTN_TEXT, .label = "Close\nSSTV", .press = close_cb };
 static button_data_t btn_denoise = { .type = BTN_TEXT, .label = "Denoise\nCLASSIC", .press = denoise_cb };
 static button_data_t btn_info = { .type = BTN_TEXT, .label = "Info", .press = info_cb };
+/* 1KO125: on page 2 in place of Delete picture while the browser is closed */
+static button_data_t btn_garbage = { .type = BTN_TEXT, .label = "Keep\ngarbage", .press = garbage_cb };
 
 static buttons_page_t btn_page_1 = {
     .items = { &btn_sstv_page_1, &btn_start, &btn_cont_start, &btn_cont_mode, &btn_tx }
 };
 static buttons_page_t btn_page_2 = {
-    .items = { &btn_sstv_page_2, &btn_browser, &btn_delete_picture, &btn_restart, &btn_denoise }
+    .items = { &btn_sstv_page_2, &btn_browser, &btn_garbage, &btn_restart, &btn_denoise }
 };
 static buttons_page_t btn_page_3 = {
     .items = { &btn_sstv_page_3, NULL, NULL, &btn_info, &btn_close }
@@ -788,6 +794,7 @@ static void construct_cb(lv_obj_t *parent)
     btn_restart.label = live_restart_enabled ? "Auto RX\nRestart ON" : "Auto RX\nRestart OFF";
     buttons_disabled(&btn_restart, false);
     denoise_load();
+    btn_garbage.label = garbage_discard ? "Discard\ngarbage" : "Keep\ngarbage";
     btn_denoise.label = denoise_labels[denoise_mode];
 
     shown_rows = 0;
@@ -1240,7 +1247,10 @@ static void ui_timer_cb(lv_timer_t *timer)
     if (saved_overlay_pending) {
         char message[160];
         saved_overlay_pending = false;
-        snprintf(message, sizeof(message), "SSTV picture %s saved", saved_overlay_name);
+        if (saved_overlay_garbage)
+            snprintf(message, sizeof(message), "Garbage pic discarded");
+        else
+            snprintf(message, sizeof(message), "SSTV picture %s saved", saved_overlay_name);
         msg_schedule_text_fmt("%s", message);
     }
 
@@ -1585,6 +1595,8 @@ static void denoise_load(void)
         if (strncmp(line, "denoise=", 8) == 0) {
             int v = atoi(line + 8);
             denoise_mode = (v >= DENOISE_OFF && v <= DENOISE_ML) ? v : DENOISE_CLASSIC;
+        } else if (strncmp(line, "garbage=", 8) == 0) {
+            garbage_discard = atoi(line + 8) == 1;
         }
     fclose(f);
 }
@@ -1594,6 +1606,7 @@ static void denoise_save(void)
     FILE *f = fopen(SSTV_CONF_FILE, "w");
     if (!f) return;
     fprintf(f, "denoise=%d\n", denoise_mode);
+    fprintf(f, "garbage=%d\n", garbage_discard ? 1 : 0);
     fclose(f);
 }
 
@@ -1605,6 +1618,17 @@ static void denoise_cb(button_data_t *data)
     btn_denoise.label = denoise_labels[denoise_mode];
     if (btn_denoise.disp_btn) buttons_refresh(&btn_denoise);
     fprintf(stderr, "SSTV: denoise %s\n", denoise_mode == DENOISE_ML ? "ML" : denoise_mode ? "CLASSIC" : "OFF");
+}
+
+/* 1KO125: Keep garbage / Discard garbage (see is_garbage() in dialog_sstv_rx.inc) */
+static void garbage_cb(button_data_t *data)
+{
+    (void)data;
+    garbage_discard = !garbage_discard;
+    denoise_save();
+    btn_garbage.label = garbage_discard ? "Discard\ngarbage" : "Keep\ngarbage";
+    if (btn_garbage.disp_btn) buttons_refresh(&btn_garbage);
+    fprintf(stderr, "SSTV: garbage %s\n", garbage_discard ? "discarded" : "kept");
 }
 
 /* ML model: read once, when first needed (decoder threads only); NULL if the

@@ -133,6 +133,20 @@ static void sstv_browser_update_list(void)
 
 static void sstv_browser_update_buttons(void)
 {
+    /* 1KO125: page 2 while the browser is open: F1 says so, F3 is Delete
+     * picture (Keep / Discard garbage otherwise), F4 and F5 are disabled */
+    button_data_t *f3 = sstv_browser_open ? &btn_delete_picture : &btn_garbage;
+    if (btn_page_2.items[2] != f3) {
+        btn_page_2.items[2] = f3;
+        if (buttons_get_cur_page() == &btn_page_2)
+            buttons_load_page(&btn_page_2);
+    }
+    btn_sstv_page_2.label = sstv_browser_open ? "SSTV RX\nBrowser" : "(SSTV 2:3)";
+    if (btn_sstv_page_2.disp_btn)
+        buttons_refresh(&btn_sstv_page_2);
+    buttons_disabled(&btn_restart, sstv_browser_open);
+    buttons_disabled(&btn_denoise, sstv_browser_open);
+
     if (sstv_browser_preview) {
         btn_delete_picture.label = "Done";
         buttons_disabled(&btn_delete_picture, false);

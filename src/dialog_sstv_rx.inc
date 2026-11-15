@@ -134,16 +134,20 @@ static bool write_sstv_png(const char *path, const uint8_t *rgb, int width, int 
     return true;
 }
 
-static bool save_sstv_png(const uint8_t *rgb, int width, int height, char *saved_name, size_t saved_name_size)
+static bool save_sstv_png_in(const char *dir, const uint8_t *rgb, int width, int height,
+                             char *saved_name, size_t saved_name_size)
 {
     if (!rgb || width <= 0 || height <= 0) return false;
     if (mkdir(SSTV_SAVE_DIR, 0775) != 0 && errno != EEXIST) {
         fprintf(stderr, "SSTV SAVE: mkdir failed: %s\n", strerror(errno)); return false;
     }
+    if (mkdir(dir, 0775) != 0 && errno != EEXIST) {
+        fprintf(stderr, "SSTV SAVE: mkdir %s failed: %s\n", dir, strerror(errno)); return false;
+    }
     time_t now=time(NULL); struct tm tm_now;
     if (!localtime_r(&now,&tm_now)) return false;
     char path[160];
-    snprintf(path,sizeof(path),SSTV_SAVE_DIR "/sstv-%04d%02d%02d-%02d%02d%02d.png",
+    snprintf(path,sizeof(path),"%s/sstv-%04d%02d%02d-%02d%02d%02d.png",dir,
              tm_now.tm_year+1900,tm_now.tm_mon+1,tm_now.tm_mday,
              tm_now.tm_hour,tm_now.tm_min,tm_now.tm_sec);
     if (saved_name && saved_name_size > 0) {
@@ -151,6 +155,50 @@ static bool save_sstv_png(const uint8_t *rgb, int width, int height, char *saved
         snprintf(saved_name, saved_name_size, "%s", base ? base + 1 : path);
     }
     return write_sstv_png(path, rgb, width, height);
+}
+
+static bool save_sstv_png(const uint8_t *rgb, int width, int height, char *saved_name, size_t saved_name_size)
+{
+    return save_sstv_png_in(SSTV_SAVE_DIR, rgb, width, height, saved_name, saved_name_size);
+}
+
+/* 1KO125: is the received picture garbage (almost pure noise)?  Two
+ * measures of the whole picture, as saved:
+ *   rows:  how much each row looks like the one above (Pearson correlation
+ *          of the luminance), about 0.5-0.9 for a picture, near 0 for noise;
+ *   speck: colour speckle, the mean step of Cb and Cr (B-Y, R-Y) between
+ *          neighbouring pixels of a row, high for noise.
+ * Garbage when rows - 0.0086 * speck < 0.35: a line found on 39 received
+ * pictures sorted by hand (18 good, 21 garbage), all on the right side. */
+static bool is_garbage(const uint8_t *rgb, int width, int height, float *score_out)
+{
+    *score_out = 1.0f;
+    if (!rgb || width < 2 || height < 2) return false;
+    double sy = 0, sy2 = 0, sx = 0, sx2 = 0, sxy = 0, speck = 0;
+    long n = 0, ns = 0;
+    for (int y = 0; y < height; ++y) {
+        const uint8_t *p = rgb + (size_t)y * width * 3;
+        const uint8_t *q = p - (size_t)width * 3;            /* the row above */
+        float pcb = 0, pcr = 0;
+        for (int x = 0; x < width; ++x) {
+            float r = p[3*x], g = p[3*x+1], b = p[3*x+2];
+            float l = 0.299f*r + 0.587f*g + 0.114f*b;
+            float cb = b - l, cr = r - l;
+            if (x > 0) { speck += fabsf(cb - pcb) + fabsf(cr - pcr); ++ns; }
+            pcb = cb; pcr = cr;
+            if (y > 0) {
+                float u = 0.299f*q[3*x] + 0.587f*q[3*x+1] + 0.114f*q[3*x+2];
+                sx += u; sx2 += (double)u*u; sy += l; sy2 += (double)l*l; sxy += (double)u*l; ++n;
+            }
+        }
+    }
+    double cov = sxy - sx*sy/n, vx = sx2 - sx*sx/n, vy = sy2 - sy*sy/n;
+    double rows = (vx > 0 && vy > 0) ? cov / sqrt(vx*vy) : 1.0;     /* flat picture: not noise */
+    double sp = ns ? speck / (2.0*ns) : 0;
+    float score = (float)(rows - 0.0086*sp);
+    *score_out = score;
+    fprintf(stderr, "SSTV GARBAGE: rows %.3f, speckle %.1f, score %.3f (garbage below 0.35)\n", rows, sp, score);
+    return score < 0.35f;
 }
 
 /* 1KO125: ML denoiser on the received picture (not on the classic result),
@@ -198,6 +246,18 @@ static void save_rx_picture(int rows)
 {
     char saved_name[96] = {0};
     if (rows > test_info.height) rows = test_info.height;
+    float score;
+    bool garbage = is_garbage(test_rgb, test_info.width, test_info.height, &score) && garbage_discard;
+    if (garbage) {                              /* 1KO125: to sstv/garbage, not denoised */
+        bool saved = save_sstv_png_in(SSTV_GARBAGE_DIR, test_rgb, test_info.width, test_info.height,
+                                      saved_name, sizeof(saved_name));
+        if (saved) {
+            snprintf(saved_overlay_name, sizeof(saved_overlay_name), "%s", saved_name);
+            saved_overlay_garbage = true;
+            saved_overlay_pending = true;
+        }
+        return;
+    }
     bool saved = save_sstv_png(test_rgb, test_info.width, test_info.height, saved_name, sizeof(saved_name));
     int mode = denoise_mode;
     if (mode != DENOISE_OFF && rows > 0) {
@@ -226,6 +286,7 @@ static void save_rx_picture(int rows)
     }
     if (saved) {
         snprintf(saved_overlay_name, sizeof(saved_overlay_name), "%s", saved_name);
+        saved_overlay_garbage = false;
         saved_overlay_pending = true;
     }
 }
