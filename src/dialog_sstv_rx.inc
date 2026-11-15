@@ -162,43 +162,129 @@ static bool save_sstv_png(const uint8_t *rgb, int width, int height, char *saved
     return save_sstv_png_in(SSTV_SAVE_DIR, rgb, width, height, saved_name, saved_name_size);
 }
 
-/* 1KO125: is the received picture garbage (almost pure noise)?  Two
- * measures of the whole picture, as saved:
- *   rows:  how much each row looks like the one above (Pearson correlation
- *          of the luminance), about 0.5-0.9 for a picture, near 0 for noise;
- *   speck: colour speckle, the mean step of Cb and Cr (B-Y, R-Y) between
- *          neighbouring pixels of a row, high for noise.
- * Garbage when rows - 0.0086 * speck < 0.35: a line found on 39 received
- * pictures sorted by hand (18 good, 21 garbage), all on the right side. */
-static bool is_garbage(const uint8_t *rgb, int width, int height, float *score_out)
+/* 1KO125: is the received picture garbage?  Ten measures of the whole
+ * picture, as saved (how much rows follow their neighbours, overall and in
+ * bands, vertical and horizontal steps, colour saturation and speckle,
+ * clipped values), weighed by a logistic regression fitted on 541 received
+ * pictures sorted by hand (293 good, 248 garbage).  Garbage when the
+ * probability is GARBAGE_P or more: cross-validated, about 0 good pictures
+ * out of 293 discarded and 87 % of the garbage found.  The same model as
+ * sstv_garbage_sort.py (Mac script). */
+#define GARBAGE_P 0.8
+
+/* Pearson correlation of rows r0..r0+n-1 with rows r1..r1+n-1 */
+static double garbage_corr_rows(const float *y, int w, int r0, int r1, int n)
 {
-    *score_out = 1.0f;
-    if (!rgb || width < 2 || height < 2) return false;
-    double sy = 0, sy2 = 0, sx = 0, sx2 = 0, sxy = 0, speck = 0;
-    long n = 0, ns = 0;
-    for (int y = 0; y < height; ++y) {
-        const uint8_t *p = rgb + (size_t)y * width * 3;
-        const uint8_t *q = p - (size_t)width * 3;            /* the row above */
-        float pcb = 0, pcr = 0;
-        for (int x = 0; x < width; ++x) {
-            float r = p[3*x], g = p[3*x+1], b = p[3*x+2];
-            float l = 0.299f*r + 0.587f*g + 0.114f*b;
-            float cb = b - l, cr = r - l;
-            if (x > 0) { speck += fabsf(cb - pcb) + fabsf(cr - pcr); ++ns; }
-            pcb = cb; pcr = cr;
-            if (y > 0) {
-                float u = 0.299f*q[3*x] + 0.587f*q[3*x+1] + 0.114f*q[3*x+2];
-                sx += u; sx2 += (double)u*u; sy += l; sy2 += (double)l*l; sxy += (double)u*l; ++n;
-            }
+    double sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0;
+    long cnt = (long)n * w;
+    for (int k = 0; k < n; ++k) {
+        const float *a = y + (size_t)(r0 + k) * w, *b = y + (size_t)(r1 + k) * w;
+        for (int x = 0; x < w; ++x) {
+            sa += a[x]; sb += b[x]; saa += (double)a[x] * a[x]; sbb += (double)b[x] * b[x]; sab += (double)a[x] * b[x];
         }
     }
-    double cov = sxy - sx*sy/n, vx = sx2 - sx*sx/n, vy = sy2 - sy*sy/n;
-    double rows = (vx > 0 && vy > 0) ? cov / sqrt(vx*vy) : 1.0;     /* flat picture: not noise */
-    double sp = ns ? speck / (2.0*ns) : 0;
-    float score = (float)(rows - 0.0086*sp);
-    *score_out = score;
-    fprintf(stderr, "SSTV GARBAGE: rows %.3f, speckle %.1f, score %.3f (garbage below 0.35)\n", rows, sp, score);
-    return score < 0.35f;
+    double va = saa - sa * sa / cnt, vb = sbb - sb * sb / cnt, d = sqrt(va * vb);
+    return d > 1e-6 ? (sab - sa * sb / cnt) / d : 1.0;
+}
+
+static int garbage_cmp(const void *a, const void *b)
+{
+    double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
+/* the q-th percentile, linear between the two nearest (as numpy) */
+static double garbage_percentile(double *v, int n, double q)
+{
+    if (n <= 0) return 0;
+    qsort(v, n, sizeof(double), garbage_cmp);
+    double pos = q / 100.0 * (n - 1);
+    int i = (int)pos;
+    return i + 1 < n ? v[i] + (pos - i) * (v[i + 1] - v[i]) : v[n - 1];
+}
+
+static bool is_garbage(const uint8_t *rgb, int w, int h, float *p_out)
+{
+    *p_out = 0;
+    if (!rgb || w < 2 || h < 34) return false;
+    size_t np = (size_t)w * h;
+    float *y = malloc(np * 3 * sizeof(float));
+    if (!y) return false;
+    float *cb = y + np, *cr = cb + np;
+    long clipped = 0;
+    double sat = 0;
+    for (size_t i = 0; i < np; ++i) {
+        float r = rgb[3*i], g = rgb[3*i+1], b = rgb[3*i+2];
+        y[i] = 0.299f*r + 0.587f*g + 0.114f*b;
+        cb[i] = b - y[i]; cr[i] = r - y[i];
+        sat += sqrtf(cb[i]*cb[i] + cr[i]*cr[i]);
+        for (int c = 0; c < 3; ++c) { uint8_t v = rgb[3*i+c]; clipped += v < 8 || v > 247; }
+    }
+    double m_sat = sat / np, m_clip = (double)clipped / (np * 3);
+    double m_cv = garbage_corr_rows(y, w, 0, 1, h - 1);
+
+    /* each pixel vs the one on its left, and the vertical steps */
+    double sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0, vsum = 0;
+    for (int r = 0; r < h; ++r) {
+        const float *row = y + (size_t)r * w;
+        for (int x = 0; x + 1 < w; ++x) {
+            double a = row[x], b = row[x+1];
+            sa += a; sb += b; saa += a*a; sbb += b*b; sab += a*b;
+        }
+        if (r > 0)
+            for (int x = 0; x < w; ++x) vsum += fabsf(row[x] - row[x - w]);
+    }
+    long nh = (long)h * (w - 1);
+    double vh = sqrt((saa - sa*sa/nh) * (sbb - sb*sb/nh));
+    double m_ch = vh > 1e-6 ? (sab - sa*sb/nh) / vh : 1.0;
+    double m_vy = vsum / ((double)(h - 1) * w);
+
+    /* 8-row bands that do not follow the row above */
+    int nb = 0, bad3 = 0, bad5 = 0;
+    for (int b0 = 1; b0 < h - 8; b0 += 8) {
+        double c = garbage_corr_rows(y, w, b0 - 1, b0, 8);
+        ++nb; bad3 += c < 0.3; bad5 += c < 0.5;
+    }
+    double m_fb3 = nb ? (double)bad3 / nb : 0, m_fb5 = nb ? (double)bad5 / nb : 0;
+
+    /* 16-row bands: correlation, colour speckle, vertical / horizontal steps */
+    double bc[32], bs[32], bv[32];
+    int n16 = 0;
+    for (int b0 = 1; b0 < h - 16 && n16 < 32; b0 += 16, ++n16) {
+        bc[n16] = garbage_corr_rows(y, w, b0 - 1, b0, 16);
+        double scb = 0, scr = 0, hs = 0, vs = 0;
+        for (int r = b0; r < b0 + 16; ++r) {
+            const float *yr = y + (size_t)r * w, *br = cb + (size_t)r * w, *rr = cr + (size_t)r * w;
+            for (int x = 0; x + 1 < w; ++x) {
+                scb += fabsf(br[x+1] - br[x]); scr += fabsf(rr[x+1] - rr[x]); hs += fabsf(yr[x+1] - yr[x]);
+            }
+            for (int x = 0; x < w; ++x) vs += fabsf(yr[x] - yr[x - w]);
+        }
+        double nhb = 16.0 * (w - 1);
+        bs[n16] = (scb / nhb + scr / nhb) / 2;
+        bv[n16] = (vs / (16.0 * w)) / (hs / nhb + 1e-6);
+    }
+    double m_bc25 = garbage_percentile(bc, n16, 25);
+    double m_bs50 = garbage_percentile(bs, n16, 50);
+    double m_bv50 = garbage_percentile(bv, n16, 50);
+    free(y);
+
+    /* (value - mean) / sd * weight, from the fit */
+    double z = -0.251876
+        + (m_fb5  - 0.499393)  / 0.380065  *  0.803889
+        + (m_vy   - 33.649128) / 14.178968 *  0.843472
+        + (m_bc25 - 0.409296)  / 0.292391  * -0.684862
+        + (m_clip - 0.230342)  / 0.139868  *  0.577786
+        + (m_sat  - 65.793586) / 23.660839 *  0.518507
+        + (m_cv   - 0.577606)  / 0.273261  * -0.667696
+        + (m_ch   - 0.901467)  / 0.070672  * -0.637332
+        + (m_fb3  - 0.371243)  / 0.369021  *  0.643692
+        + (m_bs50 - 18.224407) / 10.577017 *  0.561015
+        + (m_bv50 - 2.001931)  / 0.530028  *  0.412298;
+    double p = 1.0 / (1.0 + exp(-z));
+    *p_out = (float)p;
+    fprintf(stderr, "SSTV GARBAGE: probability %.2f (garbage from %.2f)\n", p, GARBAGE_P);
+    return p >= GARBAGE_P;
 }
 
 /* 1KO125: ML denoiser on the received picture (not on the classic result),
@@ -246,8 +332,8 @@ static void save_rx_picture(int rows)
 {
     char saved_name[96] = {0};
     if (rows > test_info.height) rows = test_info.height;
-    float score;
-    bool garbage = is_garbage(test_rgb, test_info.width, test_info.height, &score) && garbage_discard;
+    float prob;
+    bool garbage = is_garbage(test_rgb, test_info.width, test_info.height, &prob) && garbage_discard;
     if (garbage) {                              /* 1KO125: to sstv/garbage, not denoised */
         bool saved = save_sstv_png_in(SSTV_GARBAGE_DIR, test_rgb, test_info.width, test_info.height,
                                       saved_name, sizeof(saved_name));
