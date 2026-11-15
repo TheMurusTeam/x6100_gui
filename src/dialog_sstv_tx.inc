@@ -1347,7 +1347,8 @@ static void *tx_ocr_thread_cb(void *arg)
     return NULL;
 }
 
-/* the reading of the REPLAY picture (tx_replay_rgb) */
+/* the reading of the REPLAY picture (tx_replay_rgb, or the original of a
+ * denoised one) */
 static void tx_call_ocr_start(void)
 {
     if (tx_ocr_thread_valid) {               /* the last one first (at most a few seconds) */
@@ -1364,14 +1365,31 @@ static void tx_call_ocr_start(void)
         tx_ocr_done = true;
         return;
     }
-    tx_ocr_rgb = malloc((size_t)tx_replay_w * tx_replay_h * 3);
-    if (!tx_ocr_rgb) {
-        tx_ocr_done = true;
-        return;
+    /* 1KO125: a denoised picture (NAME_dn.png) is read from its original,
+     * NAME.png, when it is there: the denoiser can blur the letters */
+    size_t ln = strlen(tx_rxpic_last);
+    if (ln > 7 && strcmp(tx_rxpic_last + ln - 7, "_dn.png") == 0) {
+        char path[300];
+        snprintf(path, sizeof(path), SSTV_SAVE_DIR "/%.*s.png", (int)(ln - 7), tx_rxpic_last);
+        uint8_t *rgb = NULL;
+        unsigned int w = 0, h = 0;
+        if (tx_picture_decode_png(path, &rgb, &w, &h)) {
+            tx_ocr_rgb = rgb;
+            tx_ocr_w = w;
+            tx_ocr_h = h;
+            fprintf(stderr, "SSTV OCR: reading the original %s\n", path);
+        }
     }
-    memcpy(tx_ocr_rgb, tx_replay_rgb, (size_t)tx_replay_w * tx_replay_h * 3);
-    tx_ocr_w = tx_replay_w;
-    tx_ocr_h = tx_replay_h;
+    if (!tx_ocr_rgb) {
+        tx_ocr_rgb = malloc((size_t)tx_replay_w * tx_replay_h * 3);
+        if (!tx_ocr_rgb) {
+            tx_ocr_done = true;
+            return;
+        }
+        memcpy(tx_ocr_rgb, tx_replay_rgb, (size_t)tx_replay_w * tx_replay_h * 3);
+        tx_ocr_w = tx_replay_w;
+        tx_ocr_h = tx_replay_h;
+    }
     snprintf(tx_ocr_own, sizeof(tx_ocr_own), "%s", PARAM_T_GET(cfg.callsign()));
     tx_ocr_thread_valid = pthread_create(&tx_ocr_thread, NULL, tx_ocr_thread_cb, NULL) == 0;
     if (!tx_ocr_thread_valid) tx_ocr_done = true;
