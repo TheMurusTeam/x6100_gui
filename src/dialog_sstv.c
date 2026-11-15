@@ -184,6 +184,11 @@ static lv_obj_t *sstv_frame = NULL;
 static lv_obj_t *sstv_canvas = NULL;
 static lv_obj_t *status_label = NULL;
 static lv_obj_t *progress_bar = NULL;
+/* 1KO125: quality bars under the progress bar, Auto RX (see q_* in dialog_sstv_rx.inc) */
+static lv_obj_t *q_box = NULL;          /* both bars, shown and hidden together */
+static lv_obj_t *q_seg_bar = NULL;      /* a segment per 16 rows: green / yellow / red */
+static lv_obj_t *q_bar = NULL;          /* violet: mean quality of the rows received */
+static lv_obj_t *q_label = NULL;        /* "Q 66%" on it */
 /* 1KO125: TX panel.  It covers the RX panel while TX is set up and sent, with
  * its own canvas, status and progress bar; the RX panel under it keeps
  * receiving and drawing.  tx_rx_strip tells what the receiver is doing. */
@@ -294,6 +299,7 @@ static unsigned int tx_last_height = 0;
 static sstv_mode_t tx_last_mode = SSTV_MODE_SCOTTIE_S1;
 static bool tx_last_valid = false;
 static bool sstv_browser_open = false;
+static bool sstv_browser_q_was_hidden = true;      /* 1KO125: the quality bars, under the browser */
 static bool sstv_browser_preview = false;
 
 static void sstv_browser_free_files(void);
@@ -540,6 +546,7 @@ static void set_status(const char *text)
 
 static void set_receiver_ui_stopped(void)
 {
+    if (q_box) lv_obj_add_flag(q_box, LV_OBJ_FLAG_HIDDEN);   /* 1KO125 */
     set_status("Stand by.\n\n- Press Start Auto RX to start Autodecoder.\n\n- Press Start Manual RX to start Manual decoder, press RX Mode button to cycle all available modes for the Manual decoder.");
     if (progress_bar) {
         lv_bar_set_value(progress_bar, 0, LV_ANIM_OFF);
@@ -745,6 +752,31 @@ static void construct_cb(lv_obj_t *parent)
     lv_bar_set_value(progress_bar, 0, LV_ANIM_OFF);
     lv_obj_add_flag(progress_bar, LV_OBJ_FLAG_HIDDEN);
 
+    /* 1KO125: quality bars, the same size and look as the progress bar, under it */
+    q_box = lv_obj_create(dialog.obj);
+    lv_obj_remove_style_all(q_box);
+    lv_obj_set_pos(q_box, 35, 177);
+    lv_obj_set_size(q_box, 250, 16 + 6 + 16);
+    lv_obj_clear_flag(q_box, LV_OBJ_FLAG_SCROLLABLE);
+    q_seg_bar = lv_bar_create(q_box);
+    lv_obj_set_size(q_seg_bar, 250, 16);
+    lv_obj_set_pos(q_seg_bar, 0, 0);
+    lv_bar_set_range(q_seg_bar, 0, 1000);
+    lv_bar_set_value(q_seg_bar, 0, LV_ANIM_OFF);     /* only its track: the segments are children */
+    lv_obj_set_style_pad_all(q_seg_bar, 0, 0);
+    lv_obj_set_style_clip_corner(q_seg_bar, true, 0);
+    q_bar = lv_bar_create(q_box);
+    lv_obj_set_size(q_bar, 250, 16);
+    lv_obj_set_pos(q_bar, 0, 22);
+    lv_bar_set_range(q_bar, 0, 100);
+    lv_bar_set_value(q_bar, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(q_bar, lv_color_hex(0x9650C8), LV_PART_INDICATOR);
+    q_label = lv_label_create(q_bar);
+    lv_obj_set_style_text_color(q_label, lv_color_white(), 0);
+    lv_label_set_text(q_label, "");
+    lv_obj_center(q_label);
+    lv_obj_add_flag(q_box, LV_OBJ_FLAG_HIDDEN);
+
     /* 1KO125: TX panel, same frame as the dialog, over the RX panel */
     tx_panel = lv_obj_create(dialog.obj);
     lv_obj_remove_style_all(tx_panel);
@@ -918,6 +950,8 @@ static void destruct_cb(void)
     sstv_frame = NULL;
     status_label = NULL;
     progress_bar = NULL;
+    q_box = q_seg_bar = q_bar = q_label = NULL;
+    q_free();
     tx_panel = NULL;
     tx_canvas = NULL;
     tx_status_label = NULL;

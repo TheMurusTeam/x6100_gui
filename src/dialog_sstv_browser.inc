@@ -459,6 +459,10 @@ static void sstv_browser_build(void)
             lv_obj_has_flag(progress_bar, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(progress_bar, LV_OBJ_FLAG_HIDDEN);
     }
+    if (q_box) {
+        sstv_browser_q_was_hidden = lv_obj_has_flag(q_box, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(q_box, LV_OBJ_FLAG_HIDDEN);
+    }
 
     /* Pixel-for-pixel WEFAX BIG browser geometry. */
     ui_list_cfg_t cfg = {
@@ -525,6 +529,8 @@ static void sstv_browser_close(void)
         else
             lv_obj_clear_flag(progress_bar, LV_OBJ_FLAG_HIDDEN);
     }
+    if (q_box && !sstv_browser_q_was_hidden)
+        lv_obj_clear_flag(q_box, LV_OBJ_FLAG_HIDDEN);
 
     free(sstv_browser_buffer);
     sstv_browser_buffer = NULL;

@@ -203,13 +203,14 @@ static double garbage_percentile(double *v, int n, double q)
     return i + 1 < n ? v[i] + (pos - i) * (v[i + 1] - v[i]) : v[n - 1];
 }
 
-static bool is_garbage(const uint8_t *rgb, int w, int h, float *p_out)
+/* the probability that rgb (w x h, h >= 2) is garbage; -1 without memory.
+ * Also used on bands of rows for the quality bars (h 16 or 32). */
+static double garbage_prob(const uint8_t *rgb, int w, int h)
 {
-    *p_out = 0;
-    if (!rgb || w < 2 || h < 34) return false;
+    if (!rgb || w < 2 || h < 2) return -1;
     size_t np = (size_t)w * h;
     float *y = malloc(np * 3 * sizeof(float));
-    if (!y) return false;
+    if (!y) return -1;
     float *cb = y + np, *cr = cb + np;
     long clipped = 0;
     double sat = 0;
@@ -281,7 +282,15 @@ static bool is_garbage(const uint8_t *rgb, int w, int h, float *p_out)
         + (m_fb3  - 0.371243)  / 0.369021  *  0.643692
         + (m_bs50 - 18.224407) / 10.577017 *  0.561015
         + (m_bv50 - 2.001931)  / 0.530028  *  0.412298;
-    double p = 1.0 / (1.0 + exp(-z));
+    return 1.0 / (1.0 + exp(-z));
+}
+
+static bool is_garbage(const uint8_t *rgb, int w, int h, float *p_out)
+{
+    *p_out = 0;
+    if (!rgb || w < 2 || h < 34) return false;
+    double p = garbage_prob(rgb, w, h);
+    if (p < 0) return false;
     *p_out = (float)p;
     fprintf(stderr, "SSTV GARBAGE: probability %.2f (garbage from %.2f)\n", p, GARBAGE_P);
     return p >= GARBAGE_P;
@@ -777,6 +786,86 @@ static bool live_detect_vis_retry(bool found, uint64_t *win_end, sstv_info_t *ou
     return found;
 }
 
+/* ---- 1KO125: quality bars (Auto RX) --------------------------------------
+ * The rows drawn live are kept in q_rgb.  Each time 16 more rows are in, the
+ * band is given a quality, 100 * (1 - garbage_prob()) of the band with the
+ * 16 rows before it, shown as a segment (green >= 70, yellow >= 30, red);
+ * the violet bar is the mean of the bands so far, from the second band on.
+ * UI thread only (live_preview_tick); q_reset_pending is set by
+ * live_preview_start(), with live_mutex held. */
+#define Q_BAND 16
+#define Q_BANDS_MAX 64
+static volatile bool q_reset_pending = false;
+static uint8_t *q_rgb = NULL;
+static int q_w = 0, q_h = 0, q_top = 0, q_nbands = 0;
+static float q_band[Q_BANDS_MAX];
+
+static void q_free(void)
+{
+    free(q_rgb);
+    q_rgb = NULL;
+    q_w = q_h = q_top = q_nbands = 0;
+}
+
+static void q_reset(int w, int h)
+{
+    q_free();
+    if (w > 0 && h > 0 && h / Q_BAND <= Q_BANDS_MAX)
+        q_rgb = calloc((size_t)w * h * 3, 1);
+    if (q_rgb) { q_w = w; q_h = h; }
+    if (!q_box) return;
+    lv_obj_clean(q_seg_bar);
+    lv_bar_set_value(q_bar, 0, LV_ANIM_OFF);
+    lv_label_set_text(q_label, "");
+    if (sstv_browser_open) {                    /* shown when the browser closes */
+        sstv_browser_q_was_hidden = !q_rgb;
+        lv_obj_add_flag(q_box, LV_OBJ_FLAG_HIDDEN);
+    } else if (q_rgb) {
+        lv_obj_clear_flag(q_box, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(q_box, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void q_band_done(int i)
+{
+    int r0 = i * Q_BAND - Q_BAND;
+    if (r0 < 0) r0 = 0;
+    double p = garbage_prob(q_rgb + (size_t)r0 * q_w * 3, q_w, (i + 1) * Q_BAND - r0);
+    if (p < 0) return;
+    float q = (float)(100.0 * (1.0 - p));
+    q_band[i] = q;
+    q_nbands = i + 1;
+    if (!q_box) return;
+
+    const int bw = 250, nb = q_h / Q_BAND;              /* segment i under its rows */
+    int x0 = bw * i / nb, x1 = bw * (i + 1) / nb;
+    lv_obj_t *seg = lv_obj_create(q_seg_bar);
+    lv_obj_remove_style_all(seg);
+    lv_obj_set_pos(seg, x0, 0);
+    lv_obj_set_size(seg, x1 - x0, 16);
+    lv_obj_set_style_bg_opa(seg, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(seg, lv_color_hex(q >= 70 ? 0x3CBE50 : q >= 30 ? 0xE6BE28 : 0xDC3C3C), 0);
+
+    if (q_nbands >= 2) {
+        float sum = 0;
+        for (int k = 0; k < q_nbands; ++k) sum += q_band[k];
+        int mean = (int)(sum / q_nbands + 0.5f);
+        lv_bar_set_value(q_bar, mean, LV_ANIM_OFF);
+        lv_label_set_text_fmt(q_label, "Q %d%%", mean);
+    }
+}
+
+/* a row drawn live: kept, and the bands it completes are measured */
+static void q_add_row(int row, const uint8_t *rgb, int width, int height)
+{
+    if (!q_rgb || width != q_w || height != q_h || row < 0 || row >= q_h) return;
+    memcpy(q_rgb + (size_t)row * q_w * 3, rgb, (size_t)q_w * 3);
+    if (row + 1 > q_top) q_top = row + 1;
+    while (q_nbands < q_h / Q_BAND && q_top >= (q_nbands + 1) * Q_BAND)
+        q_band_done(q_nbands);
+}
+
 /* ---- Progressive display (Auto RX) ---------------------------------------
  * live_preview_start(): called with live_mutex held right after a capture
  * was committed in live_samples[0..live_written).  win_end is the absolute
@@ -800,6 +889,7 @@ static void live_preview_start(uint64_t win_end, uint64_t buf0_abs)
     sstv_linesync_process(&live_ls, live_samples, (size_t)live_written);
     sstv_preview_init(&live_pv, live_info.mode, row0);
     live_pv_on = sstv_row_width(live_info.mode) > 0;
+    q_reset_pending = live_pv_on;               /* 1KO125: quality bars, from the UI thread */
     fprintf(stderr, "SSTV PREVIEW: %s, row 0 at %.3f s of the capture%s\n", live_info.name,
             row0 / SSTV_SAMPLE_RATE, row0 < 0.0 ? " (unknown: from the line syncs)" : "");
 }
@@ -830,6 +920,10 @@ static void live_preview_draw_row(int row, const uint8_t *rgb, int width, int he
 static void live_preview_tick(void)
 {
     uint8_t row_rgb[320 * 3];
+    if (q_reset_pending) {                      /* 1KO125: a new picture */
+        q_reset_pending = false;
+        q_reset(live_pv.width, live_pv.height);
+    }
     for (int k = 0; k < SSTV_PV_ROWS_PER_TICK && live_pv_on; ++k) {
         long a = 0, b = 0;
         bool ok = false;
@@ -850,7 +944,10 @@ static void live_preview_tick(void)
         pthread_mutex_unlock(&live_mutex);
         if (!ok) break;
         int r = sstv_preview_render(&live_pv, live_pv_slice, row_rgb);
-        if (r >= 0) live_preview_draw_row(r, row_rgb, live_pv.width, live_pv.height);
+        if (r >= 0) {
+            live_preview_draw_row(r, row_rgb, live_pv.width, live_pv.height);
+            q_add_row(r, row_rgb, live_pv.width, live_pv.height);   /* 1KO125 */
+        }
     }
 }
 
