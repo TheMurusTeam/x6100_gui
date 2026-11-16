@@ -1117,7 +1117,8 @@ static void on_tick_cb(const slot_info_t *info, bool new_slot,
             struct timespec now;
             clock_gettime(CLOCK_REALTIME, &now);
             struct tm *ts = localtime(&now.tv_sec);
-            add_info("RX %s %02i:%02i:%02i", cfg_digital_label_get(),
+            /* not cfg_digital_label_get(): that is the last FT8 / JS8 band */
+            add_info("RX FT8-CB 11m %02i:%02i:%02i",
                      ts->tm_hour, ts->tm_min, ts->tm_sec);
         }
     }
