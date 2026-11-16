@@ -3,8 +3,9 @@
 The DSC application is for listening only. It is not for navigation, nor
 for distress and safety watchkeeping.
 
-DSC works without any data file: a call shows the MMSI and the country
-from its MID. `dsc_flags.bin` below adds the flag of that country.
+Without data files a call shows the MMSI and the country from its MID.
+`dsc_ships.bin` below adds the name of the station, `dsc_flags.bin` the
+flag of the country.
 
 ## dsc_ships.bin
 
