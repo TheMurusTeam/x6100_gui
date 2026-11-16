@@ -7,7 +7,7 @@
 
 #include "cb_msg.h"
 
-#include <ft8lib/hashtable.h>
+#include "../ft8/call_table.h"   /* the callsigns of the FT8 worker (OpenX6100 call table) */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -173,15 +173,15 @@ ftx_message_rc_t ft8cb_encode(const char *text, ftx_message_t *msg)
         const char *call = (n >= 3 && !ft8cb_is_std_call(tok[1]) && ft8cb_is_valid_call(tok[2]) &&
                             strlen(tok[2]) > 4) ? tok[2] : tok[1];
         if (!ft8cb_is_std_call(call))
-            return ftx_message_encode_nonstd(msg, &hash_if, "CQ", call, "");
-        return ftx_message_encode(msg, &hash_if, text);
+            return ftx_message_encode_nonstd(msg, &ftx_call_table_if, "CQ", call, "");
+        return ftx_message_encode(msg, &ftx_call_table_if, text);
     }
 
     /* "<HIS> ME [RR73|RRR|73]": type 4, his call hashed, mine in clear */
     if (tok[0][0] == '<' && n >= 2 && n <= 3) {
         char to[TOKEN_LEN];
         unbracket(tok[0], to, sizeof(to));
-        rc = ftx_message_encode_nonstd(msg, &hash_if, to, tok[1], n == 3 ? tok[2] : "");
+        rc = ftx_message_encode_nonstd(msg, &ftx_call_table_if, to, tok[1], n == 3 ? tok[2] : "");
         if (rc == FTX_MESSAGE_RC_OK) return rc;
     }
 
@@ -189,7 +189,7 @@ ftx_message_rc_t ft8cb_encode(const char *text, ftx_message_t *msg)
     if (n == 2 && free_text_ok(text))
         return ftx_message_encode_free(msg, text);
 
-    rc = ftx_message_encode(msg, &hash_if, text);
+    rc = ftx_message_encode(msg, &ftx_call_table_if, text);
     if (rc != FTX_MESSAGE_RC_OK && free_text_ok(text))
         rc = ftx_message_encode_free(msg, text);
     return rc;
@@ -201,5 +201,5 @@ void ft8cb_keep_hash(const char *my_call)
     ftx_message_t m;
     ftx_message_init(&m);
     /* encoding the CQ saves the callsign and its hashes (age reset) */
-    ftx_message_encode_nonstd(&m, &hash_if, "CQ", my_call, "");
+    ftx_message_encode_nonstd(&m, &ftx_call_table_if, "CQ", my_call, "");
 }
