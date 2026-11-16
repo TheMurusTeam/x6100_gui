@@ -24,7 +24,7 @@
 #include "../ft8/gfsk.h"
 
 /* FT8 audio tone offset inside the radio passband (as ft8/tx_worker.c) */
-#define SIGNAL_FREQ_HZ   1325
+#define SIGNAL_FREQ_HZ   FT8_TX_AUDIO_HZ   /* as FT8 (ft8/tx_worker.h): the waterfall shows the TX there */
 #define MAX_PWR_W        5.0f
 #define GAIN_MIN_DB     (-30.0f)
 #define GAIN_MAX_DB      0.0f
