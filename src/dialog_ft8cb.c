@@ -56,6 +56,8 @@
 #include "ft8cb/cb_div.h"
 #include "app_wf.h"                /* the shared waterfall, as FT8 / JS8 */
 #include "ft8/tx_worker.h"         /* FT8_TX_AUDIO_HZ */
+#include "ft8cb/cb_map.h"          /* Show: Map, as FT8 */
+#include "psk_reporter.h"          /* who hears you, as FT8 */
 #include "widgets/lv_finder.h"
 
 #include "ft8/worker.h"
@@ -108,6 +110,13 @@ static lv_timer_t *timer = NULL;
 static lv_anim_t   fade;
 static bool        fade_run        = false;
 static bool        disable_buttons = false;
+
+/* PSK Reporter, as FT8 (dialog_ft8.c): on / off and minutes shared with FT8 */
+#define PSK_MIN_STEP 5
+#define PSK_KNOB_MS  4000       /* the MFK sets the time this long after the button */
+static lv_obj_t   *psk_knob;
+static lv_timer_t *psk_knob_timer;
+static int         psk_up = -1; /* last told: listening, or no connection */
 
 static lv_obj_t *finder;
 static lv_obj_t *waterfall;
@@ -177,6 +186,15 @@ static void tx_call_en_dis_cb(struct button_data_t *btn_data);
 static void hold_tx_freq_cb(struct button_data_t *btn_data);
 static void mode_auto_cb(struct button_data_t *btn_data);
 static void cb_call_cb(struct button_data_t *btn_data);
+static const char *map_label_getter();
+static void show_map_cb(struct button_data_t *btn_data);
+static void map_mode_cb(struct button_data_t *btn_data);
+static const char *psk_label_getter();
+static void psk_cb(struct button_data_t *btn_data);
+static void psk_hold_cb(struct button_data_t *btn_data);
+static void psk_update(void);
+static void add_msg_cb(void *data);
+static void map_only_cb(void *data);
 static void time_sync(struct button_data_t *btn_data);
 
 static void force_save_qso(struct button_data_t *btn_data);
@@ -216,17 +234,19 @@ static button_data_t button_page_3 = { .type=BTN_TEXT, .label = "(FT8 CB 3:3)", 
 static button_data_t button_cb_call = { .type=BTN_TEXT_FN, .label_fn = cb_call_label_getter, .press = cb_call_cb };
 static button_data_t button_time_sync = { .type=BTN_TEXT, .label = "Time\nSync", .press = time_sync };
 static button_data_t button_info = { .type=BTN_TEXT, .label = "Info", .press = info_cb };
+static button_data_t button_show_map = { .type=BTN_TEXT_FN, .label_fn = map_label_getter, .press = show_map_cb, .hold = map_mode_cb };
+static button_data_t button_psk = { .type=BTN_TEXT_FN, .label_fn = psk_label_getter, .press = psk_cb, .hold = psk_hold_cb };
 
 static buttons_page_t btn_page_1 = {
     {&button_page_1, &button_show_cq_all, &button_freq, &button_tx_cq_en_dis, &button_tx_call_en_dis}
 };
 
 static buttons_page_t btn_page_2 = {
-    {&button_page_2, &button_hold_freq, &button_auto_en_dis, &button_force_save}
+    {&button_page_2, &button_hold_freq, &button_auto_en_dis, &button_force_save, &button_show_map}
 };
 
 static buttons_page_t btn_page_3 = {
-    {&button_page_3, &button_cb_call, &button_time_sync, &button_info}
+    {&button_page_3, &button_cb_call, &button_time_sync, &button_info, &button_psk}
 };
 
 static dialog_t dialog = {
@@ -352,6 +372,14 @@ static void destruct_cb() {
     dsp_audio_set_active(dsp_audio_sub_id, false);
     keyboard_close();
     worker_done();
+    psk_reporter_watch(NULL, NULL, NULL, NULL);
+    if (psk_knob_timer) {
+        lv_timer_del(psk_knob_timer);
+        psk_knob_timer = NULL;
+    }
+    psk_knob = NULL;        /* deleted with the window */
+    psk_up   = -1;
+    cbmap_close();          /* its objects go with the window */
     cbtv_destroy();
 
     app_wf_stop();          /* also turns the main screen's back on */
@@ -406,6 +434,7 @@ static void load_band(int8_t dir) {
 static void clean_screen() {
     cbtv_reset();
     app_wf_clear();
+    cbmap_clear();
 
     int32_t *c = malloc(sizeof(int32_t));
     *c = LV_KEY_UP;
@@ -625,6 +654,9 @@ static void construct_cb(lv_obj_t *parent) {
     }
     dsp_audio_set_active(dsp_audio_sub_id, true);
 
+    cbmap_open(conf.call, "FT8-CB 11m");
+    psk_update();
+
     if (!conf.call[0]) {
         msg_schedule_long_text_fmt("Set your CB callsign: page 3, CB Call");
     }
@@ -826,6 +858,186 @@ static void force_save_qso(struct button_data_t *btn_data) {
     }
 }
 
+/* ---- Show: Map (ft8cb/cb_map.c, the FT8 map) ------------------------- */
+
+static void to_map_cell(const cbtv_cell_t *in, cbmap_cell_t *out) {
+    memset(out, 0, sizeof(*out));
+    out->cell_type   = (int)in->cell_type;
+    out->dist        = in->dist;
+    out->odd         = in->odd;
+    out->meta        = in->meta;
+    out->worked_type = (int)in->worked_type;
+    snprintf(out->text, sizeof(out->text), "%s", in->text);
+}
+
+/* Every message for the list goes to the map too (both on the LVGL thread) */
+static void add_msg_cb(void *data) {
+    cbtv_add_msg_cb(data);
+    cbmap_cell_t c;
+    to_map_cell((const cbtv_cell_t *)data, &c);
+    cbmap_add(&c);
+}
+
+static void map_only_cb(void *data) {
+    cbmap_cell_t c;
+    to_map_cell((const cbtv_cell_t *)data, &c);
+    cbmap_add(&c);
+}
+
+static void on_table_press(const cbtv_cell_t *cell_data);
+
+/* A station pressed on the map: as its row in the list */
+static void map_press(const cbmap_cell_t *c) {
+    cbtv_cell_t cd = {0};
+    cd.cell_type   = (cbtv_cell_type_t)c->cell_type;
+    cd.dist        = c->dist;
+    cd.odd         = c->odd;
+    cd.meta        = c->meta;
+    cd.worked_type = (qso_log_search_worked_t)c->worked_type;
+    snprintf(cd.text, sizeof(cd.text), "%s", c->text);
+    on_table_press(&cd);
+}
+
+static const char *map_label_getter() {
+    return cbmap_shown() ? "Show:\nList" : "Show:\nMap";
+}
+
+static void show_map_cb(struct button_data_t *btn_data) {
+    if (disable_buttons) return;
+    if (cbmap_toggle(dialog.obj, table, waterfall, map_press, on_table_close, on_table_vol_change) && cbmap_shown())
+        msg_update_text_fmt("Map: turn MFK to pick a station, press to call it. Hold: Auto/Close-in/World");
+    buttons_refresh(btn_data);
+}
+
+/* Held: the map's view, Auto -> Close-in -> World */
+static void map_mode_cb(struct button_data_t *btn_data) {
+    (void)btn_data;
+    if (disable_buttons || !cbmap_shown()) return;
+    msg_update_text_fmt("Map: %s", cbmap_next_mode());
+}
+
+/* ---- PSK Reporter: who hears you, on the map (as FT8) ---------------- */
+
+static void psk_on_spot(const char *call, const char *grid, int snr, int64_t when) {
+    cbmap_heard_you(call, grid, snr, when);
+}
+
+static void psk_on_state(bool up) {
+    if (psk_up == (int)up) return;
+    psk_up = up;
+    msg_update_text_fmt("PSK Reporter: %s", up ? "listening for who hears you" : "no connection, trying again");
+}
+
+/* Your CB call on 11 m, FT8 */
+static void psk_update(void) {
+    static const psk_reporter_cb_t cb = {.on_spot = psk_on_spot, .on_state = psk_on_state};
+    bool on = param_i_get(cfg.ft8.psk()) && conf.call[0];
+    cbmap_set_you_minutes(on ? param_i_get(cfg.ft8.psk_min()) : 0);
+    psk_reporter_watch(conf.call, on ? psk_reporter_band(cparam_i_get(cfg.cur.fg_freq())) : NULL, "FT8", &cb);
+}
+
+static const char *psk_label_getter() {
+    static char buf[32];
+    if (param_i_get(cfg.ft8.psk()))
+        snprintf(buf, sizeof(buf), "PSK Rep:\n%d min", (int)param_i_get(cfg.ft8.psk_min()));
+    else
+        snprintf(buf, sizeof(buf), "PSK Rep:\nOff");
+    return buf;
+}
+
+/* The MFK back to whatever had it (unless something else took it since) */
+static void psk_knob_end_cb(lv_timer_t *t) {
+    (void)t;
+    psk_knob_timer = NULL;
+    if (!psk_knob) return;
+    bool had = lv_group_get_focused(keyboard_group) == psk_knob;
+    lv_group_remove_obj(psk_knob);
+    if (!had) return;
+    if (cbmap_shown()) {
+        cbmap_focus();
+    } else {
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+static void psk_knob_key_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *) lv_event_get_param(e));
+    int      dir = 0;
+    switch (key) {
+        case LV_KEY_RIGHT:
+        case LV_KEY_DOWN:
+            dir = 1;
+            break;
+        case LV_KEY_LEFT:
+        case LV_KEY_UP:
+            dir = -1;
+            break;
+        case LV_KEY_ESC:
+            if (psk_knob_timer) lv_timer_ready(psk_knob_timer);
+            return;
+        case KEY_VOL_LEFT_EDIT:
+        case KEY_VOL_LEFT_SELECT:
+            radio_change_vol(-1);
+            return;
+        case KEY_VOL_RIGHT_EDIT:
+        case KEY_VOL_RIGHT_SELECT:
+            radio_change_vol(1);
+            return;
+        default:
+            return;
+    }
+    int m = LV_CLAMP(PSK_MIN_STEP, (int)param_i_get(cfg.ft8.psk_min()) + dir * PSK_MIN_STEP, 60);
+    param_i_set(cfg.ft8.psk_min(), m);
+    cbmap_set_you_minutes(m);
+    msg_update_text_fmt("PSK Reporter: lines stay %d min", m);
+    buttons_refresh(&button_psk);
+    if (psk_knob_timer) lv_timer_reset(psk_knob_timer);
+}
+
+/* For a few seconds the MFK sets the time, in the list or on the map */
+static void psk_knob_start(void) {
+    if (!psk_knob) {
+        psk_knob = lv_obj_create(dialog.obj);
+        lv_obj_remove_style_all(psk_knob);
+        lv_obj_set_size(psk_knob, 0, 0);
+        lv_obj_add_event_cb(psk_knob, psk_knob_key_cb, LV_EVENT_KEY, NULL);
+    }
+    if (lv_obj_get_group(psk_knob) != keyboard_group) lv_group_add_obj(keyboard_group, psk_knob);
+    lv_group_focus_obj(psk_knob);
+    lv_group_set_editing(keyboard_group, true);
+    if (psk_knob_timer) {
+        lv_timer_reset(psk_knob_timer);
+    } else {
+        psk_knob_timer = lv_timer_create(psk_knob_end_cb, PSK_KNOB_MS, NULL);
+        lv_timer_set_repeat_count(psk_knob_timer, 1);
+    }
+    msg_update_text_fmt("PSK Reporter: turn MFK to set how long lines stay (%d min)", (int)param_i_get(cfg.ft8.psk_min()));
+}
+
+static void psk_cb(struct button_data_t *btn_data) {
+    if (disable_buttons) return;
+    bool on = !param_i_get(cfg.ft8.psk());
+    if (on && strlen(conf.call) < 3) {
+        msg_update_text_fmt("PSK Reporter: set your CB callsign first (page 3)");
+        return;
+    }
+    param_i_set(cfg.ft8.psk(), on);
+    psk_up = -1;
+    if (!on) cbmap_forget_you();
+    psk_update();
+    buttons_refresh(btn_data);
+    if (on) psk_knob_start();
+    else msg_update_text_fmt("PSK Reporter off");
+}
+
+/* Held, while on: the time, without switching it off and on */
+static void psk_hold_cb(struct button_data_t *btn_data) {
+    (void)btn_data;
+    if (disable_buttons || !param_i_get(cfg.ft8.psk())) return;
+    psk_knob_start();
+}
+
 static void on_table_press(const cbtv_cell_t *cell_data) {
     if (state == TX_PROCESS) {
         tx_call_off();
@@ -857,7 +1069,7 @@ static void on_table_press(const cbtv_cell_t *cell_data) {
             cbtv_cell_t cd = {0};
             cd.cell_type = CELL_START_QSO;
             snprintf(cd.text, sizeof(cd.text), "Start QSO with %s", cell_data->meta.call_de);
-            scheduler_put(cbtv_add_msg_cb, &cd, sizeof(cbtv_cell_t));
+            scheduler_put(add_msg_cb, &cd, sizeof(cbtv_cell_t));
         }
         msg_schedule_text_fmt("Next TX: %s", tx_msg.msg);
     } else {
@@ -898,6 +1110,7 @@ static void keyboard_close() {
     textarea_window_close();
     lv_group_add_obj(keyboard_group, table);
     lv_group_set_editing(keyboard_group, true);
+    if (cbmap_shown()) cbmap_focus();   /* the map had the MFK */
     disable_buttons = false;
 }
 
@@ -923,6 +1136,8 @@ static bool keyboard_ok_cb() {
         msg_schedule_long_text_fmt("%s is not a CB callsign: standard FT8 messages", conf.call);
     }
     if (button_cb_call.disp_btn) buttons_refresh(&button_cb_call);
+    cbmap_set_my_call(conf.call);
+    psk_update();           /* PSK Reporter: the new call */
     keyboard_close();
     return true;
 }
@@ -973,7 +1188,7 @@ static void add_info(const char * fmt, ...) {
     vsnprintf(cell_data.text, sizeof(cell_data.text), fmt, args);
     va_end(args);
 
-    scheduler_put(cbtv_add_msg_cb, &cell_data, sizeof(cbtv_cell_t));
+    scheduler_put(add_msg_cb, &cell_data, sizeof(cbtv_cell_t));
 }
 
 /**
@@ -987,7 +1202,7 @@ static void add_tx_text(const char * text) {
     if (strncmp(cell_data.text, "CQ_", 3) == 0) {
         cell_data.text[2] = ' ';
     }
-    scheduler_put(cbtv_add_msg_cb, &cell_data, sizeof(cbtv_cell_t));
+    scheduler_put(add_msg_cb, &cell_data, sizeof(cbtv_cell_t));
 }
 
 /**
@@ -1020,6 +1235,13 @@ static void add_rx_text(int16_t snr, const char * text, slot_info_t *s_info, flo
     } else if (meta.type == FTX_MSG_TYPE_CQ) {
         cell_type = CELL_RX_CQ;
     } else if (!param_i_get(cfg.ft8.show_all())) {
+        /* with Show: CQ the list leaves out others' QSOs; the map still shows them */
+        cbtv_cell_t cd = {0};
+        cd.cell_type = CELL_RX_MSG;
+        strncpy(cd.text, text, sizeof(cd.text) - 1);
+        cd.meta = meta;
+        cd.odd  = s_info->odd;
+        scheduler_put(map_only_cb, &cd, sizeof(cbtv_cell_t));
         return;
     } else {
         cell_type = CELL_RX_MSG;
@@ -1064,7 +1286,7 @@ static void add_rx_text(int16_t snr, const char * text, slot_info_t *s_info, flo
     } else {
         cell_data.dist = 0;
     }
-    scheduler_put(cbtv_add_msg_cb, (void*)&cell_data, sizeof(cbtv_cell_t));
+    scheduler_put(add_msg_cb, (void*)&cell_data, sizeof(cbtv_cell_t));
 }
 
 /* ---- audio_worker callbacks (run on the worker thread) ---------------- */

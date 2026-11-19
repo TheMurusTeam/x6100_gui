@@ -21,6 +21,10 @@ extern "C" {
 /* Country of call, or NULL (not a CB callsign, unknown division, no table) */
 const char *ft8cb_country(const char *call);
 
+/* The grid square of the centre of that country ("JN62" for 1KO125), for
+ * the map: CB calls send no locator.  NULL when unknown.  As above. */
+const char *ft8cb_grid(const char *call);
+
 #ifdef __cplusplus
 }
 #endif

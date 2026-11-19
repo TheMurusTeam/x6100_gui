@@ -170,7 +170,14 @@ static const char *const bodies[] = {
     H("COUNTRY")
     "The country of a CB callsign comes from its division number (14AB321: 14, France). It is "
     "shown on CQ calls and on the first answer of each station to your CQ. The list of "
-    "divisions is /usr/share/x6100/cb_divisions.txt (number;country).",
+    "divisions is /usr/share/x6100/cb_divisions.txt (number;country;grid).\n\n"
+    H("MAP")
+    "Page 2, Show: Map. CB messages carry no locator, so each station is placed at the centre "
+    "of the country of its division. Turn the MFK to pick a station, press it to call. "
+    "Hold the button: Auto, Close-in, World.\n\n"
+    H("PSK REPORTER")
+    "Page 3, PSK Rep: who heard your CB call on 11m FT8, as lines on the map. Press to switch "
+    "on or off, then turn the MFK to set how long lines stay. On and minutes are shared with FT8.",
 };
 
 /* third-party parts named in the credits, "" = none */

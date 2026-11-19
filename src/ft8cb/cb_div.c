@@ -17,6 +17,7 @@
 #define DIV_MAX 1000            /* division numbers have at most 3 digits */
 
 static char *names[DIV_MAX];
+static char *grids[DIV_MAX];    /* centre of the country, for the map ("JN62"); NULL if none */
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 
 static void load(void)
@@ -32,8 +33,11 @@ static void load(void)
         char *name = sep + 1;
         name[strcspn(name, "\r\n")] = '\0';
         while (*name == ' ') name++;
+        char *grid = strchr(name, ';');             /* number;country;grid square */
+        if (grid) *grid++ = '\0';
         if (n <= 0 || n >= DIV_MAX || !name[0] || names[n]) continue;
         names[n] = strdup(name);
+        if (grid && strlen(grid) >= 4) grids[n] = strdup(grid);
     }
     fclose(f);
 }
@@ -45,4 +49,13 @@ const char *ft8cb_country(const char *call)
     int n = 0;
     for (const char *p = call; isdigit((unsigned char)*p); p++) n = n * 10 + (*p - '0');
     return (n > 0 && n < DIV_MAX) ? names[n] : NULL;
+}
+
+const char *ft8cb_grid(const char *call)
+{
+    if (!call || !ft8cb_is_cb_call(call)) return NULL;
+    pthread_once(&once, load);
+    int n = 0;
+    for (const char *p = call; isdigit((unsigned char)*p); p++) n = n * 10 + (*p - '0');
+    return (n > 0 && n < DIV_MAX) ? grids[n] : NULL;
 }

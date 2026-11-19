@@ -56,5 +56,11 @@ const char *map_view_next_mode(void);
 /* "FT8 20m": the status line's start. */
 void map_view_set_title(const char *title);
 
+/* 1KO125 (FT8 CB): the grid of a station that sent none (NULL: unknown;
+ * the function itself NULL: by callsign, as FT8), and your call in place of
+ * Settings' ("" or NULL: Settings'). */
+void map_view_set_grid_fallback(const char *(*fn)(const char *call));
+void map_view_set_my_call(const char *call);
+
 /* The window closes: timer, buffers, map data. */
 void map_view_destroy(void);

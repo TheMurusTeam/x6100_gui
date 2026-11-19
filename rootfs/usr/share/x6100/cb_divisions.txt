@@ -1,355 +1,356 @@
 # CB (11 m) division numbers and countries, used by FT8 CB.
-# Source: FEDI-EA CB division list (fediea.org). One entry per line: number;country
+# Source: FEDI-EA CB division list (fediea.org). One entry per line: number;country;grid square
+# Grid square: centre of the country (AD1C cty.dat), for the FT8 CB map.
 # Names shortened to fit the FT8 CB screen. Edit freely; lines starting with # are ignored.
-1;Italy
-2;USA
-3;Brazil
-4;Argentina
-5;Venezuela
-6;Colombia
-7;Neth. Antilles
-8;Peru
-9;Canada
-10;Mexico
-11;Puerto Rico
-12;Uruguay
-13;Germany
-14;France
-15;Switzerland
-16;Belgium
-17;Hawaii
-18;Greece
-19;Netherlands
-20;Norway
-21;Sweden
-22;French Guiana
-23;Jamaica
-24;Panama
-25;Japan
-26;England
-27;Iceland
-28;Honduras
-29;Ireland
-30;Spain
-31;Portugal
-32;Chile
-33;Alaska
-34;Canary Islands
-35;Austria
-36;San Marino
-37;Dominican Rep.
-38;Greenland
-39;Angola
-40;Liechtenstein
-41;New Zealand
-42;Liberia
-43;Australia
-44;South Africa
-45;Yugoslavia
-46;East Germany
-47;Denmark
-48;Saudi Arabia
-49;Balearic Islands
-50;European Russia
-51;Andorra
-52;Faroe Islands
-53;El Salvador
-54;Luxembourg
-55;Gibraltar
-56;Finland
-57;India
-58;East Malaysia
-59;Dodecanese
-60;Hong Kong
-61;Ecuador
-62;Guam
-63;St. Helena
-64;Senegal
-65;Sierra Leone
-66;Mauritania
-67;Paraguay
-68;North Ireland
-69;Costa Rica
-70;American Samoa
-71;Midway Islands
-72;Guatemala
-73;Suriname
-74;Namibia
-75;Azores
-76;Morocco
-77;Ghana
-78;Zambia
-79;Philippines
-80;Bolivia
-81;San Andres
-82;Guantanamo Bay
-83;Tanzania
-84;Ivory Coast
-85;Zimbabwe
-86;Nepal
-87;Yemen
-88;Cuba
-89;Nigeria
-90;Crete
-91;Indonesia
-92;Libya
-93;Malta
-94;UAE
-95;Mongolia
-96;Tonga
-97;Israel
-98;Singapore
-99;Fiji
-100;South Korea
-101;Papua New Guinea
-102;Kuwait
-103;Haiti
-104;Corsica
-105;Botswana
-106;Ceuta & Melilla
-107;Monaco
-108;Scotland
-109;Hungary
-110;Cyprus
-111;Jordan
-112;Lebanon
-113;West Malaysia
-114;Pakistan
-115;Qatar
-116;Turkey
-117;Egypt
-118;Gambia
-119;Madeira
-120;Antigua & Barbuda
-121;Bahamas
-122;Barbados
-123;Bermuda
-124;St. Paul & Amsterdam
-125;Cayman Islands
-126;Nicaragua
-127;US Virgin Is.
-128;Brit. Virgin Is.
-129;Macquarie Islands
-130;Norfolk Island
-131;Guyana
-132;Marshall Islands
-133;N. Mariana Is.
-134;Belau
-135;Solomon Islands
-136;Martinique
-137;Isle of Man
-138;Vatican
-139;South Yemen
-140;Antarctica
-141;St. Pierre & Miq.
-142;Lesotho
-143;St. Lucia
-144;Eastern Island
-145;Galapagos Islands
-146;Algeria
-147;Tunisia
-148;Ascension Island
-149;Laccadive Islands
-150;Bahrain
-151;Iraq
-152;Maldives
-153;Thailand
-154;Iran
-155;Taiwan
-156;Cameroon
-157;Montserrat
-158;Trinidad & Tobago
-159;Somalia
-160;Sudan
-161;Poland
-162;DR Congo
-163;Wales
-164;Togo
-165;Sardinia
-166;St. Maarten/Saba
-167;Jersey Island
-168;Mauritius
-169;Guernsey Island
-170;Burkina Faso
-171;Svalbard Islands
-172;New Caledonia
-173;Reunion
-174;Uganda
-175;Chad
-176;Central African R.
-177;Sri Lanka
-178;Bulgaria
-179;Czechoslovakia
-180;Oman
-181;Syria
-182;Guinea Republic
-183;Benin
-184;Burundi
-185;Comoros
-186;Djibouti
-187;Kenya
-188;Madagascar
-189;Mayotte
-190;Seychelles
-191;Swaziland
-192;Cocos Islands
-193;Cocos-Keeling Is.
-194;Dominica
-195;Grenada
-196;Guadeloupe
-197;Vanuatu
-198;Falkland Islands
-199;Equatorial Guinea
-200;South Shetland Is.
-201;French Polynesia
-202;Bhutan
-203;China
-204;Mozambique
-205;Cape Verde
-206;Ethiopia
-207;St. Martin Island
-208;Glorieuses Islands
-209;Juan de Nova
-210;Wallis & Futuna
-211;Jan Mayen Island
-212;Aland Islands
-213;Market Reef
-214;Congo
-215;Gabon
-216;Mali
-217;Christmas Island
-218;Belize
-219;Anguilla
-220;St. Vincent
-221;South Orkney Is.
-222;South Sandwich Is.
-223;Samoa
-224;Western Kiribati
-225;Brunei Darussalam
-226;Malawi
-227;Rwanda
-228;Chagos Islands
-229;Heard Island
-230;Micronesia
-231;St. Peter & Paul
-232;Aruba
-233;Romania
-234;Afghanistan
-235;ITU Geneva
-236;Bangladesh
-237;Myanmar
-238;Cambodia
-239;Laos
-240;Macao
-241;Spratly Island
-242;Vietnam
-243;Agalega & St. Br.
-244;Pagalu Island
-245;Niger
-246;Sao Tome & Principe
-247;Navassa Island
-248;Turks & Caicos
-249;Northern Cook Islands
-250;Cook Islands
-251;Albania
-252;Revillagigedo
-253;Andaman & Nicobar
-254;Mount Athos
-255;Kerguelen Islands
-256;Prince Edward Is.
-257;Rodriguez Island
-258;Tristan da Cunha
-259;Tromelin Island
-260;Baker & Howland
-261;Chatham Islands
-262;Johnston Island
-263;Kermadec Islands
-264;Kingman Reef
-265;Central Kiribati
-266;Eastern Kiribati
-267;Kure Island
-268;Lord Howe Island
-269;Mellish Reef
-270;Minami Torishima
-271;Nauru
-272;Niue
-273;Jarvis & Palmyra
-274;Pitcairn Island
-275;Tokelau Islands
-276;Tuvalu
-277;Sable Island
-278;Wake Island
-279;Willis Islets
-280;Aves Island
-281;Ogasawara Islands
-282;Auckland & Campbell
-283;St. Kitts & Nevis
-284;St. Paul Island
-285;Fernando de Noronha
-286;Juan Fernandez
-287;Malpelo Island
-288;San Felix
-289;South Georgia
-290;Trindade
-291;Dhekelia & Akrotiri
-292;Abu-Ail
-293;Guinea Bissau
-294;Peter 1st Island
-295;Southern Sudan
-296;Clipperton Island
-297;Bouvet Island
-298;Crozet Islands
-299;Desecheo Island
-300;Western Sahara
-301;Armenia
-302;Asiatic Russia
-303;Azerbaijan
-304;Estonia
-305;Franz Josef Land
-306;Georgia
-307;Kaliningradsk
-308;Kazakhstan
-309;Kyrgyzstan
-310;Latvia
-311;Lithuania
-312;Moldova
-313;Tajikistan
-314;Turkmenistan
-315;Ukraine
-316;Uzbekistan
-317;Belarus
-318;Malta (SMOM)
-319;UN New York
-320;Banaba Island
-321;Conway Reef
-322;Walvis Bay
-323;Yemen
-324;Penguin Island
-325;Rotuma Island
-326;Malyj Vytsotskj
-327;Slovenia
-328;Croatia
-329;Czech
-330;Slovakia
-331;Bosnia Herzegovina
-332;Macedonia
-333;Eritrea
-334;North Korea
-335;Scarborough Reef
-336;Pratas Island
-337;Austral Islands
-338;Marquesas Islands
-339;Temotu Islands
-340;Palestine
-341;East Timor
-342;Chesterfield Islands
-343;Ducie Island
-344;Montenegro
-345;Swain's Island
-346;St. Barthelemy
-347;Curacao
-348;St. Maarten
-349;St. Eustatius/Saba
-350;Bonaire
-351;South Sudan
-352;Kosovo
+1;Italy;JN62
+2;USA;EM47
+3;Brazil;GI30
+4;Argentina;FF87
+5;Venezuela;FJ78
+6;Colombia;FJ35
+7;Neth. Antilles;FK52
+8;Peru;FI20
+9;Canada;FN04
+10;Mexico;DL91
+11;Puerto Rico;FK68
+12;Uruguay;GF27
+13;Germany;JO51
+14;France;JN16
+15;Switzerland;JN46
+16;Belgium;JO20
+17;Hawaii;BL11
+18;Greece;KM09
+19;Netherlands;JO22
+20;Norway;JP41
+21;Sweden;JO78
+22;French Guiana;GJ34
+23;Jamaica;FK18
+24;Panama;FJ09
+25;Japan;PM96
+26;England;IO92
+27;Iceland;IP04
+28;Honduras;EK65
+29;Ireland;IO53
+30;Spain;IN80
+31;Portugal;IM69
+32;Chile;FG40
+33;Alaska;BP51
+34;Canary Islands;IL28
+35;Austria;JN67
+36;San Marino;JN63
+37;Dominican Rep.;FK49
+38;Greenland;GQ84
+39;Angola;JH97
+40;Liechtenstein;JN47
+41;New Zealand;RF70
+42;Liberia;IJ56
+43;Australia;PG66
+44;South Africa;KG10
+45;Yugoslavia;KN04
+46;East Germany;JO51
+47;Denmark;JO56
+48;Saudi Arabia;LL14
+49;Balearic Islands;JM19
+50;European Russia;LO03
+51;Andorra;JN02
+52;Faroe Islands;IP62
+53;El Salvador;EK54
+54;Luxembourg;JO30
+55;Gibraltar;IM76
+56;Finland;KP21
+57;India;ML82
+58;East Malaysia;OJ62
+59;Dodecanese;KM36
+60;Hong Kong;OL72
+61;Ecuador;FI08
+62;Guam;QK23
+63;St. Helena;IH74
+64;Senegal;IK25
+65;Sierra Leone;IJ38
+66;Mauritania;IL40
+67;Paraguay;GG14
+68;North Ireland;IO64
+69;Costa Rica;EK80
+70;American Samoa;AH45
+71;Midway Islands;AL18
+72;Guatemala;EK45
+73;Suriname;GJ24
+74;Namibia;JG88
+75;Azores;HM68
+76;Morocco;IM72
+77;Ghana;IJ97
+78;Zambia;KH35
+79;Philippines;PK13
+80;Bolivia;FH73
+81;San Andres;EK92
+82;Guantanamo Bay;FL20
+83;Tanzania;KI64
+84;Ivory Coast;IJ77
+85;Zimbabwe;KH52
+86;Nepal;NL27
+87;Yemen;LK45
+88;Cuba;FL01
+89;Nigeria;JJ39
+90;Crete;KM25
+91;Indonesia;OI42
+92;Libya;JL87
+93;Malta;JM75
+94;UAE;LL74
+95;Mongolia;ON16
+96;Tonga;AG28
+97;Israel;KM71
+98;Singapore;OJ11
+99;Fiji;RH82
+100;South Korea;PM36
+101;Papua New Guinea;QI30
+102;Kuwait;LL39
+103;Haiti;FK39
+104;Corsica;JN42
+105;Botswana;KG28
+106;Ceuta & Melilla;IM75
+107;Monaco;JN33
+108;Scotland;IO76
+109;Hungary;JN97
+110;Cyprus;KM65
+111;Jordan;KM81
+112;Lebanon;KM73
+113;West Malaysia;OJ13
+114;Pakistan;MM50
+115;Qatar;LL55
+116;Turkey;KM79
+117;Egypt;KL46
+118;Gambia;IK13
+119;Madeira;IM12
+120;Antigua & Barbuda;FK97
+121;Bahamas;FL24
+122;Barbados;GK03
+123;Bermuda;FM72
+124;St. Paul & Amsterdam;MF82
+125;Cayman Islands;EK99
+126;Nicaragua;EK72
+127;US Virgin Is.;FK77
+128;Brit. Virgin Is.;FK78
+129;Macquarie Islands;QD95
+130;Norfolk Island;RG30
+131;Guyana;GJ06
+132;Marshall Islands;RJ39
+133;N. Mariana Is.;QK25
+134;Belau;PJ77
+135;Solomon Islands;RI01
+136;Martinique;FK94
+137;Isle of Man;IO74
+138;Vatican;JN61
+139;South Yemen;LK45
+140;Antarctica;JA00
+141;St. Pierre & Miq.;GN16
+142;Lesotho;KG30
+143;St. Lucia;FK93
+144;Eastern Island;DG52
+145;Galapagos Islands;EI49
+146;Algeria;JL18
+147;Tunisia;JM45
+148;Ascension Island;II22
+149;Laccadive Islands;MK61
+150;Bahrain;LL56
+151;Iraq;LM13
+152;Maldives;MJ64
+153;Thailand;NK92
+154;Iran;LM62
+155;Taiwan;PL03
+156;Cameroon;JJ55
+157;Montserrat;FK86
+158;Trinidad & Tobago;FK90
+159;Somalia;LJ22
+160;Sudan;KK44
+161;Poland;JO92
+162;DR Congo;KI16
+163;Wales;IO82
+164;Togo;JJ08
+165;Sardinia;JN40
+166;St. Maarten/Saba;FK88
+167;Jersey Island;IN89
+168;Mauritius;LG89
+169;Guernsey Island;IN89
+170;Burkina Faso;IK92
+171;Svalbard Islands;JQ88
+172;New Caledonia;RG28
+173;Reunion;LG78
+174;Uganda;KJ61
+175;Chad;JK95
+176;Central African R.;KJ06
+177;Sri Lanka;NJ07
+178;Bulgaria;KN22
+179;Czechoslovakia;JO80
+180;Oman;LL93
+181;Syria;KM95
+182;Guinea Republic;IK41
+183;Benin;JJ19
+184;Burundi;KI46
+185;Comoros;LH18
+186;Djibouti;LK11
+187;Kenya;KJ90
+188;Madagascar;LH31
+189;Mayotte;LH27
+190;Seychelles;LI75
+191;Swaziland;KG53
+192;Cocos Islands;EJ65
+193;Cocos-Keeling Is.;NH87
+194;Dominica;FK95
+195;Grenada;FK92
+196;Guadeloupe;FK96
+197;Vanuatu;RH42
+198;Falkland Islands;GD08
+199;Equatorial Guinea;JJ51
+200;South Shetland Is.;GC07
+201;French Polynesia;BH52
+202;Bhutan;NL57
+203;China;OM16
+204;Mozambique;KH71
+205;Cape Verde;HK86
+206;Ethiopia;KJ99
+207;St. Martin Island;FK88
+208;Glorieuses Islands;LH38
+209;Juan de Nova;LH12
+210;Wallis & Futuna;AH16
+211;Jan Mayen Island;IQ51
+212;Aland Islands;KP00
+213;Market Reef;JP90
+214;Congo;JI78
+215;Gabon;JI59
+216;Mali;IK88
+217;Christmas Island;OH29
+218;Belize;EK56
+219;Anguilla;FK88
+220;St. Vincent;FK93
+221;South Orkney Is.;GC79
+222;South Sandwich Is.;HD61
+223;Samoa;AH46
+224;Western Kiribati;RJ61
+225;Brunei Darussalam;OJ74
+226;Malawi;KH76
+227;Rwanda;KI48
+228;Chagos Islands;MI62
+229;Heard Island;MD66
+230;Micronesia;QJ96
+231;St. Peter & Paul;HJ50
+232;Aruba;FK52
+233;Romania;KN25
+234;Afghanistan;MM24
+235;ITU Geneva;JN36
+236;Bangladesh;NL44
+237;Myanmar;NL80
+238;Cambodia;OK22
+239;Laos;OK28
+240;Macao;OL62
+241;Spratly Island;OJ79
+242;Vietnam;OK35
+243;Agalega & St. Br.;LH89
+244;Pagalu Island;JI28
+245;Niger;JK47
+246;Sao Tome & Principe;JJ30
+247;Navassa Island;FK28
+248;Turks & Caicos;FL41
+249;Northern Cook Islands;AH99
+250;Cook Islands;BG18
+251;Albania;KN01
+252;Revillagigedo;DK48
+253;Andaman & Nicobar;NK62
+254;Mount Athos;KN20
+255;Kerguelen Islands;ME41
+256;Prince Edward Is.;KE83
+257;Rodriguez Island;MH10
+258;Tristan da Cunha;IF32
+259;Tromelin Island;LH74
+260;Baker & Howland;AJ20
+261;Chatham Islands;AE16
+262;Johnston Island;AK56
+263;Kermadec Islands;AG10
+264;Kingman Reef;AJ85
+265;Central Kiribati;AI47
+266;Eastern Kiribati;BJ11
+267;Kure Island;AL19
+268;Lord Howe Island;QF98
+269;Mellish Reef;QH72
+270;Minami Torishima;QL64
+271;Nauru;RI39
+272;Niue;AH50
+273;Jarvis & Palmyra;AJ85
+274;Pitcairn Island;CG44
+275;Tokelau Islands;AI40
+276;Tuvalu;RI91
+277;Sable Island;GN03
+278;Wake Island;RK39
+279;Willis Islets;QH53
+280;Aves Island;FK85
+281;Ogasawara Islands;QL17
+282;Auckland & Campbell;RD38
+283;St. Kitts & Nevis;FK87
+284;St. Paul Island;GN07
+285;Fernando de Noronha;HI36
+286;Juan Fernandez;FF06
+287;Malpelo Island;EJ93
+288;San Felix;EG93
+289;South Georgia;HD15
+290;Trindade;HG59
+291;Dhekelia & Akrotiri;KM65
+292;Abu-Ail;LK45
+293;Guinea Bissau;IK22
+294;Peter 1st Island;EC41
+295;Southern Sudan;KJ54
+296;Clipperton Island;DK50
+297;Bouvet Island;JD15
+298;Crozet Islands;LE53
+299;Desecheo Island;FK68
+300;Western Sahara;IL34
+301;Armenia;LN20
+302;Asiatic Russia;NO25
+303;Azerbaijan;LN30
+304;Estonia;KO29
+305;Franz Josef Land;LR40
+306;Georgia;LN22
+307;Kaliningradsk;KO04
+308;Kazakhstan;MN28
+309;Kyrgyzstan;MN71
+310;Latvia;KO27
+311;Lithuania;KO15
+312;Moldova;KN47
+313;Tajikistan;MM58
+314;Turkmenistan;LM98
+315;Ukraine;KO50
+316;Uzbekistan;MN11
+317;Belarus;KO44
+318;Malta (SMOM);JN61
+319;UN New York;FN30
+320;Banaba Island;RI49
+321;Conway Reef;RG78
+322;Walvis Bay;JG88
+323;Yemen;LK45
+324;Penguin Island;JG88
+325;Rotuma Island;RH87
+326;Malyj Vytsotskj;LO03
+327;Slovenia;JN76
+328;Croatia;JN75
+329;Czech;JO80
+330;Slovakia;KN09
+331;Bosnia Herzegovina;JN84
+332;Macedonia;KN01
+333;Eritrea;KK95
+334;North Korea;PM39
+335;Scarborough Reef;OK85
+336;Pratas Island;OL80
+337;Austral Islands;BG56
+338;Marquesas Islands;BI91
+339;Temotu Islands;RH29
+340;Palestine;KM71
+341;East Timor;PI31
+342;Chesterfield Islands;QH90
+343;Ducie Island;CG75
+344;Montenegro;JN92
+345;Swain's Island;AH48
+346;St. Barthelemy;FK87
+347;Curacao;FK52
+348;St. Maarten;FK88
+349;St. Eustatius/Saba;FK87
+350;Bonaire;FK52
+351;South Sudan;KJ54
+352;Kosovo;KN02
