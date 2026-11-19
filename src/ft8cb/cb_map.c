@@ -38,7 +38,8 @@ typedef struct {
     int64_t     heard_ms;     /* monotonic */
     int64_t     to_me_ms;     /* their last message to you, 0 never */
     int64_t     to_ms;
-    int64_t     you_ms;       /* the last report of them hearing you, 0 never */
+    int64_t     you_t;        /* the last report of them hearing you, UTC seconds, 0 never.
+                                 Not monotonic: reports can be hours older than the radio's uptime */
     int         you_snr;
     bool        cq;           /* their last message was a CQ */
     bool        worked;       /* worked before (the list's check, on a CQ) */
@@ -84,6 +85,12 @@ static const char *grid_of(const char *call) {
     return ft8cb_grid(c);
 }
 
+/* How recent a station is, on the monotonic clock (may be negative) */
+static int64_t last_ms(const station_t *s, int64_t now) {
+    int64_t you = s->you_t ? now - ((int64_t)time(NULL) - s->you_t) * 1000 : INT64_MIN;
+    return MAX(s->heard_ms ? s->heard_ms : INT64_MIN, you);
+}
+
 static station_t *find(const char *call) {
     for (int i = 0; i < st_n; i++)
         if (strcasecmp(st[i].call, call) == 0) return &st[i];
@@ -99,7 +106,7 @@ static station_t *station(const char *call, int64_t now) {
     } else {
         s = &st[0];
         for (int i = 1; i < st_n; i++)
-            if (MAX(st[i].heard_ms, st[i].you_ms) < MAX(s->heard_ms, s->you_ms)) s = &st[i];
+            if (last_ms(&st[i], now) < last_ms(s, now)) s = &st[i];
     }
     memset(s, 0, sizeof(*s));
     snprintf(s->call, sizeof(s->call), "%s", call);
@@ -177,13 +184,11 @@ void cbmap_clear(void) {
  * moves a station's line forward in time */
 void cbmap_heard_you(const char *call, const char *grid, int snr, int64_t when) {
     int64_t now   = now_ms();
-    int64_t age_s = MAX((int64_t)time(NULL) - when, 0);
-    int64_t at    = MAX(now - age_s * 1000, 1);
     bool    known = find(call) != NULL;
     station_t *s  = station(call, now);
     if (!known) s->heard_ms = 0; /* not heard here */
-    if (at < s->you_ms) return;
-    s->you_ms  = at;
+    if (when < s->you_t) return;
+    s->you_t   = when;
     s->you_snr = snr;
     if (grid && grid[0]) snprintf(s->grid, sizeof(s->grid), "%s", grid);
 }
@@ -194,7 +199,7 @@ void cbmap_set_you_minutes(int minutes) {
 }
 
 void cbmap_forget_you(void) {
-    for (int i = 0; i < st_n; i++) st[i].you_ms = 0;
+    for (int i = 0; i < st_n; i++) st[i].you_t = 0;
     if (map_scene_shown()) redraw(true);
 }
 
@@ -232,12 +237,13 @@ static void build(int64_t now) {
         const char *g = grid_of(my_call);
         if (g) snprintf(my_grid, sizeof(my_grid), "%s", g);
     }
-    bool qso_on = qso_call[0] && now - qso_ms < QSO_MS;
+    bool    qso_on = qso_call[0] && now - qso_ms < QSO_MS;
+    int64_t utc    = time(NULL);
     int  n = 0, nhere = 0, ncq = 0, ncall = 0, nyou = 0, sel = -1;
     for (int i = 0; i < st_n; i++) {
         station_t *s = &st[i];
         bool here = s->heard_ms && now - s->heard_ms < HEARD_MS;
-        bool you  = you_min && s->you_ms && now - s->you_ms < you_min * 60000LL;
+        bool you  = you_min && s->you_t && utc - s->you_t < you_min * 60LL;
         if (!here && !you) continue;
         map_scene_station_t *d = &sc_st[n];
         memset(d, 0, sizeof(*d));
