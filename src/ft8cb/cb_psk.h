@@ -9,10 +9,11 @@
  *  each station's DXCC country and leave out the reports that have none.
  *  CB calls have no DXCC, so nothing of FT8-CB ever comes through: tested
  *  on 2026-11-19, the site listed new reports of 1KO125 while both the v2
- *  and v2raw topics stayed silent. pskreporter.info itself has them, and
- *  answers its web query (retrieve.pskreporter.info, the one its own map
- *  uses) for CB calls on 27 MHz. That query is HTTPS only, so it goes
- *  through GnuTLS, which the radio's image already has.
+ *  and v2raw topics stayed silent. pskreporter.info itself has them: its
+ *  map's own query (cgi-bin/pskquery5.pl) returns them for a day, while the
+ *  query for programs (retrieve.pskreporter.info) stopped returning them
+ *  about an hour after they were made. HTTPS only, so through GnuTLS, which
+ *  the radio's image already has.
  *
  *  So: every 5 minutes (PSK Reporter asks for no more), the reports of your
  *  call heard in FT8 on 26-28 MHz in the last 24 hours, on a thread of its
@@ -44,7 +45,7 @@ typedef struct {
  * instead, and a new call waits for the 5 minutes. */
 void cbpsk_watch(const char *call, const cbpsk_cb_t *cb);
 
-/* Parses a query's answer (XML), calling `spot` for each report of `me` in
+/* Parses a query's answer (the map's JSON), calling `spot` for each report of `me` in
  * FT8 on 26-28 MHz with a usable locator; returns how many. Apart for tests. */
 int cbpsk_parse(const char *xml, const char *me,
                 void (*spot)(void *arg, const char *call, const char *grid, int snr, int64_t when), void *arg);

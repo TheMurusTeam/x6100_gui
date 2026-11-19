@@ -29,7 +29,7 @@
 
 #include <gnutls/gnutls.h>
 
-#define HOST        "retrieve.pskreporter.info"
+#define HOST        "pskreporter.info"   /* the query of its own map: see query() */
 #define QUERY_S     300             /* PSK Reporter: no more than one query every 5 minutes
                                        (sooner it answers 429 Too Many Requests) */
 #define WINDOW_S    86400           /* the reports of the last 24 hours */
@@ -38,27 +38,26 @@
 #define CB_LO_HZ    26000000
 #define CB_HI_HZ    28000000
 
-/* ---- The answer: <receptionReport receiverCallsign="14AT061" receiverLocator="JN08ER"
- *      senderCallsign="1KO125" frequency="27267385" flowStartSeconds="1795092041"
- *      mode="FT8" sNR="-20" ... /> ---- */
+/* ---- The answer (JSON, as the site's map gets it):
+ *      {"receiverCallsign":"14AT061","receiverLocator":"JN08ER","senderCallsign":"1KO125",
+ *       "frequency":27267385,"flowStartSeconds":1795092041,"mode":"FT8",...,"sNR":-20} ---- */
 
-/* The value of ` name="..."` inside one report, "" if missing */
+/* The value of `"name":` inside one report, quoted or a number; "" if missing */
 static void attr(const char *rep, const char *end, const char *name, char *out, size_t size) {
     char key[40];
-    snprintf(key, sizeof(key), " %s=\"", name);
+    snprintf(key, sizeof(key), "\"%s\":", name);
     out[0]        = '\0';
-    const char *p = rep;
-    size_t      k = strlen(key);
-    while ((p = strstr(p, key)) && p < end) {
-        p += k;
-        const char *q = memchr(p, '"', (size_t)(end - p));
-        if (!q) return;
-        size_t n = (size_t)(q - p);
-        if (n >= size) n = size - 1;
-        memcpy(out, p, n);
-        out[n] = '\0';
-        return;
-    }
+    const char *p = strstr(rep, key);
+    if (!p || p >= end) return;
+    p += strlen(key);
+    while (*p == ' ') p++;
+    bool        quoted = *p == '"';
+    const char *q      = quoted ? ++p : p;
+    while (q < end && (quoted ? *q != '"' : (*q != ',' && *q != '}'))) q++;
+    size_t n = (size_t)(q - p);
+    if (n >= size) n = size - 1;
+    memcpy(out, p, n);
+    out[n] = '\0';
 }
 
 /* Upper case, 4 or 6 characters kept; false without a usable 4 */
@@ -77,8 +76,8 @@ int cbpsk_parse(const char *xml, const char *me,
                 void (*spot)(void *arg, const char *call, const char *grid, int snr, int64_t when), void *arg) {
     int         n = 0;
     const char *p = xml;
-    while ((p = strstr(p, "<receptionReport "))) {
-        const char *end = strstr(p, "/>");
+    while ((p = strstr(p, "{\"receiverCallsign\""))) {
+        const char *end = strchr(p, '}');
         if (!end) break;
         char rc[16], rl[12], sc[16], f[16], t[16], md[12], snr[8];
         attr(p, end, "receiverCallsign", rc, sizeof(rc));
@@ -88,7 +87,7 @@ int cbpsk_parse(const char *xml, const char *me,
         attr(p, end, "flowStartSeconds", t, sizeof(t));
         attr(p, end, "mode", md, sizeof(md));
         attr(p, end, "sNR", snr, sizeof(snr));
-        p = end + 2;
+        p = end + 1;
         long long hz = atoll(f), when = atoll(t);
         if (strcasecmp(sc, me) != 0 || !rc[0] || strcasecmp(rc, me) == 0) continue;
         if (strcasecmp(md, "FT8") != 0 || hz < CB_LO_HZ || hz >= CB_HI_HZ || when <= 0) continue;
@@ -165,9 +164,10 @@ static char *https_get(const char *path) {
         LV_LOG_USER("PSK Reporter: TLS %s", gnutls_strerror(r));
         goto out;
     }
-    char req[512];
+    char req[768];
     int  n = snprintf(req, sizeof(req),
-                      "GET %s HTTP/1.0\r\nHost: " HOST "\r\nUser-Agent: X6100-1KO125-FT8CB\r\nAccept: */*\r\nConnection: close\r\n\r\n",
+                      "GET %s HTTP/1.0\r\nHost: " HOST "\r\nUser-Agent: X6100-1KO125-FT8CB\r\nAccept: */*\r\n"
+                      "Referer: https://pskreporter.info/pskmap\r\nConnection: close\r\n\r\n",
                       path);
     if (n <= 0 || n >= (int)sizeof(req)) goto out;
     for (int sent = 0; sent < n;) {
@@ -267,15 +267,22 @@ static void answer(const char *call, unsigned g, const char *xml) {
 }
 
 static void query(const char *call, unsigned g) {
-    char enc[48], path[256];
+    char enc[48], path[400];
     size_t n = 0;
     for (const char *c = call; *c && n + 4 < sizeof(enc); c++) {
         if (isalnum((unsigned char)*c)) enc[n++] = *c;
         else n += (size_t)snprintf(enc + n, sizeof(enc) - n, "%%%02X", (unsigned char)*c); /* "/" */
     }
     enc[n] = '\0';
-    snprintf(path, sizeof(path), "/query?senderCallsign=%s&flowStartSeconds=-%d&rronly=1&noactive=1&mode=FT8", enc,
-             WINDOW_S);
+    /* The site's own map query (pskquery5.pl), as its page asks it. Not
+     * retrieve.pskreporter.info: on 2026-11-19 that answered 0 reports of
+     * 1KO125 about an hour after they were made, while the map, from any
+     * browser, still showed them all; this query returned them. */
+    snprintf(path, sizeof(path),
+             "/cgi-bin/pskquery5.pl?callback=doNothing&mc_version=2026.11.14.1153&pskvers=2026.11.14.1131"
+             "&statistics=1&noactive=1&nolocator=1&flowStartSeconds=-%d&frange=26000000-27999999&mode=FT8"
+             "&callsign=%s",
+             WINDOW_S, enc);
     char *xml = https_get(path);
     answer(call, g, xml);
     free(cache_xml);
