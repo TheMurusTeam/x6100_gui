@@ -176,8 +176,10 @@ static const char *const bodies[] = {
     "of the country of its division. Turn the MFK to pick a station, press it to call. "
     "Hold the button: Auto, Close-in, World.\n\n"
     H("PSK REPORTER")
-    "Page 3, PSK Rep: who heard your CB call on 11m FT8, as lines on the map. Press to switch "
-    "on or off, then turn the MFK to set how long lines stay. On and minutes are shared with FT8.",
+    "Page 3, PSK Rep: who heard your CB call in FT8 on 27 MHz, as blue lines on the map. "
+    "Press to switch on or off, then turn the MFK to set how long lines stay (5 min to 24 h). "
+    "Every 5 minutes it asks pskreporter.info for the last 24 hours (internet and the right "
+    "clock needed): FT8's live feed carries no CB reports.",
 };
 
 /* third-party parts named in the credits, "" = none */

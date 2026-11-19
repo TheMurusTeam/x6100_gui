@@ -28,6 +28,7 @@ void ft8cb_conf_load(ft8cb_conf_t *c)
 {
     memset(c, 0, sizeof(*c));
     c->freq_hz = DEFAULT_FREQ_HZ;
+    c->psk_min = 60;
     FILE *f = fopen(FT8CB_CONF_FILE, "r");
     if (!f) return;
     char line[96];
@@ -42,6 +43,11 @@ void ft8cb_conf_load(ft8cb_conf_t *c)
         } else if (strcmp(line, "freq") == 0) {
             long hz = atol(v);
             if (hz > 26000000 && hz < 28000000) c->freq_hz = (int32_t)hz;
+        } else if (strcmp(line, "psk") == 0) {
+            c->psk = atoi(v) != 0;
+        } else if (strcmp(line, "psk_min") == 0) {
+            int m = atoi(v);
+            if (m >= 5 && m <= 1440) c->psk_min = m;
         }
     }
     fclose(f);
@@ -53,7 +59,7 @@ void ft8cb_conf_save(const ft8cb_conf_t *c)
     snprintf(tmp, sizeof(tmp), "%s.tmp", FT8CB_CONF_FILE);
     FILE *f = fopen(tmp, "w");
     if (!f) return;
-    fprintf(f, "call=%s\nfreq=%ld\n", c->call, (long)c->freq_hz);
+    fprintf(f, "call=%s\nfreq=%ld\npsk=%d\npsk_min=%d\n", c->call, (long)c->freq_hz, c->psk ? 1 : 0, c->psk_min);
     fflush(f);
     fsync(fileno(f));
     fclose(f);

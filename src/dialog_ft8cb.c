@@ -57,7 +57,7 @@
 #include "app_wf.h"                /* the shared waterfall, as FT8 / JS8 */
 #include "ft8/tx_worker.h"         /* FT8_TX_AUDIO_HZ */
 #include "ft8cb/cb_map.h"          /* Show: Map, FT8 CB's own */
-#include "psk_reporter.h"          /* who hears you, as FT8 */
+#include "ft8cb/cb_psk.h"          /* who heard you: PSK Reporter's web query */
 #include "widgets/lv_finder.h"
 
 #include "ft8/worker.h"
@@ -111,12 +111,12 @@ static lv_anim_t   fade;
 static bool        fade_run        = false;
 static bool        disable_buttons = false;
 
-/* PSK Reporter, as FT8 (dialog_ft8.c): on / off and minutes shared with FT8 */
-#define PSK_MIN_STEP 5
+/* PSK Reporter: on / off and minutes in /mnt/ft8cb.conf, FT8-CB's own */
 #define PSK_KNOB_MS  4000       /* the MFK sets the time this long after the button */
 static lv_obj_t   *psk_knob;
 static lv_timer_t *psk_knob_timer;
-static int         psk_up = -1; /* last told: listening, or no connection */
+static int         psk_ok = -1; /* last told: reached, or not */
+static int         psk_n  = -1; /* last told: reports of you in 24 h */
 
 static lv_obj_t *finder;
 static lv_obj_t *waterfall;
@@ -372,13 +372,14 @@ static void destruct_cb() {
     dsp_audio_set_active(dsp_audio_sub_id, false);
     keyboard_close();
     worker_done();
-    psk_reporter_watch(NULL, NULL, NULL, NULL);
+    cbpsk_watch(NULL, NULL);
     if (psk_knob_timer) {
         lv_timer_del(psk_knob_timer);
         psk_knob_timer = NULL;
     }
     psk_knob = NULL;        /* deleted with the window */
-    psk_up   = -1;
+    psk_ok   = -1;
+    psk_n    = -1;
     cbmap_close();          /* its objects go with the window */
     cbtv_destroy();
 
@@ -890,30 +891,51 @@ static void map_mode_cb(struct button_data_t *btn_data) {
     msg_update_text_fmt("Map: %s", cbmap_next_mode());
 }
 
-/* ---- PSK Reporter: who hears you, on the map (as FT8) ---------------- */
+/* ---- PSK Reporter: who heard you, on the map ------------------------ */
+/* Not FT8's live feed: it carries no CB reports (ft8cb/cb_psk.h). Its web
+ * query, every 5 minutes, brings the last 24 hours. */
 
 static void psk_on_spot(const char *call, const char *grid, int snr, int64_t when) {
     cbmap_heard_you(call, grid, snr, when);
 }
 
-static void psk_on_state(bool up) {
-    if (psk_up == (int)up) return;
-    psk_up = up;
-    msg_update_text_fmt("PSK Reporter: %s", up ? "listening for who hears you" : "no connection, trying again");
+static void psk_on_result(bool ok, int n) {
+    if (psk_ok == (int)ok && (!ok || psk_n == n)) return;
+    psk_ok = ok;
+    psk_n  = n;
+    if (ok) msg_update_text_fmt("PSK Reporter: %d reports of you in the last 24 h", n);
+    else msg_update_text_fmt("PSK Reporter: not reached (network, clock?), trying again in 5 min");
 }
 
-/* Your CB call on 11 m, FT8 */
+/* 5..60 min by 5, then 4, 12 and 24 hours: the query brings a whole day */
+static int psk_min_step(int m, int dir) {
+    static const int steps[] = {5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 240, 720, 1440};
+    const int        n       = sizeof(steps) / sizeof(steps[0]);
+    int              i       = 0;
+    while (i < n - 1 && steps[i] < m) i++;
+    i = LV_CLAMP(0, i + dir, n - 1);
+    return steps[i];
+}
+
+static const char *psk_min_str(int m) {
+    static char buf[16];
+    if (m > 60 && m % 60 == 0) snprintf(buf, sizeof(buf), "%d h", m / 60);
+    else snprintf(buf, sizeof(buf), "%d min", m);
+    return buf;
+}
+
+/* Your CB call, FT8 on 26-28 MHz */
 static void psk_update(void) {
-    static const psk_reporter_cb_t cb = {.on_spot = psk_on_spot, .on_state = psk_on_state};
-    bool on = param_i_get(cfg.ft8.psk()) && conf.call[0];
-    cbmap_set_you_minutes(on ? param_i_get(cfg.ft8.psk_min()) : 0);
-    psk_reporter_watch(conf.call, on ? psk_reporter_band(cparam_i_get(cfg.cur.fg_freq())) : NULL, "FT8", &cb);
+    static const cbpsk_cb_t cb = {.on_spot = psk_on_spot, .on_result = psk_on_result};
+    bool on = conf.psk && strlen(conf.call) >= 3;
+    cbmap_set_you_minutes(on ? conf.psk_min : 0);
+    cbpsk_watch(on ? conf.call : NULL, &cb);
 }
 
 static const char *psk_label_getter() {
     static char buf[32];
-    if (param_i_get(cfg.ft8.psk()))
-        snprintf(buf, sizeof(buf), "PSK Rep:\n%d min", (int)param_i_get(cfg.ft8.psk_min()));
+    if (conf.psk)
+        snprintf(buf, sizeof(buf), "PSK Rep:\n%s", psk_min_str(conf.psk_min));
     else
         snprintf(buf, sizeof(buf), "PSK Rep:\nOff");
     return buf;
@@ -961,10 +983,11 @@ static void psk_knob_key_cb(lv_event_t *e) {
         default:
             return;
     }
-    int m = LV_CLAMP(PSK_MIN_STEP, (int)param_i_get(cfg.ft8.psk_min()) + dir * PSK_MIN_STEP, 60);
-    param_i_set(cfg.ft8.psk_min(), m);
+    int m = psk_min_step(conf.psk_min, dir);
+    conf.psk_min = m;
+    ft8cb_conf_save(&conf);
     cbmap_set_you_minutes(m);
-    msg_update_text_fmt("PSK Reporter: lines stay %d min", m);
+    msg_update_text_fmt("PSK Reporter: lines stay %s", psk_min_str(m));
     buttons_refresh(&button_psk);
     if (psk_knob_timer) lv_timer_reset(psk_knob_timer);
 }
@@ -986,18 +1009,20 @@ static void psk_knob_start(void) {
         psk_knob_timer = lv_timer_create(psk_knob_end_cb, PSK_KNOB_MS, NULL);
         lv_timer_set_repeat_count(psk_knob_timer, 1);
     }
-    msg_update_text_fmt("PSK Reporter: turn MFK to set how long lines stay (%d min)", (int)param_i_get(cfg.ft8.psk_min()));
+    msg_update_text_fmt("PSK Reporter: turn MFK to set how long lines stay (%s)", psk_min_str(conf.psk_min));
 }
 
 static void psk_cb(struct button_data_t *btn_data) {
     if (disable_buttons) return;
-    bool on = !param_i_get(cfg.ft8.psk());
+    bool on = !conf.psk;
     if (on && strlen(conf.call) < 3) {
         msg_update_text_fmt("PSK Reporter: set your CB callsign first (page 3)");
         return;
     }
-    param_i_set(cfg.ft8.psk(), on);
-    psk_up = -1;
+    conf.psk = on;
+    ft8cb_conf_save(&conf);
+    psk_ok = -1;
+    psk_n  = -1;
     if (!on) cbmap_forget_you();
     psk_update();
     buttons_refresh(btn_data);
@@ -1008,7 +1033,7 @@ static void psk_cb(struct button_data_t *btn_data) {
 /* Held, while on: the time, without switching it off and on */
 static void psk_hold_cb(struct button_data_t *btn_data) {
     (void)btn_data;
-    if (disable_buttons || !param_i_get(cfg.ft8.psk())) return;
+    if (disable_buttons || !conf.psk) return;
     psk_knob_start();
 }
 

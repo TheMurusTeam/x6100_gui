@@ -6,7 +6,7 @@
 /*
  * FT8 CB - settings and log.
  *
- *   /mnt/ft8cb.conf      the CB callsign and the frequency in use
+ *   /mnt/ft8cb.conf      the CB callsign, the frequency in use, PSK Reporter
  *   /mnt/ft8cb_log.adi   the QSO log (ADIF, BAND 11m), separate from the
  *                        amateur log of the FT8 application
  *
@@ -28,6 +28,8 @@ extern "C" {
 typedef struct {
     char    call[12];
     int32_t freq_hz;
+    bool    psk;            /* PSK Reporter on: who heard you, on the map */
+    int     psk_min;        /* how long its lines stay, minutes (5..1440) */
 } ft8cb_conf_t;
 
 void ft8cb_conf_load(ft8cb_conf_t *c);

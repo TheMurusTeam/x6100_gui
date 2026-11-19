@@ -33,7 +33,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     dialog.c dialog_swrscan.c
     dxcc.c
     dialog_ft8.c dialog_freq.c dialog_gps.c dialog_msg_cw.c
-    dialog_ft8cb.c ft8cb/cb_msg.c ft8cb/qso_cb.c ft8cb/tx_cb.c ft8cb/cb_store.c ft8cb/cb_div.c ft8cb/cb_map.c ft8cb/table_view_cb.c
+    dialog_ft8cb.c ft8cb/cb_msg.c ft8cb/qso_cb.c ft8cb/tx_cb.c ft8cb/cb_store.c ft8cb/cb_div.c ft8cb/cb_map.c ft8cb/cb_psk.c ft8cb/table_view_cb.c
     ft8_ui/table_view.c ft8_ui/map_view.c
     app_wf.c
     ft8_udp.c
@@ -94,6 +94,7 @@ find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 pkg_check_modules(deps REQUIRED IMPORTED_TARGET
     libnm dbus-glib-1 sqlite3 libpng libgps sndfile libudev libpulse libpulse-simple alsa bluez
+    gnutls  # 1KO125: FT8-CB's PSK Reporter query is HTTPS only (ft8cb/cb_psk.h)
 )
 
 
