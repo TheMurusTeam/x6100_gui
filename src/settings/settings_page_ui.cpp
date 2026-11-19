@@ -411,9 +411,6 @@ static void make_spectrum_height(SettingsPage &page) {
 
 /***** SPECTRUM 3D, 3D SIZE *****/
 
-/* 1KO125: Spectrum 3D, 3D size and Band plan are shown but disabled for the
- * 1.2 release (Spectrum 3D is held off in settings_manager.h): LVGL's group
- * skips disabled objects, so the MFK never lands on them */
 static void make_spectrum_3d(SettingsPage &page) {
     lv_obj_t *obj;
 
@@ -422,7 +419,6 @@ static void make_spectrum_3d(SettingsPage &page) {
     obj = page.cell(1, 3, SMALL_3);
 
     obj = page.switch_bool(obj, *cfg.ui.spectrum_3d());
-    lv_obj_add_state(obj, LV_STATE_DISABLED);
     lv_obj_add_event_cb(obj, settings_change_bg_opa_cb, LV_EVENT_FOCUSED, &page);
     lv_obj_add_event_cb(obj, settings_change_bg_opa_cb, LV_EVENT_DEFOCUSED, &page);
     lv_obj_set_width(obj, SMALL_3 - 30);
@@ -433,7 +429,6 @@ static void make_spectrum_3d(SettingsPage &page) {
 
     obj = page.cell(1, 6, SMALL_6);
     obj = page.slider_int(obj, *cfg.ui.spectrum_3d_size(), 35, 55, 5, SMALL_6 - 120, "%d %%");
-    lv_obj_add_state(obj, LV_STATE_DISABLED);
 
     lv_obj_add_event_cb(obj, settings_change_bg_opa_cb, LV_EVENT_FOCUSED, &page);
     lv_obj_add_event_cb(obj, settings_change_bg_opa_cb, LV_EVENT_DEFOCUSED, &page);
@@ -446,7 +441,6 @@ static void make_spectrum_3d(SettingsPage &page) {
     lv_obj_set_size(obj, SMALL_6, 56);
     lv_obj_set_grid_cell(obj, LV_GRID_ALIGN_START, 1, 6, LV_GRID_ALIGN_CENTER, page.row, 1);
     lv_obj_center(obj);
-    lv_obj_add_state(obj, LV_STATE_DISABLED);
 
     page.row++;
 }

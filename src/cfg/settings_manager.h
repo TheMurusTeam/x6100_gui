@@ -279,9 +279,7 @@ class SettingsManager {
         StorageType::GLOBAL, pending_writes_, &global_params_};
     // 3D view: past traces stacked into the distance; its height is a percent
     // of the screen below the indicators (2D keeps spectrum_height)
-    /* 1KO125: Spectrum 3D off for the 1.2 release (its settings shown but
-     * disabled): max 0, so a 1 saved before loads as 0 */
-    Parameter<int32_t> p_spectrum_3d{"spectrum_3d", false, 0, 0,
+    Parameter<int32_t> p_spectrum_3d{"spectrum_3d", false, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_};
     Parameter<int32_t> p_band_plan_region{"band_plan_region", 0, 0, 3,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // 0 Auto (QTH Grid), 1-3 ITU region
