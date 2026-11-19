@@ -39,10 +39,19 @@ bool map_scene_km(const char *my_call, const char *my_grid, const char *call, co
     return true;
 }
 
+/* 1KO125: by_grid, the call is left out (a CB call would match an amateur
+ * prefix: 1S..., Italy, as Spratly) and the continent is the grid's. */
+static bool place(const map_scene_t *sc, const char *call, const char *grid, js8_map_place_t *pl) {
+    if (!sc->by_grid) return js8_map_place(call, grid, pl);
+    if (!js8_map_place(NULL, grid, pl)) return false;
+    js8_map_my_continent(NULL, grid, pl->continent);
+    return true;
+}
+
 void map_scene_distance(const map_scene_t *sc, int i, char *buf, size_t size) {
     js8_map_place_t home;
     buf[0] = '\0';
-    if (i < 0 || i >= scene_n || !scene_shown[i] || !js8_map_place(sc->my_call, sc->my_grid, &home)) return;
+    if (i < 0 || i >= scene_n || !scene_shown[i] || !place(sc, sc->my_call, sc->my_grid, &home)) return;
     double km = js8_map_distance_km(home.lat, home.lon, scene_pl[i].lat, scene_pl[i].lon);
     snprintf(buf, size, "  %.0f %s", sc->miles ? km * 0.621371 : km, sc->miles ? "mi" : "km");
 }
@@ -78,14 +87,14 @@ void map_scene_draw(const map_scene_t *sc, bool force) {
     unsigned                 n = sc->n < SCENE_MAX ? sc->n : SCENE_MAX;
 
     js8_map_place_t home;
-    bool            have_home = js8_map_place(sc->my_call, sc->my_grid, &home);
+    bool            have_home = place(sc, sc->my_call, sc->my_grid, &home);
     char            my_cont[3] = "";
-    js8_map_my_continent(sc->my_call, sc->my_grid, my_cont);
+    js8_map_my_continent(sc->by_grid ? NULL : sc->my_call, sc->my_grid, my_cont);
 
     static js8_map_point_t pts[SCENE_MAX];
     unsigned               np = 0;
     for (unsigned i = 0; i < n; i++) {
-        scene_shown[i] = js8_map_place(sc->st[i].call, sc->st[i].grid, &scene_pl[i]);
+        scene_shown[i] = place(sc, sc->st[i].call, sc->st[i].grid, &scene_pl[i]);
         if (!scene_shown[i]) continue;
         pts[np].lat = scene_pl[i].lat;
         pts[np].lon = scene_pl[i].lon;

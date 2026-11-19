@@ -74,6 +74,8 @@ typedef struct {
     const char                *status3;  /* one more under those, in status3_color, NULL none */
     uint32_t                   status3_color;
     const char                *hint;     /* bottom left, above the legend, "" none */
+    bool                       by_grid;  /* 1KO125 (FT8 CB): place and continent from the grid only,
+                                            CB calls are not amateur prefixes */
 } map_scene_t;
 
 /* Draws the scene; skipped when nothing in it changed and the view didn't

@@ -210,6 +210,10 @@ static const map_legend_item_t legend[] = {
 static void build(int64_t now) {
     snprintf(my_call, sizeof(my_call), "%s", own_call[0] ? own_call : PARAM_T_GET(cfg.callsign()));
     snprintf(my_grid, sizeof(my_grid), "%s", PARAM_T_GET(cfg.qth()));
+    if (grid_of && !my_grid[0]) { /* FT8 CB without a QTH: your division's country */
+        const char *g = grid_of(my_call);
+        if (g) snprintf(my_grid, sizeof(my_grid), "%s", g);
+    }
     bool qso_on = qso_call[0] && now - qso_ms < QSO_MS;
     int  n = 0, nhere = 0, ncq = 0, ncall = 0, nyou = 0, sel = -1;
     for (int i = 0; i < st_n; i++) {
@@ -287,7 +291,7 @@ static void build(int64_t now) {
     double best  = -1, km;
     int    dx    = -1;
     for (int i = 0; i < n; i++) /* the farthest heard: "DX ZL2AB 11300 km" */
-        if (sc_st[i].has_snr && map_scene_km(my_call, my_grid, sc_st[i].call, sc_st[i].grid, &km) && km > best) {
+        if (sc_st[i].has_snr && map_scene_km(grid_of ? NULL : my_call, my_grid, grid_of ? NULL : sc_st[i].call, sc_st[i].grid, &km) && km > best) {
             best = km;
             dx   = i;
         }
@@ -314,7 +318,8 @@ static void build(int64_t now) {
                               .status2 = status2,
                               .status3 = status3,
                               .status3_color = MAP_SCENE_BLUE,
-                              .hint    = hint};
+                              .hint    = hint,
+                              .by_grid = grid_of != NULL};
 }
 
 static void redraw(bool force) {
