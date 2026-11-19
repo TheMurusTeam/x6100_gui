@@ -80,6 +80,24 @@ jobs:
       run: |
         cd AetherX6100Buildroot && bash ./br_config.sh
 
+    # 1KO125: U-Boot's source from its official GitHub mirror when
+    # ftp.denx.de, its only download site in Buildroot, is down (19 Nov 2026:
+    # the 1.2 build stopped there after an hour; sources.buildroot.net has no
+    # 2023.01). Put in Buildroot's download folder, it is used as it is (a
+    # custom U-Boot version: no hash to check). The SD card gets R1CBU's
+    # U-Boot binary anyway (Replace u-boot below).
+    - name: U-Boot source
+      run: |
+        f=AetherX6100Buildroot/buildroot/dl/uboot/u-boot-2023.01.tar.bz2
+        mkdir -p "$(dirname "$f")"
+        if ! curl -fsSL --connect-timeout 20 -m 300 -o "$f" https://ftp.denx.de/pub/u-boot/u-boot-2023.01.tar.bz2; then
+          echo "::warning::ftp.denx.de unreachable: U-Boot v2023.01 from github.com/u-boot/u-boot"
+          rm -f "$f"
+          curl -fsSL -m 300 https://github.com/u-boot/u-boot/archive/refs/tags/v2023.01.tar.gz | gzip -d | bzip2 -9 > "$f"
+        fi
+        ls -l "$f"
+        tar -tjf "$f" | head -3
+
     # Build
     - name: Build
       run: |
