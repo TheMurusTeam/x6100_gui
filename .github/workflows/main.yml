@@ -96,7 +96,7 @@ jobs:
           curl -fsSL -m 300 https://github.com/u-boot/u-boot/archive/refs/tags/v2023.01.tar.gz | gzip -d | bzip2 -9 > "$f"
         fi
         ls -l "$f"
-        tar -tjf "$f" | head -3
+        tar -tjf "$f" > /dev/null    # a whole, readable archive
 
     # Build
     - name: Build
