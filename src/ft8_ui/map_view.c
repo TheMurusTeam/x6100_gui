@@ -94,18 +94,6 @@ static station_t *station(const char *call, int64_t now) {
 
 static void redraw(bool force);
 
-/* 1KO125 (FT8 CB): where a station sent no grid, and your own call */
-static const char *(*grid_of)(const char *call);
-static char         own_call[16];
-
-void map_view_set_grid_fallback(const char *(*fn)(const char *call)) {
-    grid_of = fn;
-}
-
-void map_view_set_my_call(const char *call) {
-    snprintf(own_call, sizeof(own_call), "%s", call ? call : "");
-}
-
 void map_view_add(const cell_data_t *cell) {
     int64_t now = now_ms();
     char    word[13];
@@ -208,12 +196,8 @@ static const map_legend_item_t legend[] = {
 
 /* The scene from the stations heard in the last 15 min. */
 static void build(int64_t now) {
-    snprintf(my_call, sizeof(my_call), "%s", own_call[0] ? own_call : PARAM_T_GET(cfg.callsign()));
+    snprintf(my_call, sizeof(my_call), "%s", PARAM_T_GET(cfg.callsign()));
     snprintf(my_grid, sizeof(my_grid), "%s", PARAM_T_GET(cfg.qth()));
-    if (grid_of && !my_grid[0]) { /* FT8 CB without a QTH: your division's country */
-        const char *g = grid_of(my_call);
-        if (g) snprintf(my_grid, sizeof(my_grid), "%s", g);
-    }
     bool qso_on = qso_call[0] && now - qso_ms < QSO_MS;
     int  n = 0, nhere = 0, ncq = 0, ncall = 0, nyou = 0, sel = -1;
     for (int i = 0; i < st_n; i++) {
@@ -225,10 +209,6 @@ static void build(int64_t now) {
         memset(d, 0, sizeof(*d));
         snprintf(d->call, sizeof(d->call), "%s", s->call);
         snprintf(d->grid, sizeof(d->grid), "%s", s->grid);
-        if (!d->grid[0] && grid_of) {           /* 1KO125: FT8 CB, the country's centre */
-            const char *g = grid_of(s->call);
-            if (g) snprintf(d->grid, sizeof(d->grid), "%s", g);
-        }
         d->snr       = s->snr;
         d->has_snr   = here;
         nhere += here;
@@ -291,7 +271,7 @@ static void build(int64_t now) {
     double best  = -1, km;
     int    dx    = -1;
     for (int i = 0; i < n; i++) /* the farthest heard: "DX ZL2AB 11300 km" */
-        if (sc_st[i].has_snr && map_scene_km(grid_of ? NULL : my_call, my_grid, grid_of ? NULL : sc_st[i].call, sc_st[i].grid, &km) && km > best) {
+        if (sc_st[i].has_snr && map_scene_km(my_call, my_grid, sc_st[i].call, sc_st[i].grid, &km) && km > best) {
             best = km;
             dx   = i;
         }
@@ -318,8 +298,7 @@ static void build(int64_t now) {
                               .status2 = status2,
                               .status3 = status3,
                               .status3_color = MAP_SCENE_BLUE,
-                              .hint    = hint,
-                              .by_grid = grid_of != NULL};
+                              .hint    = hint};
 }
 
 static void redraw(bool force) {
@@ -376,6 +355,4 @@ void map_view_destroy(void) {
     st_n        = 0;
     sel_call[0] = '\0';
     qso_call[0] = '\0';
-    grid_of     = NULL;     /* 1KO125: set again by FT8 CB when it opens */
-    own_call[0] = '\0';
 }

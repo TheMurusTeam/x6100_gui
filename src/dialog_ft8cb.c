@@ -56,7 +56,7 @@
 #include "ft8cb/cb_div.h"
 #include "app_wf.h"                /* the shared waterfall, as FT8 / JS8 */
 #include "ft8/tx_worker.h"         /* FT8_TX_AUDIO_HZ */
-#include "ft8cb/cb_map.h"          /* Show: Map, as FT8 */
+#include "ft8cb/cb_map.h"          /* Show: Map, FT8 CB's own */
 #include "psk_reporter.h"          /* who hears you, as FT8 */
 #include "widgets/lv_finder.h"
 
@@ -860,43 +860,17 @@ static void force_save_qso(struct button_data_t *btn_data) {
 
 /* ---- Show: Map (ft8cb/cb_map.c, the FT8 map) ------------------------- */
 
-static void to_map_cell(const cbtv_cell_t *in, cbmap_cell_t *out) {
-    memset(out, 0, sizeof(*out));
-    out->cell_type   = (int)in->cell_type;
-    out->dist        = in->dist;
-    out->odd         = in->odd;
-    out->meta        = in->meta;
-    out->worked_type = (int)in->worked_type;
-    snprintf(out->text, sizeof(out->text), "%s", in->text);
-}
-
 /* Every message for the list goes to the map too (both on the LVGL thread) */
 static void add_msg_cb(void *data) {
     cbtv_add_msg_cb(data);
-    cbmap_cell_t c;
-    to_map_cell((const cbtv_cell_t *)data, &c);
-    cbmap_add(&c);
+    cbmap_add((const cbtv_cell_t *)data);
 }
 
 static void map_only_cb(void *data) {
-    cbmap_cell_t c;
-    to_map_cell((const cbtv_cell_t *)data, &c);
-    cbmap_add(&c);
+    cbmap_add((const cbtv_cell_t *)data);
 }
 
 static void on_table_press(const cbtv_cell_t *cell_data);
-
-/* A station pressed on the map: as its row in the list */
-static void map_press(const cbmap_cell_t *c) {
-    cbtv_cell_t cd = {0};
-    cd.cell_type   = (cbtv_cell_type_t)c->cell_type;
-    cd.dist        = c->dist;
-    cd.odd         = c->odd;
-    cd.meta        = c->meta;
-    cd.worked_type = (qso_log_search_worked_t)c->worked_type;
-    snprintf(cd.text, sizeof(cd.text), "%s", c->text);
-    on_table_press(&cd);
-}
 
 static const char *map_label_getter() {
     return cbmap_shown() ? "Show:\nList" : "Show:\nMap";
@@ -904,7 +878,7 @@ static const char *map_label_getter() {
 
 static void show_map_cb(struct button_data_t *btn_data) {
     if (disable_buttons) return;
-    if (cbmap_toggle(dialog.obj, table, waterfall, map_press, on_table_close, on_table_vol_change) && cbmap_shown())
+    if (cbmap_toggle(dialog.obj, table, waterfall, on_table_press, on_table_close, on_table_vol_change) && cbmap_shown())
         msg_update_text_fmt("Map: turn MFK to pick a station, press to call it. Hold: Auto/Close-in/World");
     buttons_refresh(btn_data);
 }
