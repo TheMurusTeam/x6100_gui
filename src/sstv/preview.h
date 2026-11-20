@@ -15,6 +15,8 @@
  * decoder; the preview is only shown while receiving.
  *
  * Robot 36 is previewed in grey (see sstv_preview_render()).
+ * PD: one line sync brings two rows; the odd one needs no slice (need()
+ * returns an empty one) and is drawn from the even row's line.
  *
  * Positions are sample indices of the capture buffer.  Row timing:
  *  - before the line-sync tracker locks: row 0 from the VIS + nominal period;
@@ -38,6 +40,7 @@ typedef struct {
     double      row0;          /* anchor of row 0 (bias corrected)           */
     double      nominal;       /* nominal line period, samples               */
     int         next_row;      /* first row not drawn yet                    */
+    int         rows_per_line; /* PD: 2 rows per line sync, else 1           */
     double      pend_anchor;   /* anchor of next_row, from the last need()   */
     double      pend_scale;
     long        pend_a, pend_b;

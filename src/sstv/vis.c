@@ -190,6 +190,8 @@ static bool supported(int vis, sstv_info_t *o)
     case 56: o->mode = SSTV_MODE_SCOTTIE_S2; o->name = "Scottie S2"; o->width = 320; o->height = 256; break;
     case 60: o->mode = SSTV_MODE_SCOTTIE_S1; o->name = "Scottie S1"; o->width = 320; o->height = 256; break;
     case 76: o->mode = SSTV_MODE_SCOTTIE_DX; o->name = "Scottie DX"; o->width = 320; o->height = 256; break;
+    case 93: o->mode = SSTV_MODE_PD50;       o->name = "PD50";       o->width = 320; o->height = 256; break;
+    case 99: o->mode = SSTV_MODE_PD90;       o->name = "PD90";       o->width = 320; o->height = 256; break;
     default: return false;
     }
     return true;

@@ -43,6 +43,8 @@ static const mode_desc_t modes[] = {
     {56, SSTV_MODE_SCOTTIE_S2,"Scottie S2",320, 256 },
     {60, SSTV_MODE_SCOTTIE_S1,"Scottie S1",320, 256 },
     {76, SSTV_MODE_SCOTTIE_DX,"Scottie DX",320, 256 },
+    {93, SSTV_MODE_PD50,      "PD50",      320, 256 },   /* 1KO125, RX only */
+    {99, SSTV_MODE_PD90,      "PD90",      320, 256 },
 };
 
 static uint8_t clamp8(float v)
@@ -220,14 +222,14 @@ static int detect_sync_1200_robust(const float *samples, long n,
 
     int win = (int)lroundf(pulse_ms * (float)SR / 1000.0f);
     if (win < 24) win = 24;
-    if (win > 160) win = 160;
+    if (win > 240) win = 240;   /* 1KO125: was 160; PD syncs are 20 ms (240), the others <= 10 ms */
 
     /* ~1 ms hop.  Small enough to locate a 4.862-ms Martin sync accurately,
      * while keeping the scan inexpensive on the X6100. */
     const int hop = (SR + 500) / 1000;
     const float threshold = 0.45f;
 
-    float cs[160], sn[160];
+    float cs[240], sn[240];
     for (int k=0; k<win; ++k) {
         float ph = 2.0f * PI * 1200.0f * (float)k / (float)SR;
         cs[k] = cosf(ph);
@@ -1207,6 +1209,107 @@ static int robot36_decode_samples(const float *x,long n,uint8_t *rgb,long vis_en
     fprintf(stderr,"SSTV: Robot 36 image decode finished, rows=%d\n",ns);free(Y);free(C);free(freq);return ns;
 }
 
+/* 1KO125: PD family (Pasokon/PD, as MMSSTV, QSSTV and slowrx send it).
+ * One line, after its sync, brings TWO picture rows:
+ *   20 ms sync 1200 Hz, 2.08 ms porch 1500 Hz,
+ *   Y of the even row, R-Y and B-Y shared by both rows, Y of the odd row,
+ * each 320 pixels of px_ms (PD50 0.286 ms, PD90 0.532 ms): 128 lines make
+ * 320x256.  YCrCb full swing, as Robot.  The line starts with its sync
+ * right after the VIS stop bit. */
+#define PD_SYNC_MS   20.0
+#define PD_PORCH_MS  2.080
+
+static double pd_px_ms(sstv_mode_t mode)
+{
+    return mode == SSTV_MODE_PD50 ? 0.286 : mode == SSTV_MODE_PD90 ? 0.532 : 0.0;
+}
+
+static double pd_line_ms(sstv_mode_t mode)
+{
+    return PD_SYNC_MS + PD_PORCH_MS + 4.0 * 320.0 * pd_px_ms(mode);
+}
+
+/* base = line sync start; out: two rows, 2 * 320 * 3 bytes */
+static bool pd_line(const float *freq, long n, long base, double scale, double px_ms, uint8_t *out)
+{
+    const int width = 320;
+    float Y0[320], Cr[320], Cb[320], Y1[320];
+    double comp = width * px_ms, t = PD_SYNC_MS + PD_PORCH_MS;
+    long a[5];
+    for (int k = 0; k < 5; ++k) a[k] = base + llround((t + k * comp) / 1000.0 * SR * scale);
+    if (base < 0 || a[4] >= n) return false;
+    segment(freq, n, a[0], a[1], Y0, width);
+    segment(freq, n, a[1], a[2], Cr, width);
+    segment(freq, n, a[2], a[3], Cb, width);
+    segment(freq, n, a[3], a[4], Y1, width);
+    for (int r = 0; r < 2; ++r) {
+        const float *Y = r ? Y1 : Y0;
+        uint8_t *o = out + (size_t)r * width * 3;
+        for (int px = 0; px < width; ++px) {
+            float cr = Cr[px] - 128.0f, cb = Cb[px] - 128.0f, y = Y[px];
+            o[px*3]   = clamp8(y + 1.402f * cr);
+            o[px*3+1] = clamp8(y - .714136f * cr - .344136f * cb);
+            o[px*3+2] = clamp8(y + 1.772f * cb);
+        }
+    }
+    return true;
+}
+
+static int pd_decode_samples(const float *x, long n, uint8_t *rgb, sstv_mode_t mode, long vis_end)
+{
+    const double vis_row0 = (vis_end >= 0) ? (double)vis_end : -1.0;
+    const char *tag = mode == SSTV_MODE_PD50 ? "PD50" : "PD90";
+    const int width = 320, lines = 128;
+    const double px_ms = pd_px_ms(mode), line_ms = pd_line_ms(mode);
+    if (!x || n <= 0 || !rgb || px_ms <= 0.0) return -1;
+    fprintf(stderr, "SSTV: %s decoder start from RAM: samples=%ld, 320x256, line=%.3f ms (2 rows)\n", tag, n, line_ms);
+    float *freq = fm_demod(x, n);
+    if (!freq) return -3;
+    long cand[MAX_SYNCS];
+    int nc = detect_sync_1200_robust(x, n, (float)PD_SYNC_MS, cand, MAX_SYNCS);
+    if (vis_end >= 0) nc = drop_before(cand, nc, vis_end - (long)(0.010 * SR));
+    fprintf(stderr, "SSTV: %s: %d sync candidates\n", tag, nc);
+    long sync[128];
+    double fitted_spl = 0.0, nominal_spl = line_ms * SR / 1000.0;
+    int grid_rc = robust_sync_grid(tag, cand, nc, lines, nominal_spl, 8, sync, &fitted_spl);
+    if (grid_rc < 0) {
+        double first = (vis_row0 >= 0.0) ? vis_row0 : 2.0 * (double)SR;
+        fitted_spl = nominal_spl;
+        if (nc > 0) {
+            long best = cand[0]; double bd = fabs((double)best - first);
+            for (int k = 1; k < nc; ++k) { double d = fabs((double)cand[k] - first); if (d < bd) { bd = d; best = cand[k]; } }
+            if (bd <= nominal_spl * 0.75) first = (double)best;
+        }
+        for (int l = 0; l < lines; ++l) sync[l] = (long)llround(first + nominal_spl * (double)l);
+        fprintf(stderr, "SSTV: %s: FALLBACK nominal timing grid, first=%.3f s; rendering degraded image\n", tag, (double)sync[0] / SR);
+    } else if (vis_row0 >= 0.0) {
+        anchor_grid_to_vis(tag, sync, lines, fitted_spl, vis_row0);
+    } else if ((double)sync[0] > 5.0 * (double)SR && fitted_spl > 0.0) {
+        const double expected_first = 2.0 * (double)SR;
+        long shift = (long)llround(((double)sync[0] - expected_first) / fitted_spl);
+        if (shift > 0 && shift < lines) {
+            long ds = (long)llround((double)shift * fitted_spl);
+            for (int l = 0; l < lines; ++l) sync[l] -= ds;
+            fprintf(stderr, "SSTV: %s: late sparse sync chain: shifted back %ld lines, first=%.3f s\n", tag, shift, (double)sync[0] / SR);
+        }
+    }
+    double scale = fitted_spl / nominal_spl;
+    local_grid_refine(tag, cand, nc, sync, lines, fitted_spl);
+    int nl = lines;
+    for (int l = 0; l < lines; ++l) {
+        if (!pd_line(freq, n, sync[l], scale, px_ms, rgb + (size_t)l * 2 * width * 3)) {
+            nl = l;
+            fprintf(stderr, "SSTV: %s: bounds/EOF at line %d\n", tag, l);
+            break;
+        }
+    }
+    int rows = nl * 2;
+    if (rows < 256) memset(rgb + (size_t)rows * width * 3, 0, (size_t)(256 - rows) * width * 3);
+    free(freq);
+    fprintf(stderr, "SSTV: %s image decode finished, rows=%d\n", tag, rows);
+    return rows;
+}
+
 /* Scottie family decoder.  Unlike Martin, the regular 1200 Hz sync pulse
  * sits between Blue and Red.  For S1 a regular line is:
  *   1500 sep, G, 1500 sep, B, 1200 sync, 1500 porch, R
@@ -1303,6 +1406,7 @@ int sstv_row_width(sstv_mode_t mode)
     case SSTV_MODE_ROBOT36: case SSTV_MODE_ROBOT72:
     case SSTV_MODE_MARTIN_M1: case SSTV_MODE_MARTIN_M2:
     case SSTV_MODE_SCOTTIE_S1: case SSTV_MODE_SCOTTIE_S2: case SSTV_MODE_SCOTTIE_DX: return 320;
+    case SSTV_MODE_PD50: case SSTV_MODE_PD90: return 320;
     default: return 0;
     }
 }
@@ -1339,6 +1443,16 @@ int sstv_render_row(sstv_mode_t mode, const float *freq, long n, long base, doub
         return martin_row(freq, n, base, scale, 73.216f, rgb_row) ? 0 : -2;
     case SSTV_MODE_SCOTTIE_S1: case SSTV_MODE_SCOTTIE_S2: case SSTV_MODE_SCOTTIE_DX:
         return scottie_row(freq, n, base, scale, scottie_channel_ms(mode), rgb_row) ? 0 : -2;
+    case SSTV_MODE_PD50: case SSTV_MODE_PD90: {
+        uint8_t two[2 * 320 * 3];
+        if (!st) return -1;
+        st->pair_valid = 0;
+        if (!pd_line(freq, n, base, scale, pd_px_ms(mode), two)) return -2;
+        memcpy(rgb_row, two, 320 * 3);
+        memcpy(st->pair, two + 320 * 3, 320 * 3);
+        st->pair_valid = 1;
+        return 0;
+    }
     case SSTV_MODE_ROBOT36: {
         if (!st) return -1;
         float Y[320], C[320];
@@ -1385,6 +1499,8 @@ static int decode_dispatch(const float *samples, long count, sstv_mode_t mode, u
         return martin_decode_samples(samples,count,rgb,mode,vis_end);
     if (mode==SSTV_MODE_SCOTTIE_S1 || mode==SSTV_MODE_SCOTTIE_S2 || mode==SSTV_MODE_SCOTTIE_DX)
         return scottie_decode_samples(samples,count,rgb,mode,vis_end);
+    if (mode==SSTV_MODE_PD50 || mode==SSTV_MODE_PD90)
+        return pd_decode_samples(samples,count,rgb,mode,vis_end);
     fprintf(stderr,"SSTV LIVE: direct RAM decoder for %s not enabled yet\n",m->name);
     return -20;
 }
@@ -1427,7 +1543,9 @@ int sstv_decode_cont_samples(const float *samples, long count, sstv_mode_t mode,
         case SSTV_MODE_SCOTTIE_DX: preroll_s = 2.229; break;
         case SSTV_MODE_ROBOT8_BW:
         case SSTV_MODE_ROBOT36:
-        case SSTV_MODE_ROBOT72: preroll_s = 2.000; break;
+        case SSTV_MODE_ROBOT72:
+        case SSTV_MODE_PD50:
+        case SSTV_MODE_PD90: preroll_s = 2.000; break;   /* PD: sync right after the VIS, as Robot */
         default: return -2;
     }
 

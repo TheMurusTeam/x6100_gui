@@ -30,7 +30,7 @@ typedef enum {
 #define SSTV_LS_WIN     24    /* 2-ms correlation window                      */
 #define SSTV_LS_HIST    64    /* remembered pulses                             */
 #define SSTV_LS_FIT     32    /* received syncs used for the period estimate   */
-#define SSTV_LS_NMODES  8
+#define SSTV_LS_NMODES  10
 
 typedef struct {
     sstv_ls_state_t state;

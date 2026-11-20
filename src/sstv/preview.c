@@ -24,6 +24,7 @@ void sstv_preview_init(sstv_preview_t *p, sstv_mode_t mode, double row0_anchor)
     p->width = sstv_row_width(mode);
     p->height = (mode == SSTV_MODE_ROBOT8_BW) ? 120 :
                 (mode == SSTV_MODE_ROBOT36 || mode == SSTV_MODE_ROBOT72) ? 240 : 256;
+    p->rows_per_line = sstv_rows_per_line(mode);
     p->nominal = sstv_linesync_line_seconds(mode) * PV_SR;
     p->row0 = row0_anchor >= 0.0 ? row0_anchor + SSTV_PREVIEW_VIS_BIAS : -1.0;
 }
@@ -31,6 +32,13 @@ void sstv_preview_init(sstv_preview_t *p, sstv_mode_t mode, double row0_anchor)
 bool sstv_preview_need(sstv_preview_t *p, long written, const sstv_ls_status_t *ls, long *a, long *b)
 {
     if (p->width <= 0 || p->nominal <= 0.0 || sstv_preview_done(p)) return false;
+    /* PD: the odd row came with the even one (st.pair): nothing to copy */
+    if (p->rows_per_line == 2 && (p->next_row & 1)) {
+        p->pend_a = p->pend_b = 0;
+        *a = *b = 0;
+        return true;
+    }
+    int line = p->next_row / p->rows_per_line;   /* the line sync of next_row */
     bool locked = ls && ls->state != SSTV_LS_SEARCH && ls->mode == p->mode && ls->hits >= 3;
 
     /* Manual without VIS: row 0 is the first sync the tracker received. */
@@ -50,10 +58,10 @@ bool sstv_preview_need(sstv_preview_t *p, long written, const sstv_ls_status_t *
         double sync = (double)ls->last_sync + SSTV_PREVIEW_SYNC_BIAS;
         double r_last = floor((sync - p->row0) / p->nominal + 0.5);
         period = ls->period;
-        anchor = sync + ((double)p->next_row - r_last) * period;
+        anchor = sync + ((double)line - r_last) * period;
     } else {
         period = p->nominal;
-        anchor = p->row0 + (double)p->next_row * period;
+        anchor = p->row0 + (double)line * period;
     }
     /* every mode's row lies within [anchor - 0.8 P, anchor + 1.1 P] */
     long sa = (long)floor(anchor - 0.8 * period) - PV_MARGIN;
@@ -72,6 +80,12 @@ bool sstv_preview_need(sstv_preview_t *p, long written, const sstv_ls_status_t *
 int sstv_preview_render(sstv_preview_t *p, const float *slice, uint8_t *rgb_row)
 {
     int row = p->next_row++;
+    if (p->rows_per_line == 2 && (row & 1)) {   /* PD odd row: drawn with the even one */
+        if (!p->st.pair_valid) return -1;
+        memcpy(rgb_row, p->st.pair, (size_t)p->width * 3);
+        p->st.pair_valid = 0;
+        return row;
+    }
     long n = p->pend_b - p->pend_a;
     float *freq = sstv_fm_demod(slice, n);
     if (!freq) return -1;

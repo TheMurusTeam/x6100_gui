@@ -90,6 +90,8 @@ static const char *cont_mode_name(sstv_mode_t mode)
         case SSTV_MODE_SCOTTIE_S1: return "Scottie S1";
         case SSTV_MODE_SCOTTIE_S2: return "Scottie S2";
         case SSTV_MODE_SCOTTIE_DX: return "Scottie DX";
+        case SSTV_MODE_PD50: return "PD50";
+        case SSTV_MODE_PD90: return "PD90";
         default: return "Unknown";
     }
 }
@@ -114,6 +116,8 @@ static float cont_mode_seconds(sstv_mode_t mode)
         case SSTV_MODE_SCOTTIE_S1: return 111.0f;
         case SSTV_MODE_SCOTTIE_S2: return 72.0f;
         case SSTV_MODE_SCOTTIE_DX: return 270.0f;
+        case SSTV_MODE_PD50:       return 50.0f;    /* 128 x 388.160 ms */
+        case SSTV_MODE_PD90:       return 90.5f;    /* 128 x 703.040 ms */
         default:                    return (float)SSTV_CONT_MAX_SECONDS - 5.0f;
     }
 }
@@ -564,6 +568,8 @@ static bool live_supported_vis(int vis, sstv_info_t *out)
         case 56: out->mode=SSTV_MODE_SCOTTIE_S2; out->name="Scottie S2"; out->width=320; out->height=256; break;
         case 60: out->mode=SSTV_MODE_SCOTTIE_S1; out->name="Scottie S1"; out->width=320; out->height=256; break;
         case 76: out->mode=SSTV_MODE_SCOTTIE_DX; out->name="Scottie DX"; out->width=320; out->height=256; break;
+        case 93: out->mode=SSTV_MODE_PD50; out->name="PD50"; out->width=320; out->height=256; break;
+        case 99: out->mode=SSTV_MODE_PD90; out->name="PD90"; out->width=320; out->height=256; break;
         default: return false;
     }
     return true;
@@ -998,6 +1004,8 @@ static float live_mode_seconds(sstv_mode_t m)
         case SSTV_MODE_SCOTTIE_S1: return 111.0f;
         case SSTV_MODE_SCOTTIE_S2: return 72.0f;
         case SSTV_MODE_SCOTTIE_DX: return 270.0f;
+        case SSTV_MODE_PD50: return 50.0f;
+        case SSTV_MODE_PD90: return 90.5f;
         default: return 120.0f;
     }
 }

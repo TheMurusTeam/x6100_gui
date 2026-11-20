@@ -23,8 +23,17 @@ typedef enum {
     SSTV_MODE_MARTIN_M2,
     SSTV_MODE_SCOTTIE_S1,
     SSTV_MODE_SCOTTIE_S2,
-    SSTV_MODE_SCOTTIE_DX
+    SSTV_MODE_SCOTTIE_DX,
+    /* 1KO125, RX only: added at the end, earlier values stay as saved */
+    SSTV_MODE_PD50,
+    SSTV_MODE_PD90
 } sstv_mode_t;
+
+/* PD modes send two picture rows per line sync (Y even, R-Y, B-Y, Y odd) */
+static inline int sstv_rows_per_line(sstv_mode_t m)
+{
+    return (m == SSTV_MODE_PD50 || m == SSTV_MODE_PD90) ? 2 : 1;
+}
 
 typedef struct {
     sstv_mode_t mode;
@@ -81,9 +90,13 @@ typedef struct {
     float chroma[320];
     int   chroma_valid;
     int   chroma_is_cr;
+    uint8_t pair[320 * 3];   /* PD: the odd row of the last line drawn */
+    int   pair_valid;
 } sstv_row_state_t;
 
 /* Draw one row of mode into rgb_row (sstv_row_width() * 3 bytes).
+ * PD: one line sync brings two rows; the even one is drawn into rgb_row and
+ * the odd one kept in st->pair (st required).
  * freq[0..n): output of sstv_fm_demod(); base: index in freq of the row's
  * anchor sync (line sync for Robot/Martin, B/R sync for Scottie); scale:
  * measured / nominal line period.  st may be NULL except for Robot 36

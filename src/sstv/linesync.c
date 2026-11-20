@@ -58,7 +58,7 @@
 #define LS_ON          0.55        /* score to start a pulse                  */
 #define LS_OFF         0.40        /* score to end it                          */
 #define LS_MIN_MS      5.0         /* plausible pulse length (as measured)     */
-#define LS_MAX_MS      14.0
+#define LS_MAX_MS      24.0        /* 1KO125: PD syncs are 20 ms (was 14)      */
 #define LS_LOCK_CHAIN  5           /* chained syncs needed to lock             */
 #define LS_TOL_MS      3.0         /* timing tolerance on one line             */
 #define LS_TOL_REL     0.006
@@ -79,6 +79,8 @@ static const ls_mode_t ls_modes[SSTV_LS_NMODES] = {
     { SSTV_MODE_SCOTTIE_S2, 277.692,  9.0,   256 },
     { SSTV_MODE_SCOTTIE_S1, 428.220,  9.0,   256 },
     { SSTV_MODE_SCOTTIE_DX,1050.300,  9.0,   256 },
+    { SSTV_MODE_PD50,       388.160, 20.0,   128 },   /* 1KO125: lines of 2 rows */
+    { SSTV_MODE_PD90,       703.040, 20.0,   128 },
 };
 static const float ls_cos[10] = { 1.0f, 0.809017f, 0.309017f, -0.309017f, -0.809017f,
                                  -1.0f,-0.809017f,-0.309017f,  0.309017f,  0.809017f };
