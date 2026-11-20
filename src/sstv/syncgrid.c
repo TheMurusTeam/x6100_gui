@@ -65,7 +65,10 @@ double sstv_syncgrid_first_after_vis(sstv_mode_t mode)
     case SSTV_MODE_SCOTTIE_S2:  return 0.1887;
     case SSTV_MODE_SCOTTIE_DX:  return 0.7039;
     case SSTV_MODE_PD50:                         /* 1KO125: sync right after the VIS, as Robot */
-    case SSTV_MODE_PD90:        return 0.0007;
+    case SSTV_MODE_PD90:
+    case SSTV_MODE_SC2_60:
+    case SSTV_MODE_SC2_120:
+    case SSTV_MODE_SC2_180:     return 0.0007;
     default:                    return -1.0;
     }
 }
@@ -83,6 +86,9 @@ double sstv_syncgrid_sync_s(sstv_mode_t mode)
     case SSTV_MODE_SCOTTIE_DX:  return 0.009;
     case SSTV_MODE_PD50:
     case SSTV_MODE_PD90:        return 0.020;
+    case SSTV_MODE_SC2_60:
+    case SSTV_MODE_SC2_120:
+    case SSTV_MODE_SC2_180:     return 0.0055225;
     default:                    return 0.0;
     }
 }

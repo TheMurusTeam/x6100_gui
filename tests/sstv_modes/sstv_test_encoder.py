@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Independent SSTV test encoder (12 kHz mono 16-bit WAV): PD50, PD90.
+"""Independent SSTV test encoder (12 kHz mono 16-bit WAV): PD50, PD90,
+Wraase SC2-60/120/180.  Usage: MODE PICTURE OUT.wav [SNR_dB]
 Phase-continuous FM, VIS 8-bit (7 data + even parity), as the published
 specs (N7CXI / JL Barber "Proposal for SSTV mode specifications")."""
 import sys, wave, numpy as np
 from PIL import Image
 SR = 12000
-MODES = {  # vis, pixel ms
+MODES = {  # vis, pixel ms (PD) / line ms (Wraase SC-2)
     'pd50': (93, 0.286), 'pd90': (99, 0.532),
+    'sc2-60': (59, 240.3846), 'sc2-120': (63, 475.530), 'sc2-180': (55, 711.0225),
 }
 class FM:
     def __init__(s): s.ph = 0.0; s.out = []; s.t = 0.0; s.n = 0
@@ -33,7 +35,15 @@ def main(mode, png, wav, snr=None):
     RY = np.clip(128 + 0.5*(R - Y)/0.701*1.0, 0, 255)   # (R-Y)/1.402 + 128
     BY = np.clip(128 + 0.5*(B - Y)/0.886*1.0, 0, 255)   # (B-Y)/1.772 + 128
     fm = FM(); fm.tone(1900, 500); vis(fm, code)
-    for l in range(128):
+    if mode.startswith('sc2'):          # 5.5225 sync, 0.5 porch, R G B
+        ch = (px - 5.5225 - 0.5) / 3 / 320
+        for r in range(256):
+            fm.tone(1200, 5.5225); fm.tone(1500, 0.5)
+            for c in (R, G, B): fm.pixels(c[r], ch)
+        lines = 0
+    else:
+        lines = 128
+    for l in range(lines):
         r0, r1 = 2*l, 2*l + 1
         fm.tone(1200, 20.0); fm.tone(1500, 2.080)
         fm.pixels(Y[r0], px)

@@ -81,6 +81,9 @@ static const ls_mode_t ls_modes[SSTV_LS_NMODES] = {
     { SSTV_MODE_SCOTTIE_DX,1050.300,  9.0,   256 },
     { SSTV_MODE_PD50,       388.160, 20.0,   128 },   /* 1KO125: lines of 2 rows */
     { SSTV_MODE_PD90,       703.040, 20.0,   128 },
+    { SSTV_MODE_SC2_60,     240.385,  5.5225, 256 },  /* Wraase SC-2 */
+    { SSTV_MODE_SC2_120,    475.530,  5.5225, 256 },
+    { SSTV_MODE_SC2_180,    711.023,  5.5225, 256 },
 };
 static const float ls_cos[10] = { 1.0f, 0.809017f, 0.309017f, -0.309017f, -0.809017f,
                                  -1.0f,-0.809017f,-0.309017f,  0.309017f,  0.809017f };

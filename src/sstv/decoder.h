@@ -26,8 +26,19 @@ typedef enum {
     SSTV_MODE_SCOTTIE_DX,
     /* 1KO125, RX only: added at the end, earlier values stay as saved */
     SSTV_MODE_PD50,
-    SSTV_MODE_PD90
+    SSTV_MODE_PD90,
+    SSTV_MODE_SC2_60,       /* Wraase SC-2 */
+    SSTV_MODE_SC2_120,
+    SSTV_MODE_SC2_180
 } sstv_mode_t;
+
+/* Modes whose every line starts with its sync (PD, Wraase): decoded by the
+ * common line decoder */
+static inline int sstv_line_mode(sstv_mode_t m)
+{
+    return m == SSTV_MODE_PD50 || m == SSTV_MODE_PD90 ||
+           m == SSTV_MODE_SC2_60 || m == SSTV_MODE_SC2_120 || m == SSTV_MODE_SC2_180;
+}
 
 /* PD modes send two picture rows per line sync (Y even, R-Y, B-Y, Y odd) */
 static inline int sstv_rows_per_line(sstv_mode_t m)

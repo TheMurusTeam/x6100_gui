@@ -432,7 +432,8 @@ static const sstv_mode_t cont_rx_modes[] = {
     SSTV_MODE_ROBOT8_BW, SSTV_MODE_ROBOT36, SSTV_MODE_ROBOT72,
     SSTV_MODE_MARTIN_M1, SSTV_MODE_MARTIN_M2,
     SSTV_MODE_SCOTTIE_S1, SSTV_MODE_SCOTTIE_S2, SSTV_MODE_SCOTTIE_DX,
-    SSTV_MODE_PD50, SSTV_MODE_PD90              /* 1KO125: RX only */
+    SSTV_MODE_PD50, SSTV_MODE_PD90,             /* 1KO125: RX only */
+    SSTV_MODE_SC2_60, SSTV_MODE_SC2_120, SSTV_MODE_SC2_180
 };
 /* Manual RX line-sync tracker (sstv/linesync.c), fed by audio_cb() under
  * live_mutex.  It recognises the mode (Autodetect), closes the capture when

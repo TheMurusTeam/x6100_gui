@@ -92,6 +92,9 @@ static const char *cont_mode_name(sstv_mode_t mode)
         case SSTV_MODE_SCOTTIE_DX: return "Scottie DX";
         case SSTV_MODE_PD50: return "PD50";
         case SSTV_MODE_PD90: return "PD90";
+        case SSTV_MODE_SC2_60: return "SC2-60";
+        case SSTV_MODE_SC2_120: return "SC2-120";
+        case SSTV_MODE_SC2_180: return "SC2-180";
         default: return "Unknown";
     }
 }
@@ -118,6 +121,9 @@ static float cont_mode_seconds(sstv_mode_t mode)
         case SSTV_MODE_SCOTTIE_DX: return 270.0f;
         case SSTV_MODE_PD50:       return 50.0f;    /* 128 x 388.160 ms */
         case SSTV_MODE_PD90:       return 90.5f;    /* 128 x 703.040 ms */
+        case SSTV_MODE_SC2_60:     return 62.0f;    /* 256 x 240.385 ms */
+        case SSTV_MODE_SC2_120:    return 122.0f;   /* 256 x 475.530 ms */
+        case SSTV_MODE_SC2_180:    return 182.5f;   /* 256 x 711.023 ms */
         default:                    return (float)SSTV_CONT_MAX_SECONDS - 5.0f;
     }
 }
@@ -570,6 +576,9 @@ static bool live_supported_vis(int vis, sstv_info_t *out)
         case 76: out->mode=SSTV_MODE_SCOTTIE_DX; out->name="Scottie DX"; out->width=320; out->height=256; break;
         case 93: out->mode=SSTV_MODE_PD50; out->name="PD50"; out->width=320; out->height=256; break;
         case 99: out->mode=SSTV_MODE_PD90; out->name="PD90"; out->width=320; out->height=256; break;
+        case 59: out->mode=SSTV_MODE_SC2_60; out->name="SC2-60"; out->width=320; out->height=256; break;
+        case 63: out->mode=SSTV_MODE_SC2_120; out->name="SC2-120"; out->width=320; out->height=256; break;
+        case 55: out->mode=SSTV_MODE_SC2_180; out->name="SC2-180"; out->width=320; out->height=256; break;
         default: return false;
     }
     return true;
@@ -1006,6 +1015,9 @@ static float live_mode_seconds(sstv_mode_t m)
         case SSTV_MODE_SCOTTIE_DX: return 270.0f;
         case SSTV_MODE_PD50: return 50.0f;
         case SSTV_MODE_PD90: return 90.5f;
+        case SSTV_MODE_SC2_60: return 62.0f;
+        case SSTV_MODE_SC2_120: return 122.0f;
+        case SSTV_MODE_SC2_180: return 182.5f;
         default: return 120.0f;
     }
 }
