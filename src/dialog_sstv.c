@@ -1613,12 +1613,24 @@ static void ui_timer_cb(lv_timer_t *timer)
         live_samples=NULL; live_written=live_target=0;
         live_ring_pos=live_ring_count=0; live_wait_samples=live_wait_log_mark=0;
         live_enabled = (tx_ui_state != SSTV_TX_UI_RF);   /* not while transmitting */
+        /* 1KO125: Canvas split: when one of the two pictures is over it is
+         * saved and the other goes on alone, on the main canvas.  NEW PIC
+         * over first (a shorter mode): OLD PIC is the picture again.  With
+         * a VIS heard at NEW's end, that picture is the new NEW PIC instead
+         * and the split stays (as a third VIS during the split). */
+        bool promote = split_on && old_capturing && old_samples && live_enabled && rc_take < 0;
+        if (promote) {
+            fprintf(stderr, "SSTV SPLIT: NEW PIC %s over first: decoded and saved, OLD PIC %s goes on alone\n",
+                    dec_info.name, old_info.name);
+            split_promote_old();
+        }
         if (rc_take >= 0 && live_enabled && dec_samples &&
             live_capture_from(&rc_c.info, dec_samples + rc_fi, dec_written - rc_fi, rc_abs0 + (uint64_t)rc_fi,
                               rc_c.win_end, rc_c.start_s, rc_c.off))
             fprintf(stderr, "SSTV LIVE: capturing %s from the Restart candidate while %s is decoded\n",
                     live_info.name, dec_info.name);
         pthread_mutex_unlock(&live_mutex);
+        if (promote) split_promote_old_ui("NEW PIC over, OLD PIC goes on");
         int rc=pthread_create(&test_thread,NULL,live_decode_thread_cb,NULL);
         if (rc==0) test_thread_valid=true;
         else {

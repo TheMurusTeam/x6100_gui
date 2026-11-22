@@ -1353,15 +1353,11 @@ static void split_vis(const rc_cand_t *c, long fi)
             c->info.vis, c->info.name, (double)old_written / SSTV_SAMPLE_RATE, old_info.name);
 }
 
-/* Discard New Pic: the new picture is dropped, OLD PIC is the picture being
- * received again, on the main canvas. */
-static void split_discard_new(void)
+/* OLD PIC becomes the picture being received again (live_*), NEW PIC's
+ * capture having been freed or handed to the decoder by the caller.
+ * live_mutex held; the canvas follows in split_promote_old_ui(). */
+static void split_promote_old(void)
 {
-    pthread_mutex_lock(&live_mutex);
-    if (!split_on || !old_capturing || !old_samples) { pthread_mutex_unlock(&live_mutex); return; }
-    fprintf(stderr, "SSTV SPLIT: Discard New Pic - %s dropped, %s is the picture again\n",
-            live_info.name, old_info.name);
-    free(live_samples);
     live_samples = old_samples;
     live_written = old_written;
     live_target = old_target;
@@ -1379,11 +1375,29 @@ static void split_discard_new(void)
     old_samples = NULL;
     split_free_old();
     q_reset_pending = false;
-    pthread_mutex_unlock(&live_mutex);
+}
+
+/* UI thread, without live_mutex: OLD PIC on the main canvas, one canvas */
+static void split_promote_old_ui(const char *why)
+{
     q_move(&qn, &qo);
     split_redraw(sstv_canvas, SSTV_IMAGE_W, SSTV_IMAGE_H, &qn);
-    split_end("Discard New Pic");
+    split_end(why);
     set_receiver_ui_decoding(live_info.name);
+}
+
+/* Discard New Pic: the new picture is dropped, OLD PIC is the picture being
+ * received again, on the main canvas. */
+static void split_discard_new(void)
+{
+    pthread_mutex_lock(&live_mutex);
+    if (!split_on || !old_capturing || !old_samples) { pthread_mutex_unlock(&live_mutex); return; }
+    fprintf(stderr, "SSTV SPLIT: Discard New Pic - %s dropped, %s is the picture again\n",
+            live_info.name, old_info.name);
+    free(live_samples);
+    split_promote_old();
+    pthread_mutex_unlock(&live_mutex);
+    split_promote_old_ui("Discard New Pic");
 }
 
 static void split_discard_old(const char *why)
