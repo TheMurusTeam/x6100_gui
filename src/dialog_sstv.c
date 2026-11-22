@@ -769,8 +769,31 @@ static void unsupported_vis_tick(void)
 /* ---- Saved-pictures browser ---- */
 #include "dialog_sstv_browser.inc"
 
+/* 1KO125: NR, NB, DNF or DNF auto changed while the app is open (CAT,
+ * a front-panel control), on whichever thread changed it: radio calls only,
+ * nothing on the screen.  Off again, as in the other decoder apps. */
+static Observer *dsp_watch[4];
+
+static void dsp_held_cb(Subject *subj, void *user_data)
+{
+    (void)subj;
+    (void)user_data;
+    radio_set_rx_dsp_off(true);
+}
+
 static void construct_cb(lv_obj_t *parent)
 {
+    /* 1KO125: the base applies noise reduction, the noise blanker and the
+     * notches to the audio the decoder hears.  They smear the line syncs
+     * and the VIS tones (the auto-notch goes for exactly such steady tones)
+     * and change the colours.  Off on the radio while the app is open, the
+     * settings kept; back when it closes. */
+    radio_set_rx_dsp_off(true);
+    dsp_watch[0] = subject_subscribe((Subject *)cfg.dsp.nr(), dsp_held_cb, NULL);
+    dsp_watch[1] = subject_subscribe((Subject *)cfg.dsp.nb(), dsp_held_cb, NULL);
+    dsp_watch[2] = subject_subscribe((Subject *)cfg.dsp.dnf(), dsp_held_cb, NULL);
+    dsp_watch[3] = subject_subscribe((Subject *)cfg.dsp.dnf_auto(), dsp_held_cb, NULL);
+
     if (dsp_audio_sub_id == AUDIO_SUB_INVALID)
         dsp_audio_sub_id = dsp_audio_subscribe_float(audio_cb, SSTV_SAMPLE_RATE);
 
@@ -922,6 +945,11 @@ static void construct_cb(lv_obj_t *parent)
 
 static void destruct_cb(void)
 {
+    for (unsigned i = 0; i < sizeof(dsp_watch) / sizeof(dsp_watch[0]); i++) {   /* 1KO125 */
+        if (dsp_watch[i]) param_unsubscribe(dsp_watch[i]);
+        dsp_watch[i] = NULL;
+    }
+    radio_set_rx_dsp_off(false);            /* 1KO125: the user's NR/NB/notches back */
     app_info_abort();
     sstv_autodetect_stop();
     dsp_audio_set_active(dsp_audio_sub_id, false);
