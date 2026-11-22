@@ -54,6 +54,8 @@ typedef struct {
     float old_before;       /* ... with this share                             */
     float old_share;        /* ... and from the VIS on (should be gone)        */
     int   old_slots;
+    bool  new_ok;           /* 1KO125: the new syncs alone are there (Canvas split:
+                             * the old picture may go on, the user chooses) */
     bool  confirmed;
 } sstv_syncgrid_verdict_t;
 

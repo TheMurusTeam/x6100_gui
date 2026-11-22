@@ -335,6 +335,7 @@ bool sstv_syncgrid_restart_check(const float *x, long n, double vis_end_s, doubl
         r.old_known = r.old_slots > 0;
     }
 
+    r.new_ok = r.new_share >= (r.old_known ? SG_NEW_MIN : SG_NEW_MIN_ALONE);
     if (r.old_known)
         r.confirmed = r.new_share >= SG_NEW_MIN && r.old_share < SG_OLD_GONE;
     else

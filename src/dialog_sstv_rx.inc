@@ -817,36 +817,118 @@ static bool live_detect_vis_retry(bool found, uint64_t *win_end, sstv_info_t *ou
 }
 
 /* ---- 1KO125: quality bars (Auto RX) --------------------------------------
- * The rows drawn live are kept in q_rgb.  Each time 16 more rows are in, the
- * band is given a quality, 100 * (1 - garbage_prob()) of the band with the
- * 16 rows before it, shown as a segment (green >= 70, yellow >= 30, red);
- * the violet bar is the mean of the bands so far, from the second band on.
- * UI thread only (live_preview_tick); q_reset_pending is set by
- * live_preview_start(), with live_mutex held. */
-#define Q_BAND 16
-#define Q_BANDS_MAX 64
+ * The rows drawn live are kept in q->rgb.  Each time 16 more rows are in,
+ * the band is given a quality, 100 * (1 - garbage_prob()) of the band with
+ * the 16 rows before it, shown as a segment (green >= 70, yellow >= 30,
+ * red); the violet bar is the mean of the bands so far, from the second
+ * band on.  qn: the picture being received (NEW PIC in a split), qo: OLD
+ * PIC.  UI thread only (live_preview_tick, split_*); q_reset_pending (qn)
+ * is set by live_preview_start(), with live_mutex held. */
 static volatile bool q_reset_pending = false;
-static uint8_t *q_rgb = NULL;
-static int q_w = 0, q_h = 0, q_top = 0, q_nbands = 0;
-static float q_band[Q_BANDS_MAX];
 
-static void q_free(void)
+static void q_create(qbars_t *q, int y)
 {
-    free(q_rgb);
-    q_rgb = NULL;
-    q_w = q_h = q_top = q_nbands = 0;
+    q->box = lv_obj_create(dialog.obj);         /* as wide as status_label */
+    lv_obj_remove_style_all(q->box);
+    lv_obj_set_pos(q->box, 10, y);
+    lv_obj_set_size(q->box, 300, 16 + 12 + 16 + 8 + 36);
+    lv_obj_clear_flag(q->box, LV_OBJ_FLAG_SCROLLABLE);
+    q->seg_bar = lv_bar_create(q->box);
+    lv_obj_set_size(q->seg_bar, 250, 16);
+    lv_obj_set_pos(q->seg_bar, 25, 0);          /* x 35, under the progress bar */
+    lv_bar_set_range(q->seg_bar, 0, 1000);
+    lv_bar_set_value(q->seg_bar, 0, LV_ANIM_OFF);     /* only its track: the segments are children */
+    lv_obj_set_style_pad_all(q->seg_bar, 0, 0);
+    lv_obj_set_style_clip_corner(q->seg_bar, true, 0);
+    q->bar = lv_bar_create(q->box);
+    lv_obj_set_size(q->bar, 250, 16);
+    lv_obj_set_pos(q->bar, 25, 16 + 12);
+    lv_bar_set_range(q->bar, 0, 100);
+    lv_bar_set_value(q->bar, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(q->bar, lv_color_hex(0x9650C8), LV_PART_INDICATOR);
+    q->label = lv_label_create(q->box);         /* as status_label, centred */
+    lv_obj_set_style_text_color(q->label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(q->label, &sony_28, 0);
+    lv_obj_set_width(q->label, 300);
+    lv_obj_set_style_text_align(q->label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(q->label, 0, 16 + 12 + 16 + 8);
+    lv_label_set_text(q->label, "");
+    lv_obj_add_flag(q->box, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void q_reset(int w, int h)
+static void q_free(qbars_t *q)
 {
-    q_free();
+    free(q->rgb);
+    q->rgb = NULL;
+    q->w = q->h = q->top = q->nbands = 0;
+}
+
+static void q_show(qbars_t *q, bool show)
+{
+    if (!q->box || show != lv_obj_has_flag(q->box, LV_OBJ_FLAG_HIDDEN)) return;
+    if (show) lv_obj_clear_flag(q->box, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(q->box, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void q_draw_seg(qbars_t *q, int i)
+{
+    const int bw = 250, nb = q->h / Q_BAND;     /* segment i under its rows */
+    if (!q->box || nb <= 0) return;
+    float v = q->band[i];
+    int x0 = bw * i / nb, x1 = bw * (i + 1) / nb;
+    lv_obj_t *seg = lv_obj_create(q->seg_bar);
+    lv_obj_remove_style_all(seg);
+    lv_obj_set_pos(seg, x0, 0);
+    lv_obj_set_size(seg, x1 - x0, 16);
+    lv_obj_set_style_bg_opa(seg, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(seg, lv_color_hex(v >= 70 ? 0x3CBE50 : v >= 30 ? 0xE6BE28 : 0xDC3C3C), 0);
+}
+
+static void q_draw_mean(qbars_t *q)
+{
+    if (!q->box) return;
+    if (q->nbands < 2) {
+        lv_bar_set_value(q->bar, 0, LV_ANIM_OFF);
+        lv_label_set_text(q->label, "");
+        return;
+    }
+    float sum = 0;
+    for (int k = 0; k < q->nbands; ++k) sum += q->band[k];
+    int mean = (int)(sum / q->nbands + 0.5f);
+    lv_bar_set_value(q->bar, mean, LV_ANIM_OFF);
+    lv_label_set_text_fmt(q->label, "Avg. quality %d%%", mean);
+}
+
+/* the widgets again from the data (after q_move()) */
+static void q_rebuild(qbars_t *q)
+{
+    if (!q->box) return;
+    lv_obj_clean(q->seg_bar);
+    for (int i = 0; i < q->nbands; ++i) q_draw_seg(q, i);
+    q_draw_mean(q);
+}
+
+/* 1KO125: Canvas split: the data of src (rows, bands) go to dst, src is
+ * left empty; both are redrawn */
+static void q_move(qbars_t *dst, qbars_t *src)
+{
+    q_free(dst);
+    dst->rgb = src->rgb; dst->w = src->w; dst->h = src->h;
+    dst->top = src->top; dst->nbands = src->nbands;
+    memcpy(dst->band, src->band, sizeof(dst->band));
+    src->rgb = NULL;
+    q_free(src);
+    q_rebuild(dst);
+    q_rebuild(src);
+}
+
+static void q_reset(qbars_t *q, int w, int h)
+{
+    q_free(q);
     if (w > 0 && h > 0 && h / Q_BAND <= Q_BANDS_MAX)
-        q_rgb = calloc((size_t)w * h * 3, 1);
-    if (q_rgb) { q_w = w; q_h = h; }
-    if (!q_box) return;
-    lv_obj_clean(q_seg_bar);
-    lv_bar_set_value(q_bar, 0, LV_ANIM_OFF);
-    lv_label_set_text(q_label, "");
+        q->rgb = calloc((size_t)w * h * 3, 1);
+    if (q->rgb) { q->w = w; q->h = h; }
+    q_rebuild(q);
 }
 
 /* Shown exactly while a picture is received in Auto RX with the progress
@@ -854,52 +936,31 @@ static void q_reset(int w, int h)
  * on Stop, under the browser and the TX panel.  Called by ui_timer_cb(). */
 static void q_sync_visibility(void)
 {
-    if (!q_box) return;
-    bool show = q_rgb && live_capturing && progress_bar &&
-                !lv_obj_has_flag(progress_bar, LV_OBJ_FLAG_HIDDEN) && !sstv_browser_open;
-    if (show == lv_obj_has_flag(q_box, LV_OBJ_FLAG_HIDDEN)) {
-        if (show) lv_obj_clear_flag(q_box, LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_add_flag(q_box, LV_OBJ_FLAG_HIDDEN);
-    }
+    q_show(&qn, qn.rgb && live_capturing && progress_bar &&
+                !lv_obj_has_flag(progress_bar, LV_OBJ_FLAG_HIDDEN) && !sstv_browser_open);
+    q_show(&qo, qo.rgb && split_on && old_capturing && !sstv_browser_open);
 }
 
-static void q_band_done(int i)
+static void q_band_done(qbars_t *q, int i)
 {
     int r0 = i * Q_BAND - Q_BAND;
     if (r0 < 0) r0 = 0;
-    double p = garbage_prob(q_rgb + (size_t)r0 * q_w * 3, q_w, (i + 1) * Q_BAND - r0);
+    double p = garbage_prob(q->rgb + (size_t)r0 * q->w * 3, q->w, (i + 1) * Q_BAND - r0);
     if (p < 0) return;
-    float q = (float)(100.0 * (1.0 - p));
-    q_band[i] = q;
-    q_nbands = i + 1;
-    if (!q_box) return;
-
-    const int bw = 250, nb = q_h / Q_BAND;              /* segment i under its rows */
-    int x0 = bw * i / nb, x1 = bw * (i + 1) / nb;
-    lv_obj_t *seg = lv_obj_create(q_seg_bar);
-    lv_obj_remove_style_all(seg);
-    lv_obj_set_pos(seg, x0, 0);
-    lv_obj_set_size(seg, x1 - x0, 16);
-    lv_obj_set_style_bg_opa(seg, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(seg, lv_color_hex(q >= 70 ? 0x3CBE50 : q >= 30 ? 0xE6BE28 : 0xDC3C3C), 0);
-
-    if (q_nbands >= 2) {
-        float sum = 0;
-        for (int k = 0; k < q_nbands; ++k) sum += q_band[k];
-        int mean = (int)(sum / q_nbands + 0.5f);
-        lv_bar_set_value(q_bar, mean, LV_ANIM_OFF);
-        lv_label_set_text_fmt(q_label, "Avg. quality %d%%", mean);
-    }
+    q->band[i] = (float)(100.0 * (1.0 - p));
+    q->nbands = i + 1;
+    q_draw_seg(q, i);
+    q_draw_mean(q);
 }
 
 /* a row drawn live: kept, and the bands it completes are measured */
-static void q_add_row(int row, const uint8_t *rgb, int width, int height)
+static void q_add_row(qbars_t *q, int row, const uint8_t *rgb, int width, int height)
 {
-    if (!q_rgb || width != q_w || height != q_h || row < 0 || row >= q_h) return;
-    memcpy(q_rgb + (size_t)row * q_w * 3, rgb, (size_t)q_w * 3);
-    if (row + 1 > q_top) q_top = row + 1;
-    while (q_nbands < q_h / Q_BAND && q_top >= (q_nbands + 1) * Q_BAND)
-        q_band_done(q_nbands);
+    if (!q->rgb || width != q->w || height != q->h || row < 0 || row >= q->h) return;
+    memcpy(q->rgb + (size_t)row * q->w * 3, rgb, (size_t)q->w * 3);
+    if (row + 1 > q->top) q->top = row + 1;
+    while (q->nbands < q->h / Q_BAND && q->top >= (q->nbands + 1) * Q_BAND)
+        q_band_done(q, q->nbands);
 }
 
 /* ---- Progressive display (Auto RX) ---------------------------------------
@@ -930,61 +991,79 @@ static void live_preview_start(uint64_t win_end, uint64_t buf0_abs)
             row0 / SSTV_SAMPLE_RATE, row0 < 0.0 ? " (unknown: from the line syncs)" : "");
 }
 
-/* Draw picture row `row` (width x 3 bytes) into the canvas, scaled exactly
- * like render_scaled_image() so the final picture lands on top of it. */
-static void live_preview_draw_row(int row, const uint8_t *rgb, int width, int height)
+/* Draw picture row `row` (width x 3 bytes) into a cw x ch canvas, scaled
+ * exactly like render_scaled_image() so the final picture lands on top of
+ * it.  1KO125: also OLD PIC's small canvas in a split. */
+static void canvas_draw_row(lv_obj_t *canvas, int cw, int ch, int row, const uint8_t *rgb, int width, int height)
 {
-    if (!sstv_canvas || width <= 0 || height <= 0) return;
-    int out_h = SSTV_IMAGE_H;
+    if (!canvas || width <= 0 || height <= 0) return;
+    int out_h = ch;
     int out_w = (width * out_h) / height;
-    if (out_w > SSTV_IMAGE_W) { out_w = SSTV_IMAGE_W; out_h = (height * out_w) / width; }
-    int x0 = (SSTV_IMAGE_W - out_w) / 2, y0 = (SSTV_IMAGE_H - out_h) / 2;
+    if (out_w > cw) { out_w = cw; out_h = (height * out_w) / width; }
+    int x0 = (cw - out_w) / 2, y0 = (ch - out_h) / 2;
     int oy0 = (int)(((int64_t)row * out_h + height - 1) / height);          /* rows with sy == row */
     int oy1 = (int)(((int64_t)(row + 1) * out_h + height - 1) / height);
     for (int oy = oy0; oy < oy1 && oy < out_h; ++oy)
         for (int ox = 0; ox < out_w; ++ox) {
             int sx = (int)((int64_t)ox * width / out_w);
             const uint8_t *q = rgb + (size_t)sx * 3;
-            lv_canvas_set_px(sstv_canvas, x0 + ox, y0 + oy, lv_color_make(q[0], q[1], q[2]));
+            lv_canvas_set_px(canvas, x0 + ox, y0 + oy, lv_color_make(q[0], q[1], q[2]));
         }
-    lv_obj_invalidate(sstv_canvas);
+    lv_obj_invalidate(canvas);
+}
+
+static void live_preview_draw_row(int row, const uint8_t *rgb, int width, int height)
+{
+    canvas_draw_row(sstv_canvas, SSTV_IMAGE_W, SSTV_IMAGE_H, row, rgb, width, height);
 }
 
 /* Called by ui_timer_cb(): draw the rows whose audio has arrived.  The
  * slice is copied under live_mutex (the audio thread may append or a
- * Restart may replace live_samples), the row is demodulated outside it. */
-static void live_preview_tick(void)
+ * Restart may replace the capture), the row is demodulated outside it.
+ * 1KO125: one capture of Auto RX: NEW PIC (live_*) or OLD PIC (old_*). */
+static void capture_preview_tick(sstv_preview_t *pv, bool *pv_on, sstv_linesync_t *ls,
+                                 float *const *samples, const long *written, const volatile bool *capturing,
+                                 lv_obj_t *canvas, int cw, int ch, qbars_t *q)
 {
     uint8_t row_rgb[320 * 3];
-    if (q_reset_pending) {                      /* 1KO125: a new picture */
-        q_reset_pending = false;
-        q_reset(live_pv.width, live_pv.height);
-    }
-    for (int k = 0; k < SSTV_PV_ROWS_PER_TICK && live_pv_on; ++k) {
+    for (int k = 0; k < SSTV_PV_ROWS_PER_TICK && *pv_on; ++k) {
         long a = 0, b = 0;
         bool ok = false;
         pthread_mutex_lock(&live_mutex);
-        if (!live_capturing || !live_samples) {
-            live_pv_on = false;               /* capture over: the final decode follows */
+        if (!*capturing || !*samples) {
+            *pv_on = false;                   /* capture over: the final decode follows */
         } else {
-            sstv_ls_status_t st = *sstv_linesync_status(&live_ls);
-            if (sstv_preview_need(&live_pv, live_written, &st, &a, &b)) {
+            sstv_ls_status_t st = *sstv_linesync_status(ls);
+            if (sstv_preview_need(pv, *written, &st, &a, &b)) {
                 if (b - a <= SSTV_PV_SLICE_MAX) {
-                    memcpy(live_pv_slice, live_samples + a, (size_t)(b - a) * sizeof(float));
+                    memcpy(live_pv_slice, *samples + a, (size_t)(b - a) * sizeof(float));
                     ok = true;
                 } else {
-                    live_pv_on = false;       /* cannot happen with the supported modes */
+                    *pv_on = false;           /* cannot happen with the supported modes */
                 }
             }
         }
         pthread_mutex_unlock(&live_mutex);
         if (!ok) break;
-        int r = sstv_preview_render(&live_pv, live_pv_slice, row_rgb);
+        int r = sstv_preview_render(pv, live_pv_slice, row_rgb);
         if (r >= 0) {
-            live_preview_draw_row(r, row_rgb, live_pv.width, live_pv.height);
-            q_add_row(r, row_rgb, live_pv.width, live_pv.height);   /* 1KO125 */
+            canvas_draw_row(canvas, cw, ch, r, row_rgb, pv->width, pv->height);
+            q_add_row(q, r, row_rgb, pv->width, pv->height);   /* 1KO125 */
         }
     }
+}
+
+static void live_preview_tick(void)
+{
+    if (q_reset_pending) {                      /* 1KO125: a new picture */
+        q_reset_pending = false;
+        q_reset(&qn, live_pv.width, live_pv.height);
+    }
+    capture_preview_tick(&live_pv, &live_pv_on, &live_ls, &live_samples, &live_written, &live_capturing,
+                         sstv_canvas, SSTV_IMAGE_W, SSTV_IMAGE_H, &qn);
+    if (split_on)
+        capture_preview_tick(&old_pv, &old_pv_on, &old_ls, &old_samples, &old_written, &old_capturing,
+                             old_canvas, SPLIT_OLD_W, SPLIT_OLD_H, &qo);
 }
 
 /* Progressive display for Manual RX: same scheme as live_preview_tick()
@@ -1177,6 +1256,170 @@ static long rc_from_index(const rc_cand_t *c)
 
 
 
+/* ---- 1KO125: Canvas split ------------------------------------------------
+ * See the comment at split_on in dialog_sstv.c.  Everything here runs in
+ * the UI thread; the capture state (live_*, old_*) is changed with
+ * live_mutex held, since audio_cb() appends to both captures. */
+
+/* left column: one block (status, progress, quality) or OLD's on top of NEW's */
+static void split_layout(bool on)
+{
+    if (status_label) lv_obj_set_pos(status_label, 10, on ? SPLIT_Y_NEW_TITLE : 105);
+    if (progress_bar) lv_obj_set_pos(progress_bar, 35, on ? SPLIT_Y_NEW_TITLE + 36 : 155);
+    if (qn.box) lv_obj_set_pos(qn.box, 10, (on ? SPLIT_Y_NEW_TITLE + 36 : 155) + 16 + 12);
+    lv_obj_t *old_objs[] = { old_frame, old_title, old_progress };
+    for (size_t i = 0; i < sizeof(old_objs) / sizeof(old_objs[0]); ++i) {
+        if (!old_objs[i]) continue;
+        if (on && !sstv_browser_open) lv_obj_clear_flag(old_objs[i], LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(old_objs[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+/* the rows of q (all received so far) into a canvas */
+static void split_redraw(lv_obj_t *canvas, int cw, int ch, const qbars_t *q)
+{
+    if (!canvas) return;
+    lv_canvas_fill_bg(canvas, lv_color_white(), LV_OPA_COVER);
+    if (q->rgb)
+        for (int r = 0; r < q->top; ++r)
+            canvas_draw_row(canvas, cw, ch, r, q->rgb + (size_t)r * q->w * 3, q->w, q->h);
+    lv_obj_invalidate(canvas);
+}
+
+static void split_end(const char *why)
+{
+    if (!split_on) return;
+    split_on = false;
+    split_layout(false);
+    q_free(&qo);
+    q_rebuild(&qo);
+    q_show(&qo, false);
+    fprintf(stderr, "SSTV SPLIT: end - %s\n", why);
+    update_rx_controls();
+    if (live_capturing || live_decode_pending) set_receiver_ui_decoding(live_info.name);
+}
+
+/* OLD PIC's capture dropped (Discard Old Pic, Halt, Stop, closing the app).
+ * live_mutex held. */
+static void split_free_old(void)
+{
+    free(old_samples);
+    old_samples = NULL;
+    old_written = old_target = 0;
+    old_capturing = false;
+    old_decode_pending = false;
+    old_pv_on = false;
+}
+
+/* A VIS confirmed while a picture is received (candidate c, its capture
+ * from index fi of the current one).  First time: the picture being
+ * received becomes OLD PIC and goes on, the new one is NEW PIC.  In a
+ * split already: NEW PIC starts again with the new one, OLD PIC stays
+ * (the partial NEW PIC is not saved).  live_mutex held. */
+static void split_vis(const rc_cand_t *c, long fi)
+{
+    float *cur = live_samples;
+    if (split_on) {
+        fprintf(stderr, "SSTV SPLIT: new VIS=%d -> %s; NEW PIC %s discarded at %.1f s, OLD PIC %s goes on\n",
+                c->info.vis, c->info.name, live_info.name, (double)live_written / SSTV_SAMPLE_RATE, old_info.name);
+        if (live_capture_from(&c->info, cur + fi, live_written - fi, live_buf0_abs + (uint64_t)fi,
+                              c->win_end, c->start_s, c->off))
+            free(cur);
+        return;
+    }
+    /* the current capture goes on as OLD PIC */
+    old_samples = cur;
+    old_written = live_written;
+    old_target = live_target;
+    old_info = live_info;
+    old_ls = live_ls;
+    old_pv = live_pv;
+    old_pv_on = live_pv_on;
+    old_buf0_abs = live_buf0_abs;
+    old_capture_off = live_capture_off;
+    if (!live_capture_from(&c->info, cur + fi, live_written - fi, live_buf0_abs + (uint64_t)fi,
+                           c->win_end, c->start_s, c->off)) {
+        old_samples = NULL;             /* no memory: the old picture simply goes on */
+        old_pv_on = false;
+        return;
+    }
+    old_capturing = true;
+    old_decode_pending = false;
+    split_on = true;
+    q_move(&qo, &qn);                   /* its bars and rows go with it */
+    split_redraw(old_canvas, SPLIT_OLD_W, SPLIT_OLD_H, &qo);
+    split_layout(true);
+    fprintf(stderr, "SSTV SPLIT: new VIS=%d -> %s at %.1f s of %s: canvas split, both received\n",
+            c->info.vis, c->info.name, (double)old_written / SSTV_SAMPLE_RATE, old_info.name);
+}
+
+/* Discard New Pic: the new picture is dropped, OLD PIC is the picture being
+ * received again, on the main canvas. */
+static void split_discard_new(void)
+{
+    pthread_mutex_lock(&live_mutex);
+    if (!split_on || !old_capturing || !old_samples) { pthread_mutex_unlock(&live_mutex); return; }
+    fprintf(stderr, "SSTV SPLIT: Discard New Pic - %s dropped, %s is the picture again\n",
+            live_info.name, old_info.name);
+    free(live_samples);
+    live_samples = old_samples;
+    live_written = old_written;
+    live_target = old_target;
+    live_info = old_info;
+    live_ls = old_ls;
+    live_pv = old_pv;
+    live_pv_on = old_pv_on;
+    live_buf0_abs = old_buf0_abs;
+    live_capture_off = old_capture_off;
+    live_capturing = true;
+    live_decode_pending = false;
+    live_enabled = true;
+    live_capture_starts++;              /* the candidates of the new picture go */
+    rc_clear(NULL);
+    old_samples = NULL;
+    split_free_old();
+    q_reset_pending = false;
+    pthread_mutex_unlock(&live_mutex);
+    q_move(&qn, &qo);
+    split_redraw(sstv_canvas, SSTV_IMAGE_W, SSTV_IMAGE_H, &qn);
+    split_end("Discard New Pic");
+    set_receiver_ui_decoding(live_info.name);
+}
+
+static void split_discard_old(const char *why)
+{
+    pthread_mutex_lock(&live_mutex);
+    if (old_samples || old_capturing || old_decode_pending)
+        fprintf(stderr, "SSTV SPLIT: OLD PIC %s dropped (%s)\n", old_info.name, why);
+    split_free_old();
+    pthread_mutex_unlock(&live_mutex);
+    split_end(why);
+}
+
+/* ui_timer_cb(): OLD PIC's title and progress; the split ends when OLD
+ * PIC's capture does (it is then decoded and saved in the background) */
+static void split_tick(void)
+{
+    if (!split_on) return;
+    if (!old_capturing) {
+        split_end(old_decode_pending ? "OLD PIC received, decoded and saved" : "OLD PIC gone");
+        return;
+    }
+    split_layout(true);                 /* follows the browser */
+    if (old_title) {
+        char t[64];
+        snprintf(t, sizeof(t), "OLD - %s", old_info.name);
+        if (strcmp(lv_label_get_text(old_title), t) != 0) lv_label_set_text(old_title, t);
+    }
+    if (old_progress && old_target > 0) {
+        long v = old_written * 1000L / old_target;
+        lv_bar_set_value(old_progress, v < 0 ? 0 : v > 1000 ? 1000 : (int)v, LV_ANIM_OFF);
+    }
+}
+
+static void discard_new_cb(button_data_t *data) { (void)data; split_discard_new(); }
+static void discard_old_cb(button_data_t *data) { (void)data; split_discard_old("Discard Old Pic"); }
+
 static bool save_debug_wav(const char *path, const float *samples, long count)
 {
     if (!path || !samples || count <= 0) return false;
@@ -1302,15 +1545,32 @@ static void audio_cb(size_t n, float *samples)
     /* While a decoder thread runs, audio is ignored - except when a capture
      * is in progress: after a Manual -> Auto hand-over (VIS during Manual RX)
      * the Manual picture is decoded while Auto RX captures the new one. */
-    if (test_running && !live_capturing && !cont_capturing && !live_enabled) return;   /* 1KO125: Auto RX listens while decoding */
+    if (test_running && !live_capturing && !cont_capturing && !live_enabled && !old_capturing) return;   /* 1KO125: Auto RX listens while decoding */
 
     /* AUTODETECT is deliberately independent from Auto RX / Manual RX.
      * It passively inspects the same 12-kHz RX stream and never starts a decoder. */
     if (sstv_autodetect_is_listening())
         sstv_autodetect_process(samples, n);
 
-    if (!live_enabled && !cont_capturing) return;
+    if (!live_enabled && !cont_capturing && !old_capturing) return;
     pthread_mutex_lock(&live_mutex);
+
+    /* 1KO125: Canvas split: OLD PIC goes on receiving next to NEW PIC */
+    if (old_capturing && old_samples) {
+        long room = old_target - old_written;
+        long copy = (long)n < room ? (long)n : room;
+        if (copy > 0) {
+            memcpy(old_samples + old_written, samples, (size_t)copy * sizeof(float));
+            old_written += copy;
+            sstv_linesync_process(&old_ls, samples, (size_t)copy);
+        }
+        if (old_written >= old_target) {
+            old_capturing = false;
+            old_decode_pending = true;
+            fprintf(stderr, "SSTV SPLIT: OLD PIC %s received (%ld samples), decoded when the decoder is free\n",
+                    old_info.name, old_written);
+        }
+    }
 
     /* Diagnostic: actual callback cadence/block size. */
     {

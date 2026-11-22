@@ -2072,6 +2072,17 @@ static void tx_stop_receivers_for_rf(void)
     live_enabled = false;
     live_ring_pos = live_ring_count = 0;
     live_wait_samples = live_wait_log_mark = 0;
+    /* 1KO125: Canvas split: OLD PIC is closed like NEW PIC */
+    if (old_capturing) {
+        old_capturing = false;
+        if (old_samples && old_written > SSTV_SAMPLE_RATE * 3) {
+            old_decode_pending = true;
+            fprintf(stderr, "SSTV SPLIT: TX - OLD PIC %s closed after %.1f s, partial picture decoded\n",
+                    old_info.name, (double)old_written / SSTV_SAMPLE_RATE);
+        } else {
+            free(old_samples); old_samples = NULL; old_written = old_target = 0;
+        }
+    }
 
     if (cont_capturing) {
         cont_capturing = false;
