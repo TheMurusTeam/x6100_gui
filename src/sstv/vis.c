@@ -174,7 +174,7 @@ static bool leader_gate(const float complex *z, int nz, float *off, float *q)
 /* Every assigned 7-bit VIS code: supported and known-unsupported modes.
  * Restricting ML decoding to real codes is what turns parity into coding gain. */
 static const unsigned char vis_codes[] = {
-    0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,40,44,48,51,52,55,56,59,60,63,76,
+    0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,32,36,40,44,48,51,52,55,56,59,60,63,76,
     93,94,95,96,97,98,99,100,104,105,113,114,115 };
 
 static bool supported(int vis, sstv_info_t *o)
@@ -195,6 +195,11 @@ static bool supported(int vis, sstv_info_t *o)
     case 59: o->mode = SSTV_MODE_SC2_60;     o->name = "SC2-60";     o->width = 320; o->height = 256; break;
     case 63: o->mode = SSTV_MODE_SC2_120;    o->name = "SC2-120";    o->width = 320; o->height = 256; break;
     case 55: o->mode = SSTV_MODE_SC2_180;    o->name = "SC2-180";    o->width = 320; o->height = 256; break;
+    case 36: o->mode = SSTV_MODE_MARTIN_M3;  o->name = "Martin M3";  o->width = 320; o->height = 256; break;
+    case 32: o->mode = SSTV_MODE_MARTIN_M4;  o->name = "Martin M4";  o->width = 320; o->height = 256; break;
+    case 52: o->mode = SSTV_MODE_SCOTTIE_S3; o->name = "Scottie S3"; o->width = 320; o->height = 256; break;
+    case 48: o->mode = SSTV_MODE_SCOTTIE_S4; o->name = "Scottie S4"; o->width = 320; o->height = 256; break;
+    case  4: o->mode = SSTV_MODE_ROBOT24;    o->name = "Robot 24";   o->width = 320; o->height = 240; break;
     default: return false;
     }
     return true;

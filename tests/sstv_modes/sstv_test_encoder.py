@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Independent SSTV test encoder (12 kHz mono 16-bit WAV): PD50, PD90,
-Wraase SC2-60/120/180.  Usage: MODE PICTURE OUT.wav [SNR_dB]
+"""Independent SSTV test encoder (12 kHz mono 16-bit WAV): PD50, PD90.
 Phase-continuous FM, VIS 8-bit (7 data + even parity), as the published
 specs (N7CXI / JL Barber "Proposal for SSTV mode specifications")."""
 import sys, wave, numpy as np
@@ -8,7 +7,7 @@ from PIL import Image
 SR = 12000
 MODES = {  # vis, pixel ms (PD) / line ms (Wraase SC-2)
     'pd50': (93, 0.286), 'pd90': (99, 0.532),
-    'sc2-60': (59, 240.3846), 'sc2-120': (63, 475.530), 'sc2-180': (55, 711.0225),
+    'r24': (4, 0), 'sc2-60': (59, 240.3846), 'sc2-120': (63, 475.530), 'sc2-180': (55, 711.0225),
 }
 class FM:
     def __init__(s): s.ph = 0.0; s.out = []; s.t = 0.0; s.n = 0
@@ -35,7 +34,17 @@ def main(mode, png, wav, snr=None):
     RY = np.clip(128 + 0.5*(R - Y)/0.701*1.0, 0, 255)   # (R-Y)/1.402 + 128
     BY = np.clip(128 + 0.5*(B - Y)/0.886*1.0, 0, 255)   # (B-Y)/1.772 + 128
     fm = FM(); fm.tone(1900, 500); vis(fm, code)
-    if mode.startswith('sc2'):          # 5.5225 sync, 0.5 porch, R G B
+    if mode == 'r24':                   # Robot 24: 160x120, Robot 72 layout, 200 ms
+        im2 = np.asarray(Image.open(png).convert('RGB').resize((160, 120)), dtype=float)
+        r, g, b = im2[..., 0], im2[..., 1], im2[..., 2]
+        y = 0.299*r + 0.587*g + 0.114*b
+        cr = np.clip(128 + (r - y)/1.402, 0, 255); cb = np.clip(128 + (b - y)/1.772, 0, 255)
+        for l in range(120):
+            fm.tone(1200, 9); fm.tone(1500, 3); fm.pixels(y[l], 88/160)
+            fm.tone(1500, 4.5); fm.tone(1900, 1.5); fm.pixels(cr[l], 44/160)
+            fm.tone(2300, 4.5); fm.tone(1900, 1.5); fm.pixels(cb[l], 44/160)
+        lines = 0
+    elif mode.startswith('sc2'):          # 5.5225 sync, 0.5 porch, R G B
         ch = (px - 5.5225 - 0.5) / 3 / 320
         for r in range(256):
             fm.tone(1200, 5.5225); fm.tone(1500, 0.5)

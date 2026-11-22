@@ -48,6 +48,11 @@ static const mode_desc_t modes[] = {
     {59, SSTV_MODE_SC2_60,    "SC2-60",    320, 256 },
     {63, SSTV_MODE_SC2_120,   "SC2-120",   320, 256 },
     {55, SSTV_MODE_SC2_180,   "SC2-180",   320, 256 },
+    {36, SSTV_MODE_MARTIN_M3, "Martin M3", 320, 256 },   /* 128 lines, shown twice */
+    {32, SSTV_MODE_MARTIN_M4, "Martin M4", 320, 256 },
+    {52, SSTV_MODE_SCOTTIE_S3,"Scottie S3",320, 256 },
+    {48, SSTV_MODE_SCOTTIE_S4,"Scottie S4",320, 256 },
+    { 4, SSTV_MODE_ROBOT24,   "Robot 24",  320, 240 },   /* 160x120, shown at 320x240 */
 };
 
 static uint8_t clamp8(float v)
@@ -392,6 +397,19 @@ static bool martin_row(const float *freq, long n, long base, double timing_scale
     return true;
 }
 
+/* 1KO125: the half-height modes (Martin M3/M4, Scottie S3/S4) decode 128
+ * lines into the first rows of rgb; spread them to 2 x rows, each line shown
+ * twice, bottom up so nothing is overwritten before it is read. */
+static int double_rows(uint8_t *rgb, int lines, int width)
+{
+    const size_t row = (size_t)width * 3;
+    for (int l = lines - 1; l >= 0; --l) {
+        memmove(rgb + (size_t)(2 * l + 1) * row, rgb + (size_t)l * row, row);
+        memmove(rgb + (size_t)(2 * l) * row, rgb + (size_t)l * row, row);
+    }
+    return 2 * lines;
+}
+
 /* Robot 72: base = line sync; Y, R-Y, B-Y on every line.  out: 320*3. */
 static bool robot72_row(const float *freq, long n, long base, double scale, uint8_t *out)
 {
@@ -690,9 +708,11 @@ static int martin_decode_samples(const float *x, long n, uint8_t *rgb, sstv_mode
 {
     /* A Martin line starts with its sync right after the VIS stop bit. */
     const double vis_row0 = (vis_end >= 0) ? (double)vis_end : -1.0;
-    const float channel_ms = (mode == SSTV_MODE_MARTIN_M1) ? 146.432f : 73.216f;
-    const float line_ms    = (mode == SSTV_MODE_MARTIN_M1) ? 446.446f : 226.798f;
-    const int height = 256;
+    /* M3 / M4: the lines of M1 / M2, 128 of them (1KO125) */
+    const bool m1line = (mode == SSTV_MODE_MARTIN_M1 || mode == SSTV_MODE_MARTIN_M3);
+    const float channel_ms = m1line ? 146.432f : 73.216f;
+    const float line_ms    = m1line ? 446.446f : 226.798f;
+    const int height = (mode == SSTV_MODE_MARTIN_M3 || mode == SSTV_MODE_MARTIN_M4) ? 128 : 256;
 
     fprintf(stderr, "SSTV: Martin decoder start from RAM: %s, samples=%ld, channel=%.3f ms line=%.3f ms\n",
             mode == SSTV_MODE_MARTIN_M1 ? "M1" : "M2", n, channel_ms, line_ms);
@@ -861,7 +881,7 @@ static int martin_decode_samples(const float *x, long n, uint8_t *rgb, sstv_mode
      * its first member is not image row zero.  Preserve the fitted period and
      * shift the complete grid backwards by an integer number of lines. */
     {
-        const double expected_first_sec = (mode == SSTV_MODE_MARTIN_M1) ? 2.35 : 2.20;
+        const double expected_first_sec = m1line ? 2.35 : 2.20;
         const double expected_first = expected_first_sec*(double)SR;
         const double late_limit = 5.0*(double)SR;
         if (vis_row0 >= 0.0) {
@@ -893,6 +913,10 @@ static int martin_decode_samples(const float *x, long n, uint8_t *rgb, sstv_mode
         memset(rgb+(size_t)ns*320*3,0,(size_t)(height-ns)*320*3);
 
     free(freq);
+    if (height == 128) {   /* M3 / M4: each line shown twice */
+        ns = double_rows(rgb, ns, 320);
+        if (ns < 256) memset(rgb + (size_t)ns * 320 * 3, 0, (size_t)(256 - ns) * 320 * 3);
+    }
     fprintf(stderr, "SSTV: Martin image decode finished, rows=%d\n", ns);
     return ns;
 }
@@ -1294,8 +1318,40 @@ static bool wr_line(const float *freq, long n, long base, double scale, double l
     return true;
 }
 
+/* 1KO125: Robot 24 colour: 160x120, Robot 72's layout at 200 ms a line
+ * (SSTV Handbook; the receiver of wave-owl/sstv-core):
+ *   9 ms sync, 3 ms porch, Y 88 ms, 4.5 + 1.5 ms separator and porch,
+ *   R-Y 44 ms, 4.5 + 1.5 ms, B-Y 44 ms.
+ * Each 160-pixel line is widened to 320 (linear) and shown twice. */
+#define R24_LINE_MS 200.0
+
+static bool r24_line(const float *freq, long n, long base, double scale, uint8_t *out)
+{
+    float Y[160], Cr[160], Cb[160];
+    const double t[6] = { 12.0, 100.0, 106.0, 150.0, 156.0, 200.0 };   /* ms from the sync */
+    long a[6];
+    for (int k = 0; k < 6; ++k) a[k] = base + llround(t[k] / 1000.0 * SR * scale);
+    if (base < 0 || a[5] >= n) return false;
+    segment(freq, n, a[0], a[1], Y, 160);
+    segment(freq, n, a[2], a[3], Cr, 160);
+    segment(freq, n, a[4], a[5], Cb, 160);
+    for (int px = 0; px < 320; ++px) {
+        /* pixel centre of the 320 row on the 160 line */
+        float f = (px + 0.5f) * 0.5f - 0.5f;
+        int i0 = f < 0.0f ? 0 : (int)f, i1 = i0 + 1 < 160 ? i0 + 1 : 159;
+        float w = f < 0.0f ? 0.0f : f - (float)i0;
+        float y = Y[i0] + w * (Y[i1] - Y[i0]);
+        float cr = Cr[i0] + w * (Cr[i1] - Cr[i0]) - 128.0f;
+        float cb = Cb[i0] + w * (Cb[i1] - Cb[i0]) - 128.0f;
+        out[px*3]   = clamp8(y + 1.402f * cr);
+        out[px*3+1] = clamp8(y - .714136f * cr - .344136f * cb);
+        out[px*3+2] = clamp8(y + 1.772f * cb);
+    }
+    return true;
+}
+
 /* Modes decoded line by line from a sync at the start of every line (PD,
- * Wraase): timing of a line, its sync, and its rows (1 or 2) */
+ * Wraase, Robot 24): timing of a line, its sync, and its rows (1 or 2) */
 typedef struct { const char *tag; int lines; double line_ms, sync_ms; } line_mode_t;
 
 static bool line_mode(sstv_mode_t mode, line_mode_t *m)
@@ -1306,6 +1362,7 @@ static bool line_mode(sstv_mode_t mode, line_mode_t *m)
     case SSTV_MODE_SC2_60:  *m = (line_mode_t){ "SC2-60",  256, 0.0, WR_SYNC_MS }; break;
     case SSTV_MODE_SC2_120: *m = (line_mode_t){ "SC2-120", 256, 0.0, WR_SYNC_MS }; break;
     case SSTV_MODE_SC2_180: *m = (line_mode_t){ "SC2-180", 256, 0.0, WR_SYNC_MS }; break;
+    case SSTV_MODE_ROBOT24: *m = (line_mode_t){ "Robot 24", 120, R24_LINE_MS, 9.0 }; return true;
     default: return false;
     }
     m->line_ms = pd_px_ms(mode) > 0.0 ? pd_line_ms(mode) : wr_line_ms(mode);
@@ -1316,6 +1373,11 @@ static bool line_mode(sstv_mode_t mode, line_mode_t *m)
 static bool mode_line(sstv_mode_t mode, const float *freq, long n, long base, double scale, uint8_t *rgb)
 {
     if (pd_px_ms(mode) > 0.0) return pd_line(freq, n, base, scale, pd_px_ms(mode), rgb);
+    if (mode == SSTV_MODE_ROBOT24) {   /* one line, two rows */
+        if (!r24_line(freq, n, base, scale, rgb)) return false;
+        memcpy(rgb + 320 * 3, rgb, 320 * 3);
+        return true;
+    }
     return wr_line(freq, n, base, scale, wr_line_ms(mode), rgb);
 }
 
@@ -1384,12 +1446,16 @@ static int line_decode_samples(const float *x, long n, uint8_t *rgb, sstv_mode_t
  * immediately before it and R is immediately after it. */
 static int scottie_decode_samples(const float *x,long n,uint8_t *rgb,sstv_mode_t mode,long vis_end)
 {
-    const int width=320,height=256;
+    const int width=320;
+    int height=256;
     const float sync_ms=9.0f,sep_ms=1.5f;
     float channel_ms; const char *mode_name;
     switch(mode){
         case SSTV_MODE_SCOTTIE_S1: channel_ms=138.240f; mode_name="Scottie S1"; break;
         case SSTV_MODE_SCOTTIE_S2: channel_ms=88.064f; mode_name="Scottie S2"; break;
+        /* S3 / S4: the lines of S1 / S2, 128 of them (1KO125) */
+        case SSTV_MODE_SCOTTIE_S3: channel_ms=138.240f; mode_name="Scottie S3"; height=128; break;
+        case SSTV_MODE_SCOTTIE_S4: channel_ms=88.064f; mode_name="Scottie S4"; height=128; break;
         case SSTV_MODE_SCOTTIE_DX: channel_ms=345.600f; mode_name="Scottie DX"; break;
         default: return -20;
     }
@@ -1455,7 +1521,9 @@ static int scottie_decode_samples(const float *x,long n,uint8_t *rgb,sstv_mode_t
     local_grid_refine(mode_name,cand,nc,sync,height,fitted_spl);
     double scale=fitted_spl/nominal_spl;int ns=height;
     for(int row=0;row<height;++row){if(!scottie_row(freq,n,sync[row],scale,channel_ms,rgb+(size_t)row*width*3)){ns=row;break;}if((row%32)==31||row==height-1)fprintf(stderr,"SSTV: %s: decoded row %d/%d\n",mode_name,row+1,height);}
-    if(ns<height)memset(rgb+(size_t)ns*width*3,0,(size_t)(height-ns)*width*3);fprintf(stderr,"SSTV: %s image decode finished, rows=%d\n",mode_name,ns);free(freq);return ns;
+    if(ns<height)memset(rgb+(size_t)ns*width*3,0,(size_t)(height-ns)*width*3);
+    if(height==128){ns=double_rows(rgb,ns,width);if(ns<256)memset(rgb+(size_t)ns*width*3,0,(size_t)(256-ns)*width*3);}
+    fprintf(stderr,"SSTV: %s image decode finished, rows=%d\n",mode_name,ns);free(freq);return ns;
 }
 
 /* ---- Progressive display support (see decoder.h) ---------------------- */
@@ -1474,6 +1542,9 @@ int sstv_row_width(sstv_mode_t mode)
     case SSTV_MODE_SCOTTIE_S1: case SSTV_MODE_SCOTTIE_S2: case SSTV_MODE_SCOTTIE_DX: return 320;
     case SSTV_MODE_PD50: case SSTV_MODE_PD90:
     case SSTV_MODE_SC2_60: case SSTV_MODE_SC2_120: case SSTV_MODE_SC2_180: return 320;
+    case SSTV_MODE_MARTIN_M3: case SSTV_MODE_MARTIN_M4:
+    case SSTV_MODE_SCOTTIE_S3: case SSTV_MODE_SCOTTIE_S4:
+    case SSTV_MODE_ROBOT24: return 320;          /* Robot 24: 160 px, drawn doubled */
     default: return 0;
     }
 }
@@ -1484,6 +1555,8 @@ static float scottie_channel_ms(sstv_mode_t mode)
     case SSTV_MODE_SCOTTIE_S1: return 138.240f;
     case SSTV_MODE_SCOTTIE_S2: return 88.064f;
     case SSTV_MODE_SCOTTIE_DX: return 345.600f;
+    case SSTV_MODE_SCOTTIE_S3: return 138.240f;
+    case SSTV_MODE_SCOTTIE_S4: return 88.064f;
     default: return 0.0f;
     }
 }
@@ -1512,6 +1585,22 @@ int sstv_render_row(sstv_mode_t mode, const float *freq, long n, long base, doub
         return scottie_row(freq, n, base, scale, scottie_channel_ms(mode), rgb_row) ? 0 : -2;
     case SSTV_MODE_SC2_60: case SSTV_MODE_SC2_120: case SSTV_MODE_SC2_180:
         return wr_line(freq, n, base, scale, wr_line_ms(mode), rgb_row) ? 0 : -2;
+    /* Half-height modes: one line, drawn twice (the copy kept in st->pair) */
+    case SSTV_MODE_MARTIN_M3: case SSTV_MODE_MARTIN_M4:
+    case SSTV_MODE_SCOTTIE_S3: case SSTV_MODE_SCOTTIE_S4:
+    case SSTV_MODE_ROBOT24: {
+        bool ok;
+        if (!st) return -1;
+        st->pair_valid = 0;
+        if (mode == SSTV_MODE_MARTIN_M3)      ok = martin_row(freq, n, base, scale, 146.432f, rgb_row);
+        else if (mode == SSTV_MODE_MARTIN_M4) ok = martin_row(freq, n, base, scale, 73.216f, rgb_row);
+        else if (mode == SSTV_MODE_ROBOT24)   ok = r24_line(freq, n, base, scale, rgb_row);
+        else ok = scottie_row(freq, n, base, scale, scottie_channel_ms(mode), rgb_row);
+        if (!ok) return -2;
+        memcpy(st->pair, rgb_row, 320 * 3);
+        st->pair_valid = 1;
+        return 0;
+    }
     case SSTV_MODE_PD50: case SSTV_MODE_PD90: {
         uint8_t two[2 * 320 * 3];
         if (!st) return -1;
@@ -1564,9 +1653,11 @@ static int decode_dispatch(const float *samples, long count, sstv_mode_t mode, u
         return robot36_decode_samples(samples,count,rgb,vis_end);
     if (mode==SSTV_MODE_ROBOT72)
         return robot72_decode_samples(samples,count,rgb,vis_end);
-    if (mode==SSTV_MODE_MARTIN_M1 || mode==SSTV_MODE_MARTIN_M2)
+    if (mode==SSTV_MODE_MARTIN_M1 || mode==SSTV_MODE_MARTIN_M2 ||
+        mode==SSTV_MODE_MARTIN_M3 || mode==SSTV_MODE_MARTIN_M4)
         return martin_decode_samples(samples,count,rgb,mode,vis_end);
-    if (mode==SSTV_MODE_SCOTTIE_S1 || mode==SSTV_MODE_SCOTTIE_S2 || mode==SSTV_MODE_SCOTTIE_DX)
+    if (mode==SSTV_MODE_SCOTTIE_S1 || mode==SSTV_MODE_SCOTTIE_S2 || mode==SSTV_MODE_SCOTTIE_DX ||
+        mode==SSTV_MODE_SCOTTIE_S3 || mode==SSTV_MODE_SCOTTIE_S4)
         return scottie_decode_samples(samples,count,rgb,mode,vis_end);
     if (sstv_line_mode(mode))
         return line_decode_samples(samples,count,rgb,mode,vis_end);
@@ -1605,10 +1696,14 @@ int sstv_decode_cont_samples(const float *samples, long count, sstv_mode_t mode,
      * row is partial; subsequent rows lock to the real sync grid. */
     double preroll_s;
     switch (mode) {
-        case SSTV_MODE_MARTIN_M1: preroll_s = 2.350; break;
-        case SSTV_MODE_MARTIN_M2: preroll_s = 2.200; break;
+        case SSTV_MODE_MARTIN_M1:
+        case SSTV_MODE_MARTIN_M3: preroll_s = 2.350; break;
+        case SSTV_MODE_MARTIN_M2:
+        case SSTV_MODE_MARTIN_M4: preroll_s = 2.200; break;
         case SSTV_MODE_SCOTTIE_S1:
         case SSTV_MODE_SCOTTIE_S2:
+        case SSTV_MODE_SCOTTIE_S3:
+        case SSTV_MODE_SCOTTIE_S4:
         case SSTV_MODE_SCOTTIE_DX: preroll_s = 2.229; break;
         case SSTV_MODE_ROBOT8_BW:
         case SSTV_MODE_ROBOT36:
@@ -1617,7 +1712,8 @@ int sstv_decode_cont_samples(const float *samples, long count, sstv_mode_t mode,
         case SSTV_MODE_PD90:
         case SSTV_MODE_SC2_60:
         case SSTV_MODE_SC2_120:
-        case SSTV_MODE_SC2_180: preroll_s = 2.000; break;   /* sync right after the VIS, as Robot */
+        case SSTV_MODE_SC2_180:
+        case SSTV_MODE_ROBOT24: preroll_s = 2.000; break;   /* sync right after the VIS, as Robot */
         default: return -2;
     }
 

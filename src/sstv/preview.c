@@ -23,7 +23,8 @@ void sstv_preview_init(sstv_preview_t *p, sstv_mode_t mode, double row0_anchor)
     p->mode = mode;
     p->width = sstv_row_width(mode);
     p->height = (mode == SSTV_MODE_ROBOT8_BW) ? 120 :
-                (mode == SSTV_MODE_ROBOT36 || mode == SSTV_MODE_ROBOT72) ? 240 : 256;
+                (mode == SSTV_MODE_ROBOT36 || mode == SSTV_MODE_ROBOT72 ||
+                 mode == SSTV_MODE_ROBOT24) ? 240 : 256;
     p->rows_per_line = sstv_rows_per_line(mode);
     p->nominal = sstv_linesync_line_seconds(mode) * PV_SR;
     p->row0 = row0_anchor >= 0.0 ? row0_anchor + SSTV_PREVIEW_VIS_BIAS : -1.0;

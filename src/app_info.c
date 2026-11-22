@@ -119,8 +119,8 @@ static const char *const bodies[] = {
 
     /* SSTV */
     H("SSTV - SLOW SCAN TELEVISION")
-    "SSTV sends still pictures as audio tones. This application receives Robot 8/36/72, "
-    "Martin M1/M2, Scottie S1/S2/DX, PD50/90, Wraase SC2-60/120/180 and transmits Robot, Martin and Scottie S1/S2.\n\n"
+    "SSTV sends still pictures as audio tones. This application receives Robot 8/24/36/72, "
+    "Martin M1-M4, Scottie S1-S4/DX, PD50/90, Wraase SC2-60/120/180 and transmits Robot, Martin and Scottie S1/S2.\n\n"
     H("RECEIVE")
     "Start Auto RX waits for the VIS header, decodes the picture and saves it. Start Manual RX "
     "receives a picture already under way, in the mode chosen with RX Mode or by Autodetect. "

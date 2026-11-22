@@ -95,6 +95,11 @@ static const char *cont_mode_name(sstv_mode_t mode)
         case SSTV_MODE_SC2_60: return "SC2-60";
         case SSTV_MODE_SC2_120: return "SC2-120";
         case SSTV_MODE_SC2_180: return "SC2-180";
+        case SSTV_MODE_ROBOT24: return "Robot 24";
+        case SSTV_MODE_MARTIN_M3: return "Martin M3";
+        case SSTV_MODE_MARTIN_M4: return "Martin M4";
+        case SSTV_MODE_SCOTTIE_S3: return "Scottie S3";
+        case SSTV_MODE_SCOTTIE_S4: return "Scottie S4";
         default: return "Unknown";
     }
 }
@@ -124,6 +129,11 @@ static float cont_mode_seconds(sstv_mode_t mode)
         case SSTV_MODE_SC2_60:     return 62.0f;    /* 256 x 240.385 ms */
         case SSTV_MODE_SC2_120:    return 122.0f;   /* 256 x 475.530 ms */
         case SSTV_MODE_SC2_180:    return 182.5f;   /* 256 x 711.023 ms */
+        case SSTV_MODE_ROBOT24:    return 24.5f;    /* 120 x 200 ms */
+        case SSTV_MODE_MARTIN_M3:  return 57.5f;    /* 128 x 446.446 ms */
+        case SSTV_MODE_MARTIN_M4:  return 29.5f;    /* 128 x 226.798 ms */
+        case SSTV_MODE_SCOTTIE_S3: return 55.5f;    /* 128 x 428.220 ms (+ start) */
+        case SSTV_MODE_SCOTTIE_S4: return 36.0f;    /* 128 x 277.692 ms (+ start) */
         default:                    return (float)SSTV_CONT_MAX_SECONDS - 5.0f;
     }
 }
@@ -579,6 +589,11 @@ static bool live_supported_vis(int vis, sstv_info_t *out)
         case 59: out->mode=SSTV_MODE_SC2_60; out->name="SC2-60"; out->width=320; out->height=256; break;
         case 63: out->mode=SSTV_MODE_SC2_120; out->name="SC2-120"; out->width=320; out->height=256; break;
         case 55: out->mode=SSTV_MODE_SC2_180; out->name="SC2-180"; out->width=320; out->height=256; break;
+        case 36: out->mode=SSTV_MODE_MARTIN_M3; out->name="Martin M3"; out->width=320; out->height=256; break;
+        case 32: out->mode=SSTV_MODE_MARTIN_M4; out->name="Martin M4"; out->width=320; out->height=256; break;
+        case 52: out->mode=SSTV_MODE_SCOTTIE_S3; out->name="Scottie S3"; out->width=320; out->height=256; break;
+        case 48: out->mode=SSTV_MODE_SCOTTIE_S4; out->name="Scottie S4"; out->width=320; out->height=256; break;
+        case  4: out->mode=SSTV_MODE_ROBOT24; out->name="Robot 24"; out->width=320; out->height=240; break;
         default: return false;
     }
     return true;
@@ -1018,6 +1033,11 @@ static float live_mode_seconds(sstv_mode_t m)
         case SSTV_MODE_SC2_60: return 62.0f;
         case SSTV_MODE_SC2_120: return 122.0f;
         case SSTV_MODE_SC2_180: return 182.5f;
+        case SSTV_MODE_ROBOT24: return 24.5f;
+        case SSTV_MODE_MARTIN_M3: return 57.5f;
+        case SSTV_MODE_MARTIN_M4: return 29.5f;
+        case SSTV_MODE_SCOTTIE_S3: return 55.5f;
+        case SSTV_MODE_SCOTTIE_S4: return 36.0f;
         default: return 120.0f;
     }
 }

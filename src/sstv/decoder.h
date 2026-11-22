@@ -29,7 +29,12 @@ typedef enum {
     SSTV_MODE_PD90,
     SSTV_MODE_SC2_60,       /* Wraase SC-2 */
     SSTV_MODE_SC2_120,
-    SSTV_MODE_SC2_180
+    SSTV_MODE_SC2_180,
+    SSTV_MODE_MARTIN_M3,    /* M1 lines, 128 rows shown twice */
+    SSTV_MODE_MARTIN_M4,    /* M2 lines, 128 rows */
+    SSTV_MODE_SCOTTIE_S3,   /* S1 lines, 128 rows */
+    SSTV_MODE_SCOTTIE_S4,   /* S2 lines, 128 rows */
+    SSTV_MODE_ROBOT24       /* 160x120 colour, shown at 320x240 */
 } sstv_mode_t;
 
 /* Modes whose every line starts with its sync (PD, Wraase): decoded by the
@@ -37,13 +42,19 @@ typedef enum {
 static inline int sstv_line_mode(sstv_mode_t m)
 {
     return m == SSTV_MODE_PD50 || m == SSTV_MODE_PD90 ||
-           m == SSTV_MODE_SC2_60 || m == SSTV_MODE_SC2_120 || m == SSTV_MODE_SC2_180;
+           m == SSTV_MODE_SC2_60 || m == SSTV_MODE_SC2_120 || m == SSTV_MODE_SC2_180 ||
+           m == SSTV_MODE_ROBOT24;
 }
 
-/* PD modes send two picture rows per line sync (Y even, R-Y, B-Y, Y odd) */
+/* Picture rows per line sync: PD sends two (Y even, R-Y, B-Y, Y odd); the
+ * half-height modes (Martin M3/M4, Scottie S3/S4, Robot 24) are shown with
+ * every line twice, so the picture fills the same canvas */
 static inline int sstv_rows_per_line(sstv_mode_t m)
 {
-    return (m == SSTV_MODE_PD50 || m == SSTV_MODE_PD90) ? 2 : 1;
+    return (m == SSTV_MODE_PD50 || m == SSTV_MODE_PD90 ||
+            m == SSTV_MODE_MARTIN_M3 || m == SSTV_MODE_MARTIN_M4 ||
+            m == SSTV_MODE_SCOTTIE_S3 || m == SSTV_MODE_SCOTTIE_S4 ||
+            m == SSTV_MODE_ROBOT24) ? 2 : 1;
 }
 
 typedef struct {

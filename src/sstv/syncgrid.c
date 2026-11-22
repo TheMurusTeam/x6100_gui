@@ -61,14 +61,19 @@ double sstv_syncgrid_first_after_vis(sstv_mode_t mode)
     case SSTV_MODE_ROBOT72:     return 0.0007;
     case SSTV_MODE_MARTIN_M1:   return 0.0007;
     case SSTV_MODE_MARTIN_M2:   return 0.0007;
+    case SSTV_MODE_MARTIN_M3:
+    case SSTV_MODE_MARTIN_M4:   return 0.0007;   /* as M1 / M2 */
     case SSTV_MODE_SCOTTIE_S1:  return 0.2893;
     case SSTV_MODE_SCOTTIE_S2:  return 0.1887;
+    case SSTV_MODE_SCOTTIE_S3:  return 0.2893;   /* as S1 */
+    case SSTV_MODE_SCOTTIE_S4:  return 0.1887;   /* as S2 */
     case SSTV_MODE_SCOTTIE_DX:  return 0.7039;
     case SSTV_MODE_PD50:                         /* 1KO125: sync right after the VIS, as Robot */
     case SSTV_MODE_PD90:
     case SSTV_MODE_SC2_60:
     case SSTV_MODE_SC2_120:
-    case SSTV_MODE_SC2_180:     return 0.0007;
+    case SSTV_MODE_SC2_180:
+    case SSTV_MODE_ROBOT24:     return 0.0007;
     default:                    return -1.0;
     }
 }
@@ -78,17 +83,22 @@ double sstv_syncgrid_sync_s(sstv_mode_t mode)
     switch (mode) {
     case SSTV_MODE_ROBOT8_BW:   return 0.005;
     case SSTV_MODE_MARTIN_M1:
-    case SSTV_MODE_MARTIN_M2:   return 0.004862;
+    case SSTV_MODE_MARTIN_M2:
+    case SSTV_MODE_MARTIN_M3:
+    case SSTV_MODE_MARTIN_M4:   return 0.004862;
     case SSTV_MODE_ROBOT36:
     case SSTV_MODE_ROBOT72:
     case SSTV_MODE_SCOTTIE_S1:
     case SSTV_MODE_SCOTTIE_S2:
-    case SSTV_MODE_SCOTTIE_DX:  return 0.009;
+    case SSTV_MODE_SCOTTIE_DX:
+    case SSTV_MODE_SCOTTIE_S3:
+    case SSTV_MODE_SCOTTIE_S4:  return 0.009;
     case SSTV_MODE_PD50:
     case SSTV_MODE_PD90:        return 0.020;
     case SSTV_MODE_SC2_60:
     case SSTV_MODE_SC2_120:
     case SSTV_MODE_SC2_180:     return 0.0055225;
+    case SSTV_MODE_ROBOT24:     return 0.009;
     default:                    return 0.0;
     }
 }

@@ -84,6 +84,13 @@ static const ls_mode_t ls_modes[SSTV_LS_NMODES] = {
     { SSTV_MODE_SC2_60,     240.385,  5.5225, 256 },  /* Wraase SC-2 */
     { SSTV_MODE_SC2_120,    475.530,  5.5225, 256 },
     { SSTV_MODE_SC2_180,    711.023,  5.5225, 256 },
+    /* Same lines as M1/M2/S1/S2 (listed after them: on a tie without VIS
+     * the full-height mode is chosen), 128 of them */
+    { SSTV_MODE_MARTIN_M3,  446.446,  4.862, 128 },
+    { SSTV_MODE_MARTIN_M4,  226.798,  4.862, 128 },
+    { SSTV_MODE_SCOTTIE_S3, 428.220,  9.0,   128 },
+    { SSTV_MODE_SCOTTIE_S4, 277.692,  9.0,   128 },
+    { SSTV_MODE_ROBOT24,    200.000,  9.0,   120 },
 };
 static const float ls_cos[10] = { 1.0f, 0.809017f, 0.309017f, -0.309017f, -0.809017f,
                                  -1.0f,-0.809017f,-0.309017f,  0.309017f,  0.809017f };
