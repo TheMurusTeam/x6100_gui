@@ -68,6 +68,8 @@ constexpr uint8_t C_CTL_SCP = 0x27;   /* Scope control & data */
 constexpr uint8_t C_SND_VOICE = 0x28; /* Transmit Voice Memory Contents */
 constexpr uint8_t C_CTL_MTEXT = 0x70; /* Microtelecom Extension */
 constexpr uint8_t C_CTL_MISC = 0x7f;  /* Miscellaneous control, Sc */
+constexpr uint8_t C_1KO_VENDOR = 0x7e; /* 1KO125 vendor commands (not Icom) */
+constexpr uint8_t S_1KO_FILTER = 0x01; /* RX filter edges in Hz */
 
 constexpr uint8_t CODE_OK = 0xFB;
 constexpr uint8_t CODE_NG = 0xFA;
@@ -446,6 +448,7 @@ std::string_view handle_ctl_ptt_x1c(const CivPacketView&, CivTxPacker&);
 std::string_view handle_send_sel_freq_x25(const CivPacketView&, CivTxPacker&);
 std::string_view handle_send_sel_mode_x26(const CivPacketView&, CivTxPacker&);
 std::string_view handle_ctl_scp_x27(const CivPacketView&, CivTxPacker&);
+std::string_view handle_1ko_vendor_x7e(const CivPacketView&, CivTxPacker&);
 
 cmd_handler_t cmd_handlers[256] = {};
 bool cmd_handlers_ready = false;
@@ -471,7 +474,74 @@ void init_cmd_handlers() {
     cmd_handlers[0x25] = handle_send_sel_freq_x25;
     cmd_handlers[0x26] = handle_send_sel_mode_x26;
     cmd_handlers[0x27] = handle_ctl_scp_x27;
+    cmd_handlers[C_1KO_VENDOR] = handle_1ko_vendor_x7e;
     // cmd_handlers[0x27] = scope_streamer_handle_27;
+}
+
+// ============================================================================
+// 0x7E — 1KO125 vendor commands
+//
+// 7E 01: RX filter edges, low and high in Hz, 4 BCD digits each, big-endian
+// (as the radio's filter panel shows them):
+//   read   FE FE A4 E0 7E 01 FD            -> FE FE E0 A4 7E 01 LL LL HH HH FD
+//   write  FE FE A4 E0 7E 01 LL LL HH HH FD -> FB, or FA (bad BCD, low >= high,
+//          high > 6000)
+// Why a command of our own: 1A 03 works with Icom's coarse bandwidth codes,
+// symmetric around the centre, and existing clients rely on that; changing
+// it would change them.  No client sends 7E, so nothing changes for them.
+// The mode's rules are the computed filter parameters' own: AM/FM keep low
+// at 0 (only high is set), CW stays centred on the key tone (the width is
+// set), out-of-range values are clipped; the client reads the result back.
+// ============================================================================
+
+static bool bcd_valid(std::string_view d) {
+    for (unsigned char c : d) {
+        if ((c >> 4) > 9 || (c & 0x0F) > 9) return false;
+    }
+    return true;
+}
+
+/* 2 bytes, 4 digits, big-endian (from_bcd_be() reads one byte more with an
+ * even number of digits) */
+static int32_t bcd4_be(std::string_view d) {
+    int32_t v = 0;
+    for (size_t i = 0; i < 2; i++) {
+        unsigned char c = (unsigned char)d[i];
+        v = v * 100 + (c >> 4) * 10 + (c & 0x0F);
+    }
+    return v;
+}
+
+std::string_view handle_1ko_vendor_x7e(const CivPacketView &request, CivTxPacker &resp) {
+    std::string_view data = request.get_command_data();
+    if (data.size() < 1 || request.get_subcommand() != S_1KO_FILTER) {
+        return civ::detail::set_unsupported(request, resp);
+    }
+    std::string_view edges = request.get_subcommand_data();
+    if (edges.size() == 0) {
+        uint8_t bcd[4];
+        to_bcd_be(bcd, (uint64_t)std::max<int32_t>(0, cfg.filter.low()->get()), 4);
+        to_bcd_be(bcd + 2, (uint64_t)std::max<int32_t>(0, cfg.filter.high()->get()), 4);
+        return resp.set_command(C_1KO_VENDOR).set_subcommand(S_1KO_FILTER).append_data(bcd, 4).get_packet();
+    }
+    if (edges.size() != 4 || !bcd_valid(edges)) {
+        return resp.set_ng().get_packet();
+    }
+    int32_t low  = bcd4_be(edges.substr(0, 2));
+    int32_t high = bcd4_be(edges.substr(2, 2));
+    if (low >= high || high > 6000) {
+        return resp.set_ng().get_packet();
+    }
+    /* in the order that never puts low above high on the way (as FT8 does),
+     * or the validation would clip the first edge to the old other one */
+    if (low < cfg.filter.high()->get()) {
+        cfg.filter.low()->set(low);
+        cfg.filter.high()->set(high);
+    } else {
+        cfg.filter.high()->set(high);
+        cfg.filter.low()->set(low);
+    }
+    return resp.set_ok().get_packet();
 }
 
 // ============================================================================

@@ -721,7 +721,11 @@ static void process_civ_packet(const uint8_t *buf, size_t len, const sockaddr_in
             if (in->type != 0x01 && in->reply == (uint8_t)0xC1) {
                 uint16_t civ_dlen = in->datalen;
                 size_t payload_offset = PING_SIZE;
-                if (payload_offset + civ_dlen <= len && civ_dlen >= FRAME_ADD_LEN + 2) {
+                /* 1KO125: 6 bytes are a whole CI-V frame (FE FE to fm cmd FD):
+                 * the reads 03, 04, 07, 0F, 10, 11 were dropped here while the
+                 * serial port (cat.cpp) answers them.  No 6-byte command
+                 * changes the radio's state. */
+                if (payload_offset + civ_dlen <= len && civ_dlen >= FRAME_ADD_LEN + 1) {
                     const uint8_t *civ_payload = buf + payload_offset;
                     CivPacketView req(civ_payload, civ_dlen);
                     auto resp = process_civ_message(req, resp_packer);
