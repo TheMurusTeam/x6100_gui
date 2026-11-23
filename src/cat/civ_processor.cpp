@@ -70,6 +70,7 @@ constexpr uint8_t C_CTL_MTEXT = 0x70; /* Microtelecom Extension */
 constexpr uint8_t C_CTL_MISC = 0x7f;  /* Miscellaneous control, Sc */
 constexpr uint8_t C_1KO_VENDOR = 0x7e; /* 1KO125 vendor commands (not Icom) */
 constexpr uint8_t S_1KO_FILTER = 0x01; /* RX filter edges in Hz */
+constexpr uint8_t S_1KO_DNF    = 0x02; /* notch: on, auto, centre, width */
 
 constexpr uint8_t CODE_OK = 0xFB;
 constexpr uint8_t CODE_NG = 0xFA;
@@ -512,8 +513,51 @@ static int32_t bcd4_be(std::string_view d) {
     return v;
 }
 
+// 7E 02: notch (DNF), the parameters set on the radio, the same values:
+//   read   FE FE A4 E0 7E 02 FD -> FE FE E0 A4 7E 02 ON AU CC CC WW WW FD
+//   write  FE FE A4 E0 7E 02 ON AU CC CC WW WW FD -> FB, or FA
+// ON, AU: DNF on and AUTO, 00/01; CC CC: centre in Hz (100-3000), WW WW:
+// width in Hz (10-100), 4 BCD digits each, big-endian.  Why: no CI-V
+// command reached the notch (16 41 / 16 48 answer NG), so a client could
+// not even turn it on.  All four are always written: centre and width
+// first, then AUTO, then ON, so the notch comes on where it belongs.  The
+// radio's own observers pass them to the base and redraw the notch; with
+// SSTV (or another decoder app) open they are kept off like a change from
+// the front panel, and back when it closes.
+static std::string_view handle_1ko_dnf(const CivPacketView &request, CivTxPacker &resp) {
+    std::string_view d = request.get_subcommand_data();
+    if (d.size() == 0) {
+        uint8_t out[6];
+        out[0] = cfg.dsp.dnf()->get() ? 1 : 0;
+        out[1] = cfg.dsp.dnf_auto()->get() ? 1 : 0;
+        to_bcd_be(out + 2, (uint64_t)std::max<int32_t>(0, cfg.dsp.dnf_center()->get()), 4);
+        to_bcd_be(out + 4, (uint64_t)std::max<int32_t>(0, cfg.dsp.dnf_width()->get()), 4);
+        return resp.set_command(C_1KO_VENDOR).set_subcommand(S_1KO_DNF).append_data(out, 6).get_packet();
+    }
+    if (d.size() != 6) {
+        return resp.set_ng().get_packet();
+    }
+    uint8_t on = (uint8_t)d[0], au = (uint8_t)d[1];
+    if (on > 1 || au > 1 || !bcd_valid(d.substr(2, 4))) {
+        return resp.set_ng().get_packet();
+    }
+    int32_t center = bcd4_be(d.substr(2, 2));
+    int32_t width  = bcd4_be(d.substr(4, 2));
+    if (center < 100 || center > 3000 || width < 10 || width > 100) {
+        return resp.set_ng().get_packet();
+    }
+    cfg.dsp.dnf_center()->set(center);
+    cfg.dsp.dnf_width()->set(width);
+    cfg.dsp.dnf_auto()->set(au);
+    cfg.dsp.dnf()->set(on);
+    return resp.set_ok().get_packet();
+}
+
 std::string_view handle_1ko_vendor_x7e(const CivPacketView &request, CivTxPacker &resp) {
     std::string_view data = request.get_command_data();
+    if (data.size() >= 1 && request.get_subcommand() == S_1KO_DNF) {
+        return handle_1ko_dnf(request, resp);
+    }
     if (data.size() < 1 || request.get_subcommand() != S_1KO_FILTER) {
         return civ::detail::set_unsupported(request, resp);
     }
@@ -727,6 +771,7 @@ std::string_view handle_ctl_lvl_x14(const CivPacketView &request, CivTxPacker &r
                 return after_cmd.append_byte(0x01).append_byte(0x28).get_packet();
             case 0x09: // cw keytone
                 to_bcd_be(bcd, x_cw_pitch_2_ci(cfg.cw.key_tone()->get()), 3);
+                break;      /* 1KO125: it fell into 0x0a and answered the TX power */
             case 0x0a: // Get Tx power
                 to_bcd_be(bcd, std::round(cfg.pwr()->get() * 255 / 10), 3);
                 break;
@@ -751,6 +796,7 @@ std::string_view handle_ctl_lvl_x14(const CivPacketView &request, CivTxPacker &r
                 break;
             case 0x09: // cw keytone
                 cfg.cw.key_tone()->set(ci_cw_pitch_2_x(bcd_val));
+                break;      /* 1KO125: it fell into 0x0a and set the TX power too */
             case 0x0a: // Set Tx power
                 {
                     float pwr = static_cast<float>(bcd_val) * 10.0f / 255.0f;
