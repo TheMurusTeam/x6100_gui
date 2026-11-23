@@ -101,10 +101,72 @@ static int                audio_rx_rate       = 16000;
 
 static audio_port_player_t *wfview_player       = nullptr;
 
+
 static uint32_t          dsp_audio_sub_id     = DSP_AUDIO_SUB_INVALID;
 
 // Application ports injected by cat_lan_init().
 static const app_ports_t *g_ports = nullptr;
+
+/* 1KO125: PTT keyed by the network client (1C 00 01 on the CI-V port).
+ * Why: when the client vanished during TX (Mac asleep, app hung or closed
+ * badly, Wi-Fi gone) the radio stayed in TX for good: the session was
+ * closed on ping timeout or CLOSE but the PTT was never released, so SSB
+ * went on transmitting nothing and AM/FM their carrier.  Now a PTT keyed
+ * from the network is released when the session ends, and when no TX
+ * audio packet has come from the client for LAN_TX_AUDIO_TIMEOUT (the
+ * packets count, not silence: a client keeps sending them through the
+ * pauses of speech).  A PTT from the microphone, the radio's keys, its own
+ * apps (FT8, voice messages...) or the serial/USB CAT is never touched.
+ * Everything here runs in the LAN thread (cat_lan_shutdown(): after it). */
+#define LAN_TX_AUDIO_TIMEOUT std::chrono::seconds(3)
+#define LAN_PTT_TX_WAIT      std::chrono::seconds(2)    /* keyed, TX not seen yet */
+static bool lan_ptt_active  = false;
+static bool lan_ptt_seen_tx = false;
+static std::chrono::steady_clock::time_point lan_ptt_on_time;
+static std::chrono::steady_clock::time_point lan_last_tx_audio;
+
+static void lan_ptt_release(const char *why) {
+    if (!lan_ptt_active) return;
+    lan_ptt_active  = false;
+    lan_ptt_seen_tx = false;
+    if (g_ports && !g_ports->radio->is_rx()) {
+        g_ports->radio->set_ptt(false);
+        LV_LOG_WARN("LAN: %s, PTT released", why);
+    }
+}
+
+/* a CI-V frame from the network client: is it 1C 00 00/01 (set PTT)? */
+static void lan_ptt_note(const uint8_t *civ, size_t len) {
+    if (len != 8 || civ[4] != 0x1C || civ[5] != 0x00 || civ[7] != 0xFD) return;
+    if (civ[6] == 0x01) {
+        if (lan_ptt_active) return;     /* repeated: the audio clock goes on */
+        lan_ptt_active    = true;
+        lan_ptt_seen_tx   = false;
+        lan_ptt_on_time   = std::chrono::steady_clock::now();
+        lan_last_tx_audio = lan_ptt_on_time;
+    } else if (civ[6] == 0x00) {
+        lan_ptt_active  = false;
+        lan_ptt_seen_tx = false;
+    }
+}
+
+/* poll loop, every <= POLL_TIMEOUT_MS */
+static void lan_ptt_watchdog(void) {
+    if (!lan_ptt_active || !g_ports) return;
+    auto now = std::chrono::steady_clock::now();
+    bool rx = g_ports->radio->is_rx();
+    if (!rx) {
+        lan_ptt_seen_tx = true;
+    } else if (lan_ptt_seen_tx || now - lan_ptt_on_time >= LAN_PTT_TX_WAIT) {
+        /* back to RX some other way (or TX refused): not ours to watch any
+         * more, or a later microphone PTT would be released */
+        lan_ptt_active  = false;
+        lan_ptt_seen_tx = false;
+        return;
+    }
+    if (now - lan_last_tx_audio >= LAN_TX_AUDIO_TIMEOUT)
+        lan_ptt_release("TX audio stopped for 3 s");
+}
 
 // DSP PSD subscription backing the CI-V scope streamer.
 static uint32_t scope_psd_sub_id = PSD_SUB_INVALID;
@@ -269,6 +331,7 @@ static void process_control_packet(const uint8_t *buf, size_t len, const sockadd
     // Close on control port
     if (in->type == CTL_TYPE_CLOSE) {
         LV_LOG_INFO("LAN: close received on control port");
+        lan_ptt_release("client closed the session");
         cleanup_audio();
         client_ctrl_valid = false;
         client_civ_valid  = false;
@@ -595,6 +658,7 @@ static void process_audio_packet(const uint8_t *buf, size_t len, const sockaddr_
             LV_LOG_INFO("LAN/AUDIO: ready");
         } else if (hdr->type == CTL_TYPE_CLOSE) {
             LV_LOG_INFO("LAN/AUDIO: close received");
+            lan_ptt_release("client closed the audio stream");
             cleanup_audio();
         }
         return;
@@ -611,6 +675,7 @@ static void process_audio_packet(const uint8_t *buf, size_t len, const sockaddr_
         size_t payload_offset = AUDIO_SIZE;
         if (payload_offset + datalen > len) return;
 
+        lan_last_tx_audio = std::chrono::steady_clock::now();   /* 1KO125: PTT watchdog */
         if (wfview_player) {
             const int16_t *pcm = (const int16_t *)(buf + payload_offset);
             size_t nsamples = datalen / 2;
@@ -728,6 +793,7 @@ static void process_civ_packet(const uint8_t *buf, size_t len, const sockaddr_in
                 if (payload_offset + civ_dlen <= len && civ_dlen >= FRAME_ADD_LEN + 1) {
                     const uint8_t *civ_payload = buf + payload_offset;
                     CivPacketView req(civ_payload, civ_dlen);
+                    lan_ptt_note(civ_payload, civ_dlen);    /* 1KO125 */
                     auto resp = process_civ_message(req, resp_packer);
                     if (!resp.empty()) {
                         civ_data_send(reinterpret_cast<const uint8_t *>(resp.data()), resp.size());
@@ -933,6 +999,7 @@ static void cat_lan_thread() {
                 now - last_ping_time).count();
             if (elapsed >= PING_TIMEOUT_SEC) {
                 LV_LOG_WARN("LAN: ping timeout (%llds), disconnecting", (long long)elapsed);
+                lan_ptt_release("client gone (ping timeout)");
                 cleanup_audio();
                 client_ctrl_valid = false;
                 client_civ_valid  = false;
@@ -949,6 +1016,7 @@ static void cat_lan_thread() {
                 send_queue.clear();
             }
         }
+        lan_ptt_watchdog();                         /* 1KO125 */
         check_retransmit();
         purge_buffer();
     }
@@ -1083,6 +1151,7 @@ void cat_lan_destruct(void) {
         delete thread;
         thread = nullptr;
     }
+    lan_ptt_release("LAN server stopped");     /* 1KO125 */
     if (fd_audio >= 0)         { close(fd_audio);         fd_audio         = -1; }
     if (fd_control >= 0)       { close(fd_control);       fd_control       = -1; }
     if (fd_civ >= 0)           { close(fd_civ);           fd_civ           = -1; }
