@@ -17,9 +17,10 @@ noted.
 | 3 | `14 09` (CW pitch) no longer reads/writes the TX power | `599bbc3` | `src/cat/civ_processor.cpp` |
 | 4 | New vendor command `7E 02`: notch (DNF) | `599bbc3` | `src/cat/civ_processor.cpp` |
 | 5 | Network PTT released when the client stops sending audio or goes away | `64ce8be` | `src/cat/lan/cat_lan.cpp` |
+| 6 | New vendor command `7E 03`: station identity (read only) | `b00212d` | `src/cat/civ_processor.cpp` |
 
-All five are on the `1ko125` branch of TheMurusTeam/x6100_gui and have been
-tested on the radio. None of them changes how an existing command behaves
+All six are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
+have been tested on the radio; change 6 is waiting for its test. None of them changes how an existing command behaves
 for existing clients, except the two bug fixes (1 and 3), which make the
 radio answer as the serial CAT and the CI-V reference already said it
 should.
@@ -447,6 +448,94 @@ transmitted the carrier.
 
 ---
 
+## 6. New command `7E 03`: station identity (read only)
+
+**Commit:** `b00212d` · **File:** `src/cat/civ_processor.cpp`,
+`handle_1ko_station()`, called by `handle_1ko_vendor_x7e()` for subcommand
+`S_1KO_STATION = 0x03`
+
+### Why
+
+A client's macros (`<MYCALL>`, `<MYLOC>`, `<MYQTH>`, `<MYNAME>` in
+x6100-mac, for RTTY now and FT8 and SSTV later) need the station's
+identity. It is already set on the radio, for its keyboard modes and JS8,
+and no CI-V command could read it. With `7E 03` there is one source: the
+user sets it on the radio and the client reads it.
+
+### Fields
+
+The existing global settings (`src/cfg/settings_manager.h`):
+
+| NN | Parameter | Contents |
+|---|---|---|
+| `00` | `p_callsign` | callsign |
+| `01` | `p_qth` | locator (e.g. JN45) |
+| `02` | `p_op_qth` | operator's town |
+| `03` | `p_op_name` | operator's name |
+
+### Protocol: one field per request
+
+**Read**
+
+```
+TX:  FE FE A4 E0 7E 03 NN FD
+RX:  FE FE E0 A4 7E 03 NN <text> FD
+```
+
+- `<text>` is the stored string as UTF-8 bytes, with no terminator and no
+  padding; its length is implied by the `FD`.
+- An empty field is answered `FE FE E0 A4 7E 03 NN FD` (no text bytes): it
+  is not an error.
+- **At most 32 bytes.** A longer string is cut at 32 bytes without
+  splitting a UTF-8 character (31 bytes if a 2-byte character would cross
+  the limit). The longest answer is 8 + 32 = 40 bytes.
+- `FD`, `FE`, `FF` and control bytes (`< 0x20`, `0x7F`) are replaced by
+  `?`. Valid UTF-8 never contains `FD`–`FF`, but a stray byte in the
+  setting must never end or break the frame.
+
+Example, callsign `IK1ABC`: `FE FE A4 E0 7E 03 00 FD` →
+`FE FE E0 A4 7E 03 00 49 4B 31 41 42 43 FD`.
+
+**NG (`FA`)** when there is no `NN`, `NN` is above `03`, or any byte
+follows `NN`: that would be a write, and the command is read only. The
+identity is changed on the radio only.
+
+### Why one field per request
+
+The CI-V answer buffer is 64 bytes, both on the serial port (`cat.cpp`) and
+on the LAN (`cat_lan.cpp`), and `CivTxPacker::append_data_imp()` copies
+without checking the length. Four strings in one frame could overflow it;
+one field of at most 32 bytes cannot.
+
+### Implementation notes
+
+- The strings are read with `Parameter<std::string>::get()`, which copies
+  the value under the parameter's own mutex, so reading from the CAT thread
+  is safe.
+- No transceive notification: x6100-mac reads the four fields when it
+  connects and when it opens a digital mode.
+
+### Compatibility
+
+Firmware without this command answers NG (`FA`); a client then uses its own
+settings (x6100-mac does).
+
+### Tests
+
+1. Callsign `IK1ABC` on the radio: `7E 03 00` → `7E 03 00 49 4B 31 41 42 43`.
+2. Locator `JN45`: `7E 03 01` → `7E 03 01 4A 4E 34 35`.
+3. Empty town: `7E 03 02` → `7E 03 02` with no text.
+4. A name with an accent (`Niccolò`) → correct UTF-8 bytes (`C3 B2` for `ò`).
+5. A 40-character string → 32 bytes; with a 2-byte character across the
+   32nd byte → 31 bytes.
+6. `7E 03 04` → NG; `7E 03` with no field → NG; `7E 03 00 41` → NG and
+   **no** change on the radio.
+7. Change the callsign on the radio → the next read shows it.
+8. Same answers over the LAN and the serial/USB port.
+9. `7E 01`, `7E 02` and the Icom commands: unchanged.
+
+---
+
 ## Notes for client developers: commands used as they are
 
 Not changed by 1KO125, listed because x6100-mac relies on them and their
@@ -467,12 +556,14 @@ behaviour is easy to get wrong.
 
 ## Status and upstream
 
-- On `1ko125`: all five changes, tested on the radio.
-- Pull request to OpenX6100: **not opened yet**. It will contain all five
+- On `1ko125`: all six changes; 1–5 tested on the radio, 6 waiting for its
+  test.
+- Pull request to OpenX6100: **not opened yet**. It will contain all six
   changes; its description should give the reasons above: LAN/serial parity
   (only read commands unblocked), vendor commands so that no existing Icom
   command changes behaviour, the `14 09` bug that read and wrote the TX
-  power, and the radio staying in TX when a network client disappears.
+  power, the radio staying in TX when a network client disappears, and the
+  station identity read from the radio by the clients' macros.
 - Open items: width of the notch (full or half, change 4); `from_bcd_be()`
   with an even number of digits in `scope_streamer.cpp` (change 2).
 
