@@ -72,6 +72,7 @@ constexpr uint8_t C_1KO_VENDOR = 0x7e; /* 1KO125 vendor commands (not Icom) */
 constexpr uint8_t S_1KO_FILTER = 0x01; /* RX filter edges in Hz */
 constexpr uint8_t S_1KO_DNF    = 0x02; /* notch: on, auto, centre, width */
 constexpr uint8_t S_1KO_STATION = 0x03; /* station identity, read only */
+constexpr uint8_t S_1KO_TXMETER = 0x04; /* TX power, SWR, ALC, read only */
 
 constexpr uint8_t CODE_OK = 0xFB;
 constexpr uint8_t CODE_NG = 0xFA;
@@ -594,8 +595,42 @@ static std::string_view handle_1ko_station(const CivPacketView &request, CivTxPa
     return resp.set_command(C_1KO_VENDOR).set_subcommand(S_1KO_STATION).append_data(out, 1 + n).get_packet();
 }
 
+// 7E 04: TX meter, read only:
+//   FE FE A4 E0 7E 04 FD -> FE FE E0 A4 7E 04 TX PP PP SS SS AA AA FD
+// TX: 01 in TX, 00 in RX; PP PP power in tenths of a watt, SS SS SWR in
+// hundredths, AA AA ALC in tenths as the radio shows it (10 - BASE value),
+// 4 BCD digits each, big-endian.  The last values from the BASE, not
+// low-passed and the SWR not cut at 5; kept after TX, zero before any.
+// NG with any byte after 04.  Why: 15 11 answers no data (append_data is
+// missing, and its uint8_t overflows above ~8 W), 15 12 is negative, so
+// very high, at SWR 1.0; the user chose not to change them for the other
+// programs and to add this instead.
+static uint16_t meter_bcd_val(float v, float scale, int max) {
+    long n = lroundf(v * scale);
+    if (n < 0) n = 0;
+    if (n > max) n = max;
+    return (uint16_t)n;
+}
+
+static std::string_view handle_1ko_txmeter(const CivPacketView &request, CivTxPacker &resp) {
+    if (request.get_subcommand_data().size() != 0) {
+        return resp.set_ng().get_packet();
+    }
+    float pwr = 0.0f, swr = 0.0f, alc = 0.0f;
+    g_ports->telemetry->tx_info_raw(&pwr, &swr, &alc);
+    uint8_t out[7];
+    out[0] = g_ports->radio->is_rx() ? 0 : 1;
+    to_bcd_be(out + 1, meter_bcd_val(pwr, 10.0f, 9999), 4);
+    to_bcd_be(out + 3, meter_bcd_val(swr, 100.0f, 9999), 4);
+    to_bcd_be(out + 5, meter_bcd_val(alc, 10.0f, 100), 4);
+    return resp.set_command(C_1KO_VENDOR).set_subcommand(S_1KO_TXMETER).append_data(out, 7).get_packet();
+}
+
 std::string_view handle_1ko_vendor_x7e(const CivPacketView &request, CivTxPacker &resp) {
     std::string_view data = request.get_command_data();
+    if (data.size() >= 1 && request.get_subcommand() == S_1KO_TXMETER) {
+        return handle_1ko_txmeter(request, resp);
+    }
     if (data.size() >= 1 && request.get_subcommand() == S_1KO_DNF) {
         return handle_1ko_dnf(request, resp);
     }

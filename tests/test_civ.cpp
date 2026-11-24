@@ -27,6 +27,11 @@ bool fake_tx_info_refresh(uint8_t *, float *alc, float *pwr, float *vswr) {
 }
 
 float fake_s_meter_get_raw_db() { return -73.0f; }
+void fake_tx_info_raw(float *pwr, float *swr, float *alc) {
+    *pwr = 5.0f;
+    *swr = 1.35f;
+    *alc = 2.5f;
+}
 bool    fake_is_rx() { return true; }
 void    fake_set_ptt(bool) {}
 
@@ -40,6 +45,7 @@ const radio_port_t test_radio_port = {
 
 const telemetry_port_t test_telemetry_port = {
     .tx_info_refresh = &fake_tx_info_refresh,
+    .tx_info_raw = &fake_tx_info_raw,
     .s_meter_get_raw_db = &fake_s_meter_get_raw_db,
 };
 
@@ -645,6 +651,44 @@ TEST_CASE("C_CTL_PTT read returns RX state from stub", "[cat]") {
 
     REQUIRE(to_bytes(sv) == std::vector<uint8_t>({
         0xFE, 0xFE, 0xE0, LOCAL_ADDRESS, C_CTL_PTT, 0x00, 0x00, 0xFD
+    }));
+}
+
+// ---- 1KO125: 7E 04, TX meter -----------------------------------------------
+
+TEST_CASE("7E 04 reads TX state, power, SWR and ALC as BCD", "[cat]") {
+    TestDbGuard db;
+    SettingsManager mgr;
+    init_band_5(db, mgr);
+    cfg_set_instance(&mgr);
+
+    auto raw = ci_v_frame(0x7E, {0x04});
+    CivPacketView req(raw.data(), raw.size());
+    uint8_t txBuf[256];
+    CivTxPacker packer(txBuf, 0xE0, LOCAL_ADDRESS);
+    auto sv = process_civ_message(req, packer);
+
+    /* stub: RX, 5.0 W, SWR 1.35, ALC 2.5 */
+    REQUIRE(to_bytes(sv) == std::vector<uint8_t>({
+        0xFE, 0xFE, 0xE0, LOCAL_ADDRESS, 0x7E, 0x04,
+        0x00, 0x00, 0x50, 0x01, 0x35, 0x00, 0x25, 0xFD
+    }));
+}
+
+TEST_CASE("7E 04 with data is NG (read only)", "[cat]") {
+    TestDbGuard db;
+    SettingsManager mgr;
+    init_band_5(db, mgr);
+    cfg_set_instance(&mgr);
+
+    auto raw = ci_v_frame(0x7E, {0x04, 0x00});
+    CivPacketView req(raw.data(), raw.size());
+    uint8_t txBuf[256];
+    CivTxPacker packer(txBuf, 0xE0, LOCAL_ADDRESS);
+    auto sv = process_civ_message(req, packer);
+
+    REQUIRE(to_bytes(sv) == std::vector<uint8_t>({
+        0xFE, 0xFE, 0xE0, LOCAL_ADDRESS, CODE_NG, 0xFD
     }));
 }
 

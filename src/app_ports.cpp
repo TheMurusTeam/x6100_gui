@@ -33,6 +33,9 @@ static void port_set_pwr(float w) { radio_set_pwr(w); }
 
 /* Telemetry */
 
+static void port_tx_info_raw(float *pwr, float *swr, float *alc) {
+    tx_info_raw(pwr, swr, alc);
+}
 static bool port_tx_info_refresh(uint8_t *prev_msg_id, float *alc, float *pwr, float *vswr) {
     return tx_info_refresh(prev_msg_id, alc, pwr, vswr);
 }
@@ -162,6 +165,7 @@ static const radio_port_t radio_port = {
 
 static const telemetry_port_t telemetry_port = {
     .tx_info_refresh = &port_tx_info_refresh,
+    .tx_info_raw = &port_tx_info_raw,
     .s_meter_get_raw_db = &port_s_meter_get_raw_db,
 };
 

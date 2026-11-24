@@ -8,6 +8,7 @@
 
 #include "tx_info.h"
 
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -283,10 +284,30 @@ lv_obj_t *tx_info_init(lv_obj_t *parent) {
     return obj;
 }
 
+/* 1KO125: the last values from the BASE as they came, for CAT 7E 04:
+ * no low-pass, SWR not cut at max_swr (a cut at 5 would hide an
+ * antenna that is not there).  Written in the radio thread, read in
+ * the CAT/LAN threads: the three together under a mutex. */
+static pthread_mutex_t raw_mutex = PTHREAD_MUTEX_INITIALIZER;
+static float raw_pwr = 0.0f, raw_swr = 0.0f, raw_alc = 0.0f;
+
+void tx_info_raw(float *pwr_p, float *swr_p, float *alc_p) {
+    pthread_mutex_lock(&raw_mutex);
+    if (pwr_p) *pwr_p = raw_pwr;
+    if (swr_p) *swr_p = raw_swr;
+    if (alc_p) *alc_p = raw_alc;
+    pthread_mutex_unlock(&raw_mutex);
+}
+
 void tx_info_update(float p, float s, float a) {
     const float beta = 0.9f;
 
     a = 10.f - a;
+    pthread_mutex_lock(&raw_mutex);         /* 1KO125 */
+    raw_pwr = p;
+    raw_swr = s;
+    raw_alc = a;
+    pthread_mutex_unlock(&raw_mutex);
     s = LV_MIN(max_swr, s);
 
     switch (cur_mode) {
