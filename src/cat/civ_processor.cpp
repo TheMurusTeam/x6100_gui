@@ -71,6 +71,7 @@ constexpr uint8_t C_CTL_MISC = 0x7f;  /* Miscellaneous control, Sc */
 constexpr uint8_t C_1KO_VENDOR = 0x7e; /* 1KO125 vendor commands (not Icom) */
 constexpr uint8_t S_1KO_FILTER = 0x01; /* RX filter edges in Hz */
 constexpr uint8_t S_1KO_DNF    = 0x02; /* notch: on, auto, centre, width */
+constexpr uint8_t S_1KO_STATION = 0x03; /* station identity, read only */
 
 constexpr uint8_t CODE_OK = 0xFB;
 constexpr uint8_t CODE_NG = 0xFA;
@@ -553,10 +554,53 @@ static std::string_view handle_1ko_dnf(const CivPacketView &request, CivTxPacker
     return resp.set_ok().get_packet();
 }
 
+// 7E 03 NN: station identity, read only, one field per request:
+//   FE FE A4 E0 7E 03 NN FD -> FE FE E0 A4 7E 03 NN <text> FD
+// NN: 00 callsign, 01 locator (p_qth), 02 operator's town (p_op_qth),
+// 03 operator's name.  <text>: the stored string, UTF-8, no terminator, at
+// most 32 bytes (cut without splitting a character), empty if not set;
+// FD/FE/FF and control bytes become '?'.  NG with no NN, NN > 03 or any
+// byte after NN (a write).  Why: a client's macros (<MYCALL>, <MYLOC>,
+// <MYQTH>, <MYNAME>) take them from the radio, one source the user sets on
+// the radio.  One field per request because the CI-V answer buffer is 64
+// bytes on both ports and CivTxPacker does not check the length.
+#define STATION_TEXT_MAX 32
+static std::string_view handle_1ko_station(const CivPacketView &request, CivTxPacker &resp) {
+    std::string_view d = request.get_subcommand_data();
+    if (d.size() != 1) {
+        return resp.set_ng().get_packet();
+    }
+    uint8_t field = (uint8_t)d[0];
+    std::string text;
+    switch (field) {
+        case 0x00: text = cfg.callsign()->get(); break;
+        case 0x01: text = cfg.qth()->get(); break;
+        case 0x02: text = cfg.op_qth()->get(); break;
+        case 0x03: text = cfg.op_name()->get(); break;
+        default:   return resp.set_ng().get_packet();
+    }
+    size_t n = std::min(text.size(), (size_t)STATION_TEXT_MAX);
+    if (n < text.size()) {
+        /* do not split a UTF-8 character: back while the next byte
+         * would be a continuation byte (10xxxxxx) */
+        while (n > 0 && ((uint8_t)text[n] & 0xC0) == 0x80) n--;
+    }
+    uint8_t out[1 + STATION_TEXT_MAX];
+    out[0] = field;
+    for (size_t i = 0; i < n; i++) {
+        uint8_t c = (uint8_t)text[i];
+        out[1 + i] = (c >= 0xFD || c < 0x20 || c == 0x7F) ? '?' : c;
+    }
+    return resp.set_command(C_1KO_VENDOR).set_subcommand(S_1KO_STATION).append_data(out, 1 + n).get_packet();
+}
+
 std::string_view handle_1ko_vendor_x7e(const CivPacketView &request, CivTxPacker &resp) {
     std::string_view data = request.get_command_data();
     if (data.size() >= 1 && request.get_subcommand() == S_1KO_DNF) {
         return handle_1ko_dnf(request, resp);
+    }
+    if (data.size() >= 1 && request.get_subcommand() == S_1KO_STATION) {
+        return handle_1ko_station(request, resp);
     }
     if (data.size() < 1 || request.get_subcommand() != S_1KO_FILTER) {
         return civ::detail::set_unsupported(request, resp);
