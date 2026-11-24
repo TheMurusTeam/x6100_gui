@@ -122,17 +122,56 @@ static const app_ports_t *g_ports = nullptr;
 #define LAN_PTT_TX_WAIT      std::chrono::seconds(2)    /* keyed, TX not seen yet */
 static bool lan_ptt_active  = false;
 static bool lan_ptt_seen_tx = false;
+static bool lan_tx_modem    = false;   /* the TX keyed from the network is the modem's */
 static std::chrono::steady_clock::time_point lan_ptt_on_time;
 static std::chrono::steady_clock::time_point lan_last_tx_audio;
+
+/* 1KO125: the network transmits with the modem, from the codec.
+ * Why: 1C 00 01 went to set_ptt(), and x6100_control_ptt_set() keys the
+ * BASE with the radio's own microphone input, while the client's audio
+ * goes to wfview_player, i.e. the codec, which reaches the modulator only
+ * with x6100_control_modem_set() (the voice messages, FT8 and the Bluetooth
+ * headset do the same, see bt_audio.c).  So over the LAN the radio's
+ * microphone went on the air, not the client's audio: about 1.7 W out of
+ * 5 W with the client silent.  Over the network the audio always comes
+ * from the client, so here 1C 00 01 / 1C 00 00 key and unkey the modem.
+ * The serial/USB CAT is unchanged (set_ptt): a program there may want the
+ * radio's microphone.  Record mode (x6100_voice_rec) is not set: with it
+ * TX did not work (bt_audio.c). */
+static void lan_tx_off(void) {
+    if (lan_tx_modem) {
+        lan_tx_modem = false;
+        g_ports->radio->set_modem(false);
+    } else {
+        g_ports->radio->set_ptt(false);
+    }
+}
 
 static void lan_ptt_release(const char *why) {
     if (!lan_ptt_active) return;
     lan_ptt_active  = false;
     lan_ptt_seen_tx = false;
-    if (g_ports && !g_ports->radio->is_rx()) {
-        g_ports->radio->set_ptt(false);
-        LV_LOG_WARN("LAN: %s, PTT released", why);
+    if (!g_ports) return;
+    bool tx = !g_ports->radio->is_rx();
+    if (tx || lan_tx_modem) lan_tx_off();   /* the modem request goes even if already in RX */
+    if (tx) LV_LOG_WARN("LAN: %s, PTT released", why);
+}
+
+/* 1C 00 01 / 1C 00 00 from the network client: answered here, as the CI-V
+ * processor would (1C 00 FB), keying the modem.  False: not such a frame. */
+static bool lan_ptt_write(const uint8_t *civ, size_t len, CivTxPacker &resp, std::string_view *out) {
+    if (len != 8 || civ[4] != 0x1C || civ[5] != 0x00 || civ[7] != 0xFD) return false;
+    if (civ[6] == 0x01) {
+        lan_tx_modem = true;
+        g_ports->radio->set_modem(true);
+    } else if (civ[6] == 0x00) {
+        lan_tx_off();
+    } else {
+        return false;               /* not 00/01: the processor answers it */
     }
+    resp.set_dst_addr(civ[3]);
+    *out = resp.set_command(0x1C).set_subcommand(0x00).append_byte(0xFB).get_packet();
+    return true;
 }
 
 /* a CI-V frame from the network client: is it 1C 00 00/01 (set PTT)? */
@@ -159,9 +198,14 @@ static void lan_ptt_watchdog(void) {
         lan_ptt_seen_tx = true;
     } else if (lan_ptt_seen_tx || now - lan_ptt_on_time >= LAN_PTT_TX_WAIT) {
         /* back to RX some other way (or TX refused): not ours to watch any
-         * more, or a later microphone PTT would be released */
+         * more, or a later microphone PTT would be released.  The modem
+         * request is withdrawn too, so it cannot key the radio again. */
         lan_ptt_active  = false;
         lan_ptt_seen_tx = false;
+        if (lan_tx_modem) {
+            lan_tx_modem = false;
+            g_ports->radio->set_modem(false);
+        }
         return;
     }
     if (now - lan_last_tx_audio >= LAN_TX_AUDIO_TIMEOUT)
@@ -794,7 +838,9 @@ static void process_civ_packet(const uint8_t *buf, size_t len, const sockaddr_in
                     const uint8_t *civ_payload = buf + payload_offset;
                     CivPacketView req(civ_payload, civ_dlen);
                     lan_ptt_note(civ_payload, civ_dlen);    /* 1KO125 */
-                    auto resp = process_civ_message(req, resp_packer);
+                    std::string_view resp;
+                    if (!lan_ptt_write(civ_payload, civ_dlen, resp_packer, &resp))   /* 1KO125: modem */
+                        resp = process_civ_message(req, resp_packer);
                     if (!resp.empty()) {
                         civ_data_send(reinterpret_cast<const uint8_t *>(resp.data()), resp.size());
                     }
