@@ -18,9 +18,10 @@ noted.
 | 4 | New vendor command `7E 02`: notch (DNF) | `599bbc3` | `src/cat/civ_processor.cpp` |
 | 5 | Network PTT released when the client stops sending audio or goes away | `64ce8be` | `src/cat/lan/cat_lan.cpp` |
 | 6 | New vendor command `7E 03`: station identity (read only) | `b00212d` | `src/cat/civ_processor.cpp` |
+| 7 | Network PTT keys the modem: the client's audio goes on the air | `b3a115f` | `src/cat/lan/cat_lan.cpp` |
 
-All six are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
-have been tested on the radio; change 6 is waiting for its test. None of them changes how an existing command behaves
+All seven are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
+have been tested on the radio; changes 6 and 7 are waiting for their test. None of them changes how an existing command behaves
 for existing clients, except the two bug fixes (1 and 3), which make the
 radio answer as the serial CAT and the CI-V reference already said it
 should.
@@ -536,6 +537,80 @@ settings (x6100-mac does).
 
 ---
 
+## 7. Network PTT keys the modem: the client's audio goes on the air
+
+**Commit:** `b3a115f` · **File:** `src/cat/lan/cat_lan.cpp`
+(`lan_ptt_write()`, `lan_tx_off()`, with the change 5 functions)
+
+### Problem
+
+Found on a dummy load: a network client transmitting in USB with its
+microphone muted still put out about 1.7 W of 5 W, while the radio's own
+PTT in silence put out nothing.
+
+`1C 00 01` from the LAN went to `handle_ctl_ptt_x1c()` → `set_ptt(true)` →
+`x6100_control_ptt_set()`, which keys the BASE with **the radio's own
+microphone input** (built-in or handset, with their gains). The client's
+audio goes to `wfview_player`, i.e. the codec, and the codec reaches the
+modulator only with `x6100_control_modem_set()`, as for the radio's voice
+messages, its FT8 transmitter and the Bluetooth headset (see the comment at
+the top of `src/bt_audio.c`).
+
+So over the network the radio's microphone went on the air, never the
+client's audio. Voice from the client could not be heard, and RTTY, FT8 or
+SSTV from a network client could not work. wfview over the LAN has the same
+problem with OpenX6100.
+
+### Change
+
+Over the network the audio always comes from the client, so the PTT writes
+from the LAN client are handled in `cat_lan.cpp`, before the CI-V
+processor:
+
+| Frame from the LAN client | Before | Now |
+|---|---|---|
+| `1C 00 01` | `set_ptt(true)`: radio microphone | `set_modem(true)`: client audio (codec) |
+| `1C 00 00` | `set_ptt(false)` | `set_modem(false)` if the network keyed the modem, otherwise `set_ptt(false)` as before |
+| `1C 00` (read) | `is_rx()` | unchanged |
+
+The answer to a write is the same as before, `1C 00 FB`.
+
+The releases of change 5 (3-second audio watchdog, `CTL_TYPE_CLOSE` on the
+control and audio ports, ping timeout, `cat_lan_shutdown()`) now withdraw
+the modem request, even when the radio is already back in RX. The watchdog
+does the same when the radio went back to RX some other way or did not go
+into TX within 2 s, so a stale modem request can never key the radio again.
+
+Record mode (`audio_set_play_mode(AUDIO_PLAY_ON)`, the `x6100_voice_rec`
+bit) is **not** set: with it the radio did not go into TX (`bt_audio.c`).
+
+### Unchanged
+
+- The serial/USB CAT: `1C 00 01` still keys with `set_ptt()`, i.e. the
+  radio's microphone; a program there may want it.
+- A PTT from the microphone, the radio's keys or its own apps.
+- Reading `1C 00`.
+
+### Tests (dummy load, power 5 W)
+
+1. Client in USB, voice TX with its microphone muted → about 0 W (no longer
+   1.7 W).
+2. Speaking into the client's microphone → power follows the voice;
+   speaking close to the radio's built-in microphone → nothing goes on the
+   air.
+3. A steady tone from the client → steady power, ALC moving as with the
+   radio's own FT8.
+4. Change 5 still works: Wi-Fi off during TX → RX within 3 s; client closed
+   normally → RX at once.
+5. The radio's microphone PTT with the client connected → the radio's
+   microphone goes on the air, as before.
+6. The radio's FT8, voice messages and RTTY with the client connected →
+   unchanged.
+7. Serial/USB CAT: `1C 00 01` → the radio's microphone, as before.
+8. wfview over the LAN: its TX audio now goes on the air.
+
+---
+
 ## Notes for client developers: commands used as they are
 
 Not changed by 1KO125, listed because x6100-mac relies on them and their
@@ -550,20 +625,22 @@ behaviour is easy to get wrong.
 | `16 02` / `16 22` / `16 40` | Preamp, NB, NR. |
 | `1A 03` | Filter width as an Icom code, read only. SSB/CW: code ≤ 9 → code × 50 + 50 Hz, otherwise code × 100 − 400; AM/FM: code × 200 + 200. |
 | `27 15 00` + 5 BCD (least significant first) | Scope span = half width in Hz; the radio sets zoom = round(50 kHz / span), kept to 1, 2, 4, 8 (per mode). The zoom in use can be read from the scope frames (span = 100 kHz / zoom). |
-| `1C 00` | PTT, see change 5. |
+| `1C 00` | PTT, see changes 5 and 7. Over the LAN it keys the modem (client audio); over the serial/USB port it keys the radio's microphone. |
 
 ---
 
 ## Status and upstream
 
-- On `1ko125`: all six changes; 1–5 tested on the radio, 6 waiting for its
-  test.
-- Pull request to OpenX6100: **not opened yet**. It will contain all six
+- On `1ko125`: all seven changes; 1–5 tested on the radio, 6 and 7 waiting
+  for their test.
+- Pull request to OpenX6100: **not opened yet**. It will contain all seven
   changes; its description should give the reasons above: LAN/serial parity
   (only read commands unblocked), vendor commands so that no existing Icom
   command changes behaviour, the `14 09` bug that read and wrote the TX
-  power, the radio staying in TX when a network client disappears, and the
-  station identity read from the radio by the clients' macros.
+  power, the radio staying in TX when a network client disappears, the
+  station identity read from the radio by the clients' macros, and the
+  network PTT that put the radio's microphone on the air instead of the
+  client's audio (also a bug for wfview with OpenX6100).
 - Open items: width of the notch (full or half, change 4); `from_bcd_be()`
   with an even number of digits in `scope_streamer.cpp` (change 2).
 
