@@ -19,9 +19,10 @@ noted.
 | 5 | Network PTT released when the client stops sending audio or goes away | `64ce8be` | `src/cat/lan/cat_lan.cpp` |
 | 6 | New vendor command `7E 03`: station identity (read only) | `b00212d` | `src/cat/civ_processor.cpp` |
 | 7 | Network PTT keys the modem: the client's audio goes on the air | `b3a115f` | `src/cat/lan/cat_lan.cpp` |
+| 8 | New vendor command `7E 04`: TX meter (read only) | `48ae540` | `src/cat/civ_processor.cpp`, `src/tx_info.c` |
 
-All seven are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
-have been tested on the radio; changes 6 and 7 are waiting for their test. None of them changes how an existing command behaves
+All eight are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
+have been tested on the radio; changes 6–8 are waiting for their test. None of them changes how an existing command behaves
 for existing clients, except the two bug fixes (1 and 3), which make the
 radio answer as the serial CAT and the CI-V reference already said it
 should.
@@ -611,6 +612,94 @@ bit) is **not** set: with it the radio did not go into TX (`bt_audio.c`).
 
 ---
 
+## 8. New command `7E 04`: TX meter (read only)
+
+**Commit:** `48ae540` · **Files:** `src/cat/civ_processor.cpp`
+(`handle_1ko_txmeter()`, subcommand `S_1KO_TXMETER = 0x04`),
+`src/tx_info.c` (`tx_info_raw()`), `src/ports/telemetry_port.h`,
+`src/app_ports.cpp`
+
+### Why
+
+A client should show power, SWR and ALC during TX, as the radio's display
+does. The Icom commands exist but cannot be used (`handle_rd_sqsm_x15()`):
+
+- **`15 11` (power):** a value is computed (`-pwr*pwr + 35*pwr`) but the
+  answer carries **no data** (`append_data` is missing); and the value is a
+  `uint8_t`, which overflows above about 8 W.
+- **`15 12` (SWR):** `-21*swr*swr + 134*swr - 122` is −9 at SWR 1.0; stored
+  in a `uint8_t`, a perfect antenna reads as a very high SWR.
+- **`15 13` (ALC):** works (`alc × 12`, 0–120), with Icom's coarse scale.
+
+`15 11` and `15 12` are **not fixed**, by the author's choice: only other
+programs use them, and their behaviour is left as it is. A vendor command,
+next to `7E 01`–`7E 03`, gives exact values instead.
+
+### Protocol
+
+```
+TX:  FE FE A4 E0 7E 04 FD
+RX:  FE FE E0 A4 7E 04 TX PP PP SS SS AA AA FD
+```
+
+| Field | Contents | Format |
+|---|---|---|
+| `TX` | `01` in TX (`!is_rx()`), `00` in RX | byte |
+| `PP PP` | power in **tenths of a watt** (5.0 W → `00 50`) | 4 BCD digits, most significant first, 0000–9999 |
+| `SS SS` | SWR in **hundredths** (1.35 → `01 35`) | 4 BCD digits, 0000–9999 |
+| `AA AA` | ALC in **tenths**, as the radio shows it (2.5 → `00 25`) | 4 BCD digits, 0000–0100 |
+
+Example, in TX at 5.0 W, SWR 1.35, ALC 2.5:
+`FE FE E0 A4 7E 04 01 00 50 01 35 00 25 FD` (14 bytes).
+
+- **Values:** the last ones from the BASE as they came
+  (`radio.c` → `tx_info_update()`): **not** low-passed (the radio's display
+  smooths them in the non-digital modes) and the SWR **not** cut at 5 (the
+  display's limit; a cut would hide a missing antenna). The ALC is the one
+  the display shows, `10 − value from the BASE`. Smoothing and peak hold are
+  the client's job, as for the S-meter.
+- **In RX:** `TX = 00` and the last values of the previous TX, not zeroed,
+  so a client can show the SWR just measured. Before any TX: all zero.
+- **Rounding** to the nearest tenth or hundredth; above the maximum →
+  9999 (0100 for the ALC); negative → 0000.
+
+**NG (`FA`)** when any byte follows `04`: the command is read only.
+
+### Implementation notes
+
+- `tx_info_update()` runs in the radio thread; the CAT and LAN threads read.
+  It now stores the three raw values together under a mutex, and
+  `tx_info_raw()` reads them together under the same mutex, so the three
+  values in an answer always belong to the same packet from the BASE.
+- `tx_info_refresh()` is not used: with a `msg_id` shared between callers
+  it returns nothing when the message has not changed, while `7E 04` must
+  always answer the last values.
+- The radio's display, `15 11`, `15 12` and `15 13` are unchanged.
+
+### Use
+
+x6100-mac reads `7E 04` about 10 times a second during TX only, plus once
+right after going back to RX.
+
+### Compatibility
+
+Firmware without this command answers NG (`FA`); a client then shows no TX
+meter.
+
+### Tests (dummy load, power set to 5 W)
+
+1. In RX before any TX: `7E 04` → `7E 04 00 00 00 00 00 00 00`.
+2. Steady carrier (RTTY) from the client: `TX = 01`, power about `00 50`,
+   SWR as on the radio's display (e.g. `01 10`), ALC equal to the display.
+3. SSB speaking: the power follows the voice (raw values, not smoothed).
+4. Back in RX: `TX = 00` and the last values of the TX.
+5. Antenna disconnected, minimum power, for an instant: SWR **above 5**.
+6. `7E 04 00` → NG, nothing changes.
+7. Same answers over the LAN and the serial/USB port.
+8. `7E 01`–`7E 03`, `15 02` (S-meter) and the radio's TX display unchanged.
+
+---
+
 ## Notes for client developers: commands used as they are
 
 Not changed by 1KO125, listed because x6100-mac relies on them and their
@@ -622,6 +711,7 @@ behaviour is easy to get wrong.
 | `11` | Attenuator: read → `11 00` / `11 20` (`att × 0x20`); write `11 00` off, `11 20` on. The value goes through `cfg.cur.att()->set()`, which keeps it within 0…`x6100_att_on`, so `0x20` switches it on. Over the LAN the read needs change 1. |
 | `14 02` / `14 03` | RF gain, squelch: 0–255 over CI-V; the radio stores `value × 100 / 255` rounded down. |
 | `15 02` | S-meter: `value = dBm × 0.75 + 96`, 3 BCD digits most significant first. |
+| `15 11` / `15 12` | Power and SWR: **broken, not fixed** (no data in the `15 11` answer, `uint8_t` overflow above ~8 W; `15 12` reads very high at SWR 1.0). Use `7E 04` (change 8). |
 | `16 02` / `16 22` / `16 40` | Preamp, NB, NR. |
 | `1A 03` | Filter width as an Icom code, read only. SSB/CW: code ≤ 9 → code × 50 + 50 Hz, otherwise code × 100 − 400; AM/FM: code × 200 + 200. |
 | `27 15 00` + 5 BCD (least significant first) | Scope span = half width in Hz; the radio sets zoom = round(50 kHz / span), kept to 1, 2, 4, 8 (per mode). The zoom in use can be read from the scope frames (span = 100 kHz / zoom). |
@@ -631,16 +721,17 @@ behaviour is easy to get wrong.
 
 ## Status and upstream
 
-- On `1ko125`: all seven changes; 1–5 tested on the radio, 6 and 7 waiting
-  for their test.
-- Pull request to OpenX6100: **not opened yet**. It will contain all seven
+- On `1ko125`: all eight changes; 1–5 tested on the radio, 6–8 waiting for
+  their test.
+- Pull request to OpenX6100: **not opened yet**. It will contain all eight
   changes; its description should give the reasons above: LAN/serial parity
   (only read commands unblocked), vendor commands so that no existing Icom
   command changes behaviour, the `14 09` bug that read and wrote the TX
   power, the radio staying in TX when a network client disappears, the
   station identity read from the radio by the clients' macros, and the
   network PTT that put the radio's microphone on the air instead of the
-  client's audio (also a bug for wfview with OpenX6100).
+  client's audio (also a bug for wfview with OpenX6100), and a TX meter
+  because `15 11` and `15 12` cannot be used (left unfixed by choice).
 - Open items: width of the notch (full or half, change 4); `from_bcd_be()`
   with an even number of digits in `scope_streamer.cpp` (change 2).
 
