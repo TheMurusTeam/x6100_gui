@@ -1,0 +1,479 @@
+# 1KO125 – CAT (CI-V) changes
+
+This document describes every change 1KO125 makes to the CAT interface of
+the x6100_gui firmware (OpenX6100 / R1CBU), the reasons for each one, and
+the exact protocol of the new commands. It is written for CAT client
+developers and for the OpenX6100 maintainers who review these changes.
+
+The changes were made for the native macOS client **x6100-mac**, which talks
+to the radio over the network (the Icom/wfview LAN protocol, UDP ports
+50001–50003), but they apply to every CAT client and every transport where
+noted.
+
+| # | Change | Commit | Files |
+|---|---|---|---|
+| 1 | LAN server accepts 6-byte CI-V frames | `021ffd6` | `src/cat/lan/cat_lan.cpp` |
+| 2 | New vendor command `7E 01`: RX filter edges | `021ffd6` | `src/cat/civ_processor.cpp` |
+| 3 | `14 09` (CW pitch) no longer reads/writes the TX power | `599bbc3` | `src/cat/civ_processor.cpp` |
+| 4 | New vendor command `7E 02`: notch (DNF) | `599bbc3` | `src/cat/civ_processor.cpp` |
+| 5 | Network PTT released when the client stops sending audio or goes away | `64ce8be` | `src/cat/lan/cat_lan.cpp` |
+
+All five are on the `1ko125` branch of TheMurusTeam/x6100_gui and have been
+tested on the radio. None of them changes how an existing command behaves
+for existing clients, except the two bug fixes (1 and 3), which make the
+radio answer as the serial CAT and the CI-V reference already said it
+should.
+
+Conventions used below: the radio presents itself as an IC-705, CI-V
+address `A4`; the controller is `E0`. Frames are written as hex bytes,
+`FE FE` preamble and `FD` end included. `FB` = OK, `FA` = NG.
+
+---
+
+## 1. LAN: 6-byte CI-V frames are no longer dropped
+
+**Commit:** `021ffd6` · **File:** `src/cat/lan/cat_lan.cpp`, CI-V packet
+handling (around line 793)
+
+### Problem
+
+The LAN server only processed CI-V frames of at least 7 bytes:
+
+```cpp
+civ_dlen >= FRAME_ADD_LEN + 2      // FRAME_ADD_LEN = 5  ->  7 bytes minimum
+```
+
+A CI-V frame without data is 6 bytes long (`FE FE A4 E0 cmd FD`). Every such
+command sent over the network was dropped silently, with no answer and no
+NG. The serial/USB CAT (`src/cat/cat.cpp`) accepts any frame longer than 5
+bytes, so the same commands worked over USB and failed over the network.
+
+Commands affected (all of them are **reads**; no 6-byte command changes the
+state of the radio):
+
+| Command | Meaning |
+|---|---|
+| `03` | read frequency |
+| `04` | read mode and filter |
+| `07` | VFO |
+| `0F` | split |
+| `10` | tuning step |
+| `11` | read attenuator |
+
+Clients worked around it with `25 00` / `26 00` for frequency and mode, but
+the attenuator could not be read over the network at all.
+
+### Change
+
+```cpp
+civ_dlen >= FRAME_ADD_LEN + 1      // 6 bytes minimum, as on the serial port
+```
+
+The parsing after this check (`CivPacketView`) is the same the serial port
+already uses for 6-byte frames, so nothing else had to change.
+
+### Compatibility
+
+Clients that never sent 6-byte frames see no difference. Clients that sent
+them now get the answer they get over USB.
+
+### Tests
+
+1. Over the LAN: `FE FE A4 E0 03 FD` → frequency (`FE FE E0 A4 03 …5 BCD… FD`).
+2. `FE FE A4 E0 04 FD` → mode and filter; `FE FE A4 E0 11 FD` → `11 00` or `11 20`.
+3. wfview over the LAN: frequency, mode and scope work as before.
+4. Serial/USB: unchanged (not touched).
+
+---
+
+## 2. New command `7E 01`: RX filter edges in Hz
+
+**Commit:** `021ffd6` · **File:** `src/cat/civ_processor.cpp`,
+`handle_1ko_vendor_x7e()` (command constant `C_1KO_VENDOR = 0x7E`,
+subcommand `S_1KO_FILTER = 0x01`)
+
+### Why a new command
+
+The radio's RX filter is defined by two edges in audio Hz (low and high),
+which is what the filter panel shows. Over CI-V a client could only:
+
+- **read** the width with `1A 03`, as an Icom bandwidth code (50/100/200 Hz
+  steps, symmetric around the centre), from which the edges cannot be told;
+- **not set** it at all: the `1A 03` write is commented out in
+  `civ_processor.cpp` (commit `ed268ae`, Georgy Dyuldin);
+- PBT (`14 07` / `14 08`) always answers a fixed `01 28`.
+
+Re-enabling the `1A 03` write was ruled out: it works with Icom's coarse
+codes and a symmetric passband, and existing clients rely on its current
+behaviour. `0x7E` is not used by Icom for the IC-705 nor by the firmware,
+which answered NG to it; no existing client sends it. A new command adds
+exact control without changing anything for anyone else.
+
+### Protocol
+
+Both edges are **4 BCD digits, most significant first** (2 bytes each),
+range 0000–6000.
+
+**Read**
+
+```
+TX:  FE FE A4 E0 7E 01 FD
+RX:  FE FE E0 A4 7E 01 LL LL HH HH FD
+```
+
+Example, USB with the default filter 50–2950 Hz:
+`FE FE E0 A4 7E 01 00 50 29 50 FD`.
+
+**Write**
+
+```
+TX:  FE FE A4 E0 7E 01 LL LL HH HH FD
+RX:  FE FE E0 A4 FB FD     (accepted)
+     FE FE E0 A4 FA FD     (NG)
+```
+
+Example, 100–2500 Hz: `FE FE A4 E0 7E 01 01 00 25 00 FD`.
+
+NG when: the payload is not exactly 4 bytes, a nibble is not a decimal
+digit, `low >= high`, or `high > 6000`.
+
+### Behaviour per mode
+
+The command writes the same computed parameters the radio's own filter
+panel uses, `cfg.filter.low()` and `cfg.filter.high()`
+(`src/cfg/settings_manager.cpp`: `cur_filter_*_compute()`,
+`cur_filter_*_reverse()`, `filter_low_validate`, `filter_high_validate`).
+So the mode's rules are the radio's:
+
+| Mode | Effect of a write |
+|---|---|
+| USB, LSB, USB-D, LSB-D | low and high are set as given |
+| AM, NFM | low stays 0; only high is set (send low < high, e.g. `00 00`) |
+| CW, CW-R | the filter stays centred on the key tone; the width is set. If low and high are not symmetric around the key tone, the high edge wins: width = 2 × (high − key tone) |
+
+Values the mode's validation does not allow are clipped by the validation
+and answered `FB`; a client should read the edges back after a write.
+
+Each mode has its own filter on the radio: a write changes the filter of
+the current mode only.
+
+The two edges are written in the order that never puts low above high on
+the way (low first if the new low is below the current high, otherwise high
+first, as the FT8 app does); otherwise the validation would clip the first
+edge against the old value of the other.
+
+The DSP (`dsp.cpp`) and the filter panel are subscribed to these parameters
+and update by themselves.
+
+### BCD note
+
+The two-byte values are decoded by a local helper, `bcd4_be()`.
+`from_bcd_be()` reads one byte too many when the number of digits is even.
+`src/cat/scope_streamer.cpp` calls `from_bcd_be()` that way (around lines
+124, 351, 354); not changed here, to be checked separately.
+
+### Not implemented
+
+An unsolicited (transceive) `7E 01` when the filter changes on the radio.
+Clients poll it (x6100-mac reads it once a second).
+
+### Compatibility
+
+Firmware without this command answers NG (`FA`). A client can send `7E 01`
+once after connecting and, without an answer in `7E 01` form, fall back to
+`1A 03` (x6100-mac then estimates the edges from mode and width and does not
+offer filter editing).
+
+### Tests
+
+1. Read in USB with defaults → `7E 01 00 50 29 50`.
+2. Write `01 00 25 00` in USB → `FB`; the filter panel shows 100–2500.
+3. From 100–2500 write 2600–3000 → accepted, no intermediate clipping.
+4. AM: write `00 00 40 00` → high 4000.
+5. CW, key tone 600: write `04 00 08 00` → edges 400–800.
+6. Bad BCD, `high` 7000, `low >= high` → `FA`.
+7. Change the filter on the radio → the next `7E 01` read shows it.
+
+---
+
+## 3. Fix: `14 09` (CW pitch) read and wrote the TX power
+
+**Commit:** `599bbc3` · **File:** `src/cat/civ_processor.cpp`,
+`handle_ctl_lvl_x14()`
+
+### Problem
+
+In both the read and the write switch, `case 0x09` (CW key tone) had no
+`break` and fell through into `case 0x0a` (TX power):
+
+```cpp
+case 0x09: // cw keytone
+    to_bcd_be(bcd, x_cw_pitch_2_ci(cfg.cw.key_tone()->get()), 3);
+case 0x0a: // Get Tx power        <- 0x09 ended up here too
+    to_bcd_be(bcd, std::round(cfg.pwr()->get() * 255 / 10), 3);
+    break;
+...
+case 0x09: // cw keytone
+    cfg.cw.key_tone()->set(ci_cw_pitch_2_x(bcd_val));
+case 0x0a: // Set Tx power        <- 0x09 ended up here too
+    ...
+```
+
+Effects:
+
+- **Read:** `14 09` answered with the TX power instead of the pitch.
+  At 5 W the answer was `01 28` (128), which a client reads as a 600 Hz
+  pitch whatever the real key tone was.
+- **Write:** `14 09 xx xx` set the key tone **and the TX power** from the
+  same raw value. Any CAT client adjusting the CW pitch changed the output
+  power without knowing it.
+
+The same code is in OpenX6100 `main` (around lines 658 and 682).
+
+### How it was found
+
+x6100-mac read the pitch with `14 09` to centre CW filter presets on it.
+With a key tone of 700 Hz it read 600 (the power), sent a 500 Hz filter
+centred on 600, and the radio, centring on 700, ended up with 300 Hz.
+
+### Change
+
+A `break;` after each of the two `case 0x09` lines. Nothing else.
+
+### Value scale (unchanged)
+
+0–255, 3 BCD digits most significant first; 0 = 300 Hz, 128 ≈ 600 Hz,
+255 = 900 Hz (`x_cw_pitch_2_ci`, `ci_cw_pitch_2_x`).
+
+### Tests
+
+1. Key tone 700 Hz, power 5 W: `FE FE A4 E0 14 09 FD` → `14 09 01 70`
+   (not `01 28`).
+2. Write `14 09 01 28` → key tone 600 on the radio, **power unchanged**.
+3. `14 0A` read and write of the power: unchanged.
+
+---
+
+## 4. New command `7E 02`: notch (DNF)
+
+**Commit:** `599bbc3` · **File:** `src/cat/civ_processor.cpp`,
+`handle_1ko_dnf()`, called by `handle_1ko_vendor_x7e()` for subcommand
+`S_1KO_DNF = 0x02`
+
+### Why
+
+No CI-V command reached the radio's notch: `16 41` (auto notch) and
+`16 48` (manual notch) answer NG, and there was nothing for its frequency
+and width. A client could not even switch it on. The Icom commands for
+position (`14 0D`, 0–255) and width (`16 57`, three steps) would not match
+the radio's settings, so a vendor command sets the notch exactly as the
+radio's own controls do.
+
+### Parameters
+
+The same parameters and ranges as on the radio (`settings_manager.h`,
+`controls.cpp`):
+
+| Field | Parameter | Values | Step of the radio's encoder |
+|---|---|---|---|
+| ON | `cfg.dsp.dnf()` | 00 / 01 | — |
+| AU (AUTO) | `cfg.dsp.dnf_auto()` | 00 / 01 | — |
+| Centre | `cfg.dsp.dnf_center()` | 100–3000 Hz | 50 Hz |
+| Width | `cfg.dsp.dnf_width()` | 10–100 Hz | 5 Hz |
+
+They are global, not per mode.
+
+### Protocol
+
+Centre and width are **4 BCD digits, most significant first** (2 bytes each).
+
+**Read**
+
+```
+TX:  FE FE A4 E0 7E 02 FD
+RX:  FE FE E0 A4 7E 02 ON AU CC CC WW WW FD
+```
+
+Example with the defaults (off, centre 1000, width 50):
+`FE FE E0 A4 7E 02 00 00 10 00 00 50 FD`.
+
+**Write** — always all four fields (a client sends back the ones it does
+not change, as read):
+
+```
+TX:  FE FE A4 E0 7E 02 ON AU CC CC WW WW FD
+RX:  FB, or FA (NG)
+```
+
+Example, notch on at 1500 Hz, width 30 Hz: `FE FE A4 E0 7E 02 01 00 15 00 00 30 FD`.
+
+NG when: the payload is not exactly 6 bytes, ON or AU is not 00/01, a
+nibble is not a decimal digit, the centre is outside 100–3000 or the width
+outside 10–100. Multiples of the encoder steps are **not** required (the
+parameter accepts any value in range); x6100-mac sends multiples of 50 and 5.
+
+Write order: centre and width first, then AUTO, then ON, so the notch comes
+on where it belongs. The radio's observers (`radio.c`) pass the values to
+the base, and the spectrum and AF scopes redraw the notch.
+
+### Decoder apps open
+
+With SSTV (or another decoder app) open, NR, NB and the notch are held off
+(commit `ac0313d`, `dsp_held_cb`). A `7E 02` received then behaves like a
+change from the front panel: the notch stays off, the values are stored and
+come back when the app closes.
+
+### How the radio draws the notch (for clients that draw it)
+
+`src/spectrum.c`, `update_dnf()`: a white band at 50 % over the whole
+height, from `centre − width` to `centre + width` relative to the dial
+(negative side in LSB, LSB-D and CW-R). It is not drawn when the notch is
+off, when AUTO is on (its place is not known) and in AM/NFM.
+
+### Open question: is the width full or half?
+
+Two parts of the firmware disagree:
+
+- `src/spectrum.c` (original code) draws `centre ± width`, treating
+  `dnf_width` as a half width;
+- `src/af_scope.c` (1KO125 code) draws `centre ± width/2`, treating it as
+  the full width.
+
+One of them draws the notch twice as wide as it is. The base library
+(`x6100_control`) is binary only, so it has to be measured: a steady tone in
+the passband, manual notch with width 100 Hz, centre moved in 50 Hz steps;
+if the tone disappears within ±50 Hz of the centre the width is the full
+width, within ±100 Hz it is the half width. Until then x6100-mac draws it
+like `spectrum.c`.
+
+### Tests
+
+1. Read with defaults → `7E 02 00 00 10 00 00 50`.
+2. Write `01 00 15 00 00 30` → DNF on, "DNF freq: 1500 Hz", "DNF width:
+   30 Hz" on the radio; the notch moves on the spectrum.
+3. Write with AU = 01 → AUTO on, notch no longer drawn.
+4. NG: centre 50 or 3100, width 5 or 150, ON = 02, bad BCD, short frame.
+5. Change the notch on the radio → the next `7E 02` read shows it.
+6. With SSTV open: `7E 02` with ON = 01 → `FB`, notch stays off; after
+   closing SSTV the notch comes on with the values sent.
+
+---
+
+## 5. Network PTT: released when the client stops sending audio or goes away
+
+**Commit:** `64ce8be` · **File:** `src/cat/lan/cat_lan.cpp`
+(`lan_ptt_note()`, `lan_ptt_watchdog()`, `lan_ptt_release()`)
+
+### Background: phone over the network
+
+A network client transmits with what the firmware already had:
+
+- **PTT:** `1C 00 01` / `1C 00 00` (`handle_ctl_ptt_x1c()` →
+  `radio->set_ptt()`); the answer to a write is `1C 00 FB`. `1C 00` reads
+  the state: `1C 00 00` (RX) or `1C 00 01` (TX).
+- **TX audio:** audio packets sent by the client to port 50003 (`ident`
+  `0x0080`, the same layout the radio uses for RX audio: header 0x18 bytes,
+  `sendseq` big-endian at 0x12, `datalen` big-endian at 0x16, then 16-bit
+  little-endian mono PCM) go to `wfview_player` (`player_send`), created at
+  the sample rate the client asked for receive audio.
+
+### Problem
+
+If the client vanished while the radio was transmitting (Mac asleep, app
+hung or closed badly, Wi-Fi lost), **the radio stayed in TX for good**: on
+ping timeout (`PING_TIMEOUT_SEC` = 15 s), on `CTL_TYPE_CLOSE` (control and
+audio port) and when the server stopped, the session was closed but the PTT
+was never released. In SSB the radio kept transmitting nothing; in AM/FM it
+transmitted the carrier.
+
+### Change
+
+1. **PTT released when the network session ends.** On ping timeout, on
+   `CTL_TYPE_CLOSE` on the control port and on the audio port, and in
+   `cat_lan_shutdown()`: if the PTT was keyed from the network and the radio
+   is still transmitting, `set_ptt(false)`, with a log line giving the
+   reason.
+2. **Audio watchdog, 3 seconds.** If the PTT was keyed from the network and
+   no TX audio packet has come from the client for 3 s
+   (`LAN_TX_AUDIO_TIMEOUT`), the PTT is released
+   (log: `LAN: TX audio stopped for 3 s, PTT released`). Packets count, not
+   silence: a client keeps sending packets through the pauses of speech.
+3. **Only for a PTT keyed from the network.** A PTT from the microphone, the
+   radio's keys, its own apps (FT8, voice messages…) or the serial/USB CAT is
+   never touched.
+
+### How it works
+
+- `lan_ptt_note()`: before each CI-V frame from the LAN client is
+  processed, an 8-byte `1C 00 01` arms the watchdog (`lan_ptt_active`, the
+  time it was keyed, last audio = now); `1C 00 00` disarms it. A repeated
+  `1C 00 01` while armed does not restart the 3 s.
+- `process_audio_packet()`: every valid audio packet from the client sets
+  `lan_last_tx_audio = now`.
+- `lan_ptt_watchdog()`, called from the main loop (poll ≤ 100 ms):
+  - when the radio is seen in TX, it notes that the transmission started;
+  - if the radio is back in RX after that (released some other way), or does
+    not go into TX within 2 s (`LAN_PTT_TX_WAIT`, keying refused), the
+    watchdog disarms, so that a later microphone PTT is never released by it;
+  - if 3 s have passed since the last audio packet, the PTT is released.
+- `lan_ptt_release()`: releases only if the PTT was keyed from the network
+  and the radio is still in TX.
+- Threads: everything runs in the LAN thread (`set_ptt()` is already called
+  from the CAT thread in `handle_ctl_ptt_x1c()`); `cat_lan_shutdown()` calls
+  it after joining the thread.
+
+### What a client should do
+
+- Send audio continuously while transmitting (x6100-mac: 20 ms packets of
+  320 samples at 16 kHz), including during pauses.
+- On release, wait for the audio already sent to reach the radio (about
+  0.2 s) before `1C 00 00`, or the end of the last word is cut.
+- Keep its own safeguards too (x6100-mac: 3-minute limit, release on
+  disconnect, quit and sleep).
+
+### Tests
+
+1. TX over the network, then unplug the network / switch off the Mac's
+   Wi-Fi → the radio is back in RX within 3 s (not after 15 s).
+2. TX over the network, then close the client normally → RX at once.
+3. TX with continuous audio for more than 3 s, speech with pauses → the
+   radio stays in TX.
+4. `1C 00 01` without sending audio → back in RX after 3 s.
+5. Microphone PTT with a network client connected and idle → never released
+   after 3 s.
+6. The radio's FT8 and voice messages with a network client connected →
+   normal TX.
+7. Serial/USB CAT: `1C 00 01` without audio → no watchdog (unchanged).
+
+---
+
+## Notes for client developers: commands used as they are
+
+Not changed by 1KO125, listed because x6100-mac relies on them and their
+behaviour is easy to get wrong.
+
+| Command | Notes |
+|---|---|
+| `25 00` / `26 00` | Frequency and mode + data flag of the selected VFO. Work with every firmware over the LAN (unlike `03`/`04` before change 1). |
+| `11` | Attenuator: read → `11 00` / `11 20` (`att × 0x20`); write `11 00` off, `11 20` on. The value goes through `cfg.cur.att()->set()`, which keeps it within 0…`x6100_att_on`, so `0x20` switches it on. Over the LAN the read needs change 1. |
+| `14 02` / `14 03` | RF gain, squelch: 0–255 over CI-V; the radio stores `value × 100 / 255` rounded down. |
+| `15 02` | S-meter: `value = dBm × 0.75 + 96`, 3 BCD digits most significant first. |
+| `16 02` / `16 22` / `16 40` | Preamp, NB, NR. |
+| `1A 03` | Filter width as an Icom code, read only. SSB/CW: code ≤ 9 → code × 50 + 50 Hz, otherwise code × 100 − 400; AM/FM: code × 200 + 200. |
+| `27 15 00` + 5 BCD (least significant first) | Scope span = half width in Hz; the radio sets zoom = round(50 kHz / span), kept to 1, 2, 4, 8 (per mode). The zoom in use can be read from the scope frames (span = 100 kHz / zoom). |
+| `1C 00` | PTT, see change 5. |
+
+---
+
+## Status and upstream
+
+- On `1ko125`: all five changes, tested on the radio.
+- Pull request to OpenX6100: **not opened yet**. It will contain all five
+  changes; its description should give the reasons above: LAN/serial parity
+  (only read commands unblocked), vendor commands so that no existing Icom
+  command changes behaviour, the `14 09` bug that read and wrote the TX
+  power, and the radio staying in TX when a network client disappears.
+- Open items: width of the notch (full or half, change 4); `from_bcd_be()`
+  with an even number of digits in `scope_streamer.cpp` (change 2).
+
+Hany El Imam — 1KO125
