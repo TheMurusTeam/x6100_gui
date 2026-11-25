@@ -128,7 +128,8 @@ bool dialog_vm_toggle(void) {
 
 
 const char *dialog_current_name(void) {
-    return dialog_is_running() ? current_dialog->name : NULL;
+    if (!dialog_is_running()) return NULL;
+    return current_dialog->name ? current_dialog->name : "App";
 }
 
 static bool dialog_is_running() {

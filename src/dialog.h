@@ -46,7 +46,7 @@ typedef struct {
 
 void dialog_construct(dialog_t *dialog, lv_obj_t *parent);
 void dialog_destruct();
-/* 1KO125: the running dialog's name (NULL if none or unnamed); UI thread */
+/* 1KO125: the running dialog's name, "App" if unnamed, NULL if none; UI thread */
 const char *dialog_current_name(void);
 
 bool dialog_key(dialog_t *dialog, lv_event_t * e);

@@ -15,11 +15,16 @@
  *
  *  Busy = a dialog running (every app, Settings, QTH, Callsign, the
  *  frequency entry, the Channels window opened on its own), Broadcast on,
- *  or a text window open (the RTTY keyboard of the main screen).  The
- *  Channels overlay opens only over a running app, so the app counts.
+ *  or the RTTY app on.  RTTY and Broadcast are apps of the APP menu that
+ *  run on the main screen (a button page and a panel), not dialogs, so
+ *  they are asked for themselves.  The Channels overlay opens only over a
+ *  running app, and the text windows only inside an app (or RTTY), so the
+ *  app counts.  Free: the main screen with its button pages, the short
+ *  messages and the GENE info pop-up (broadcast_overlay.c).
  *
  *  The state is computed every BUSY_PERIOD_MS by an LVGL timer, in the UI
- *  thread, from the modules' own queries, and kept under a mutex for the
+ *  thread, from dialog_current_name(), app_broadcast_is_on() and
+ *  rtty_get_state(), and kept under a mutex for the
  *  CAT and LAN threads: they never touch the dialogs or LVGL objects.
  */
 
@@ -32,7 +37,7 @@
 
 #include "app_broadcast.h"
 #include "dialog.h"
-#include "textarea_window.h"
+#include "rtty.h"
 
 #define BUSY_PERIOD_MS 200
 
@@ -44,13 +49,12 @@ static void busy_timer_cb(lv_timer_t *t)
 {
     (void)t;
     const char *name = NULL;
-    if (dialog_is_run()) {
-        name = dialog_current_name();
-        if (!name || !name[0]) name = "App";
+    if ((name = dialog_current_name()) != NULL) {
+        /* a dialog is running */
     } else if (app_broadcast_is_on()) {
         name = "Broadcast";
-    } else if (textarea_window_is_open()) {
-        name = "Keyboard";
+    } else if (rtty_get_state() != RTTY_OFF) {
+        name = "RTTY";
     }
     pthread_mutex_lock(&busy_mutex);
     busy = name != NULL;
