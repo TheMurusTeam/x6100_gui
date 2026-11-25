@@ -20,9 +20,10 @@ noted.
 | 6 | New vendor command `7E 03`: station identity (read only) | `b00212d` | `src/cat/civ_processor.cpp` |
 | 7 | Network PTT keys the modem: the client's audio goes on the air | `b3a115f` | `src/cat/lan/cat_lan.cpp` |
 | 8 | New vendor command `7E 04`: TX meter (read only) | `48ae540` | `src/cat/civ_processor.cpp`, `src/tx_info.c` |
+| 9 | New vendor command `7E 05`: radio busy (read only) | `6351034` | `src/cat/civ_processor.cpp`, `src/radio_busy.c`, `src/dialog.c` |
 
-All eight are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
-have been tested on the radio; changes 6–8 are waiting for their test. None of them changes how an existing command behaves
+All nine are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
+have been tested on the radio; changes 6–9 are waiting for their test. None of them changes how an existing command behaves
 for existing clients, except the two bug fixes (1 and 3), which make the
 radio answer as the serial CAT and the CI-V reference already said it
 should.
@@ -700,6 +701,106 @@ meter.
 
 ---
 
+## 9. New command `7E 05`: radio busy (read only)
+
+**Commit:** `6351034` · **Files:** `src/cat/civ_processor.cpp`
+(`handle_1ko_busy()`, subcommand `S_1KO_BUSY = 0x05`), `src/radio_busy.c`,
+`src/dialog.c` / `src/dialog.h` (`dialog_t.name`, `dialog_current_name()`),
+`src/textarea_window.c`, `src/ports/radio_port.h` (`busy_get`), every
+`dialog_*.c` (its name)
+
+### Why
+
+An app open on the radio (FT8, WEFAX, SSTV…) sets mode, filter and
+frequency for itself and holds them. A network client that does not know
+fights it: with WEFAX open, voice from x6100-mac went out in USB-D with
+power and ALC peaking; a mode or filter set from the client snapped back;
+with FT8 open the client could still move the frequency.
+
+The rule chosen: **anything open on the radio other than the main screen**
+makes it busy, with no exceptions and no classification (Wi-Fi, QTH and
+Settings count too). The client pauses until the radio is free. The
+firmware only says whether it is busy and by what; nothing else changes. In
+particular the network PTT is **not** refused while busy: the protection is
+in the client.
+
+### Protocol
+
+```
+TX:  FE FE A4 E0 7E 05 FD
+RX:  FE FE E0 A4 7E 05 BB <name> FD
+```
+
+| Field | Contents |
+|---|---|
+| `BB` | `00` free (main screen), `01` busy |
+| `<name>` | what is open, ASCII, at most 16 bytes, no terminator; empty when free |
+
+`FD`, `FE`, `FF` and control bytes in the name become `?`.
+
+Examples: free → `FE FE E0 A4 7E 05 00 FD`; FT8 open →
+`FE FE E0 A4 7E 05 01 46 54 38 FD`.
+
+**NG (`FA`)** when any byte follows `05`: the command is read only.
+
+### What counts as busy
+
+| Busy | Name |
+|---|---|
+| Any dialog running: the apps, Settings, the list and entry windows | the dialog's name, see below |
+| Broadcast scan on (with or without its band list) | `Broadcast` |
+| A text window open outside a dialog (the main screen's RTTY keyboard) | `Keyboard` |
+
+Dialog names: `FT8`, `FT8-CB`, `JS8`, `JTTY`, `PSK31`, `Olivia`, `WSPR`,
+`SSTV`, `WEFAX`, `NAVTEX`, `DSC`, `CW Msg`, `Voice Msg`, `Recorder`,
+`SWR Scan`, `Wi-Fi`, `Bluetooth`, `GPS`, `QTH`, `Callsign`, `Channels`,
+`Frequency`, `Settings`, `Broadcast` (its band list). A dialog without a name
+would read `App`.
+
+Free: the main screen with any of its button pages, and the short messages
+it shows. The Channels window opened over a running app is an overlay of
+that app, so the app's name is answered.
+
+### Implementation notes
+
+- `radio_busy.c` computes the state every 200 ms in an LVGL timer, in the
+  UI thread, from `dialog_is_run()` / `dialog_current_name()`,
+  `app_broadcast_is_on()` and `textarea_window_is_open()`, and keeps it with
+  the name under a mutex.
+- The CAT and LAN threads read it through `radio_port_t.busy_get`, never
+  the dialogs or LVGL objects. A port without `busy_get` reads as free.
+- So the answer may lag the screen by up to 200 ms; clients poll once a
+  second.
+
+### Use
+
+x6100-mac reads `7E 05` when it connects and once a second. While busy it
+pauses: volume to 0, TX stopped, back to voice, and a modal window asking
+to close the radio's app, with a Disconnect button. When the radio is free
+again the window closes and the volume comes back.
+
+### Compatibility
+
+Firmware without this command answers NG (`FA`); a client then treats the
+radio as always free.
+
+### Tests
+
+1. Main screen: `7E 05` → `7E 05 00` (no name).
+2. Main screen, another button page (e.g. MIC): still `00`.
+3. FT8 open: `7E 05 01 46 54 38` ("FT8"); closed → `00`.
+4. Same with WEFAX, SSTV, Wi-Fi, QTH, Settings, Broadcast, each with its
+   name.
+5. A window opened from an app (Channels over WEFAX): stays `01` with the
+   app's name until back on the main screen.
+6. `7E 05 00` → NG, nothing changes.
+7. Same answers over the LAN and the serial/USB port.
+8. Read once a second while opening and closing apps: no stall, no delay of
+   the radio's interface.
+9. `7E 01`–`7E 04` and the Icom commands unchanged.
+
+---
+
 ## Notes for client developers: commands used as they are
 
 Not changed by 1KO125, listed because x6100-mac relies on them and their
@@ -721,17 +822,18 @@ behaviour is easy to get wrong.
 
 ## Status and upstream
 
-- On `1ko125`: all eight changes; 1–5 tested on the radio, 6–8 waiting for
+- On `1ko125`: all nine changes; 1–5 tested on the radio, 6–9 waiting for
   their test.
-- Pull request to OpenX6100: **not opened yet**. It will contain all eight
+- Pull request to OpenX6100: **not opened yet**. It will contain all nine
   changes; its description should give the reasons above: LAN/serial parity
   (only read commands unblocked), vendor commands so that no existing Icom
   command changes behaviour, the `14 09` bug that read and wrote the TX
   power, the radio staying in TX when a network client disappears, the
   station identity read from the radio by the clients' macros, and the
   network PTT that put the radio's microphone on the air instead of the
-  client's audio (also a bug for wfview with OpenX6100), and a TX meter
-  because `15 11` and `15 12` cannot be used (left unfixed by choice).
+  client's audio (also a bug for wfview with OpenX6100), a TX meter
+  because `15 11` and `15 12` cannot be used (left unfixed by choice), and
+  a "radio busy" state so that clients do not fight the radio's own apps.
 - Open items: width of the notch (full or half, change 4); `from_bcd_be()`
   with an even number of digits in `scope_streamer.cpp` (change 2).
 
