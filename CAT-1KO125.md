@@ -20,7 +20,7 @@ noted.
 | 6 | New vendor command `7E 03`: station identity (read only) | `b00212d` | `src/cat/civ_processor.cpp` |
 | 7 | Network PTT keys the modem: the client's audio goes on the air | `b3a115f` | `src/cat/lan/cat_lan.cpp` |
 | 8 | New vendor command `7E 04`: TX meter (read only) | `48ae540` | `src/cat/civ_processor.cpp`, `src/tx_info.c` |
-| 9 | New vendor command `7E 05`: radio busy (read only) | `6351034` | `src/cat/civ_processor.cpp`, `src/radio_busy.c`, `src/dialog.c` |
+| 9 | New vendor command `7E 05`: radio busy (read only) | `6351034`, `991704a` | `src/cat/civ_processor.cpp`, `src/radio_busy.c`, `src/dialog.c` |
 
 All nine are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
 have been tested on the radio; changes 6–9 are waiting for their test. None of them changes how an existing command behaves
@@ -703,11 +703,10 @@ meter.
 
 ## 9. New command `7E 05`: radio busy (read only)
 
-**Commit:** `6351034` · **Files:** `src/cat/civ_processor.cpp`
+**Commits:** `6351034`, `991704a` · **Files:** `src/cat/civ_processor.cpp`
 (`handle_1ko_busy()`, subcommand `S_1KO_BUSY = 0x05`), `src/radio_busy.c`,
 `src/dialog.c` / `src/dialog.h` (`dialog_t.name`, `dialog_current_name()`),
-`src/textarea_window.c`, `src/ports/radio_port.h` (`busy_get`), every
-`dialog_*.c` (its name)
+`src/ports/radio_port.h` (`busy_get`), every `dialog_*.c` (its name)
 
 ### Why
 
@@ -749,7 +748,7 @@ Examples: free → `FE FE E0 A4 7E 05 00 FD`; FT8 open →
 |---|---|
 | Any dialog running: the apps, Settings, the list and entry windows | the dialog's name, see below |
 | Broadcast scan on (with or without its band list) | `Broadcast` |
-| A text window open outside a dialog (the main screen's RTTY keyboard) | `Keyboard` |
+| The RTTY app on (`rtty_get_state() != RTTY_OFF`) | `RTTY` |
 
 Dialog names: `FT8`, `FT8-CB`, `JS8`, `JTTY`, `PSK31`, `Olivia`, `WSPR`,
 `SSTV`, `WEFAX`, `NAVTEX`, `DSC`, `CW Msg`, `Voice Msg`, `Recorder`,
@@ -757,16 +756,22 @@ Dialog names: `FT8`, `FT8-CB`, `JS8`, `JTTY`, `PSK31`, `Olivia`, `WSPR`,
 `Frequency`, `Settings`, `Broadcast` (its band list). A dialog without a name
 would read `App`.
 
-Free: the main screen with any of its button pages, and the short messages
-it shows. The Channels window opened over a running app is an overlay of
-that app, so the app's name is answered.
+RTTY and Broadcast are apps of the APP menu that run on the main screen (a
+button page and a panel) instead of a dialog, so they are asked for
+themselves. Windows opened inside an app (the Channels overlay over a
+running app, the text windows for messages and macros, including the RTTY
+free text) belong to that app: its name is answered.
+
+Free: the main screen with any of its button pages, the short messages it
+shows, and the info pop-up of the microphone's GENE key
+(`broadcast_overlay.c`, not the Broadcast scan).
 
 ### Implementation notes
 
 - `radio_busy.c` computes the state every 200 ms in an LVGL timer, in the
-  UI thread, from `dialog_is_run()` / `dialog_current_name()`,
-  `app_broadcast_is_on()` and `textarea_window_is_open()`, and keeps it with
-  the name under a mutex.
+  UI thread, from `dialog_current_name()` (`"App"` for an unnamed dialog),
+  `app_broadcast_is_on()` and `rtty_get_state()`, and keeps it with the name
+  under a mutex.
 - The CAT and LAN threads read it through `radio_port_t.busy_get`, never
   the dialogs or LVGL objects. A port without `busy_get` reads as free.
 - So the answer may lag the screen by up to 200 ms; clients poll once a
@@ -789,15 +794,16 @@ radio as always free.
 1. Main screen: `7E 05` → `7E 05 00` (no name).
 2. Main screen, another button page (e.g. MIC): still `00`.
 3. FT8 open: `7E 05 01 46 54 38` ("FT8"); closed → `00`.
-4. Same with WEFAX, SSTV, Wi-Fi, QTH, Settings, Broadcast, each with its
-   name.
-5. A window opened from an app (Channels over WEFAX): stays `01` with the
-   app's name until back on the main screen.
-6. `7E 05 00` → NG, nothing changes.
-7. Same answers over the LAN and the serial/USB port.
-8. Read once a second while opening and closing apps: no stall, no delay of
+4. Same with WEFAX, SSTV, Wi-Fi, QTH, Settings, Broadcast, RTTY, each with
+   its name.
+5. A window opened from an app (Channels over WEFAX, the RTTY free-text
+   window): stays `01` with the app's name until back on the main screen.
+6. The GENE info pop-up and the short messages on the main screen: `00`.
+7. `7E 05 00` → NG, nothing changes.
+8. Same answers over the LAN and the serial/USB port.
+9. Read once a second while opening and closing apps: no stall, no delay of
    the radio's interface.
-9. `7E 01`–`7E 04` and the Icom commands unchanged.
+10. `7E 01`–`7E 04` and the Icom commands unchanged.
 
 ---
 
