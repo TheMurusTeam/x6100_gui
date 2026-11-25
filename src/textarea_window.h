@@ -18,6 +18,8 @@ typedef bool (*textarea_window_cb_t)(void);
 lv_obj_t * textarea_window_open(textarea_window_cb_t ok_cb, textarea_window_cb_t cancel_cb);
 lv_obj_t * textarea_window_open_w_label(textarea_window_cb_t ok_cb, textarea_window_cb_t cancel_cb, const char * text);
 void textarea_window_close();
+/* 1KO125: a text window is open (radio busy, CAT 7E 05) */
+bool textarea_window_is_open(void);
 
 const char* textarea_window_get();
 void textarea_window_set(const char *text);

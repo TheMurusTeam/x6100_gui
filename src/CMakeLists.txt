@@ -28,7 +28,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     rtty.c screenshot.c display.cpp gps.c
     rtty_tx.c rtty_sql.c rtty_buttons.c digi_qso.c digi_next.c
     digi_txq.c digi_text.c digi_log.c digi_qso_menu.c rtty_afc.c
-    ui_list.c app_info.c
+    ui_list.c app_info.c radio_busy.c
     app_radio.c
     dialog.c dialog_swrscan.c
     dxcc.c

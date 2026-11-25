@@ -240,6 +240,7 @@ static buttons_page_t page_browser = { .items = { &btn_pb, &btn_open, &btn_delet
 static buttons_page_t page_freq = { .items = { &btn_pf, &btn_tune, NULL, NULL, &btn_fclose } };
 
 static dialog_t dialog = {
+    .name = "DSC",                /* 1KO125: CAT 7E 05 */
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = destruct_cb,

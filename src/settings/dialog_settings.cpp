@@ -66,6 +66,7 @@ static dialog_t dialog = {
     .btn_page     = &btn_page,
     .key_cb       = key_cb,
     .run          = false,
+    .name         = "Settings",         /* 1KO125: CAT 7E 05 (after .run: C++ order) */
 };
 
 dialog_t *dialog_settings = &dialog;

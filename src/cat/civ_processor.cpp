@@ -73,6 +73,7 @@ constexpr uint8_t S_1KO_FILTER = 0x01; /* RX filter edges in Hz */
 constexpr uint8_t S_1KO_DNF    = 0x02; /* notch: on, auto, centre, width */
 constexpr uint8_t S_1KO_STATION = 0x03; /* station identity, read only */
 constexpr uint8_t S_1KO_TXMETER = 0x04; /* TX power, SWR, ALC, read only */
+constexpr uint8_t S_1KO_BUSY    = 0x05; /* radio busy (not the main screen), read only */
 
 constexpr uint8_t CODE_OK = 0xFB;
 constexpr uint8_t CODE_NG = 0xFA;
@@ -626,8 +627,40 @@ static std::string_view handle_1ko_txmeter(const CivPacketView &request, CivTxPa
     return resp.set_command(C_1KO_VENDOR).set_subcommand(S_1KO_TXMETER).append_data(out, 7).get_packet();
 }
 
+// 7E 05: radio busy, read only:
+//   FE FE A4 E0 7E 05 FD -> FE FE E0 A4 7E 05 BB <name> FD
+// BB: 00 free (main screen), 01 busy: something else is open (an app,
+// Settings, Broadcast, a text window).  <name>: what, at most 16 bytes, no
+// terminator, empty when free; FD/FE/FF and control bytes -> '?'.  NG with
+// any byte after 05.  Why: an app open on the radio holds mode, filter and
+// frequency, and a network client changing them fights it (WEFAX open:
+// voice from the client went out in USB-D); the client pauses while the
+// radio is busy.  The state comes from radio_busy.c (UI thread) through
+// the radio port, never from the dialogs from this thread.
+#define BUSY_NAME_MAX 16
+static std::string_view handle_1ko_busy(const CivPacketView &request, CivTxPacker &resp) {
+    if (request.get_subcommand_data().size() != 0) {
+        return resp.set_ng().get_packet();
+    }
+    char name[BUSY_NAME_MAX + 1] = "";
+    bool busy = g_ports->radio->busy_get && g_ports->radio->busy_get(name, sizeof(name));
+    uint8_t out[1 + BUSY_NAME_MAX];
+    size_t n = 0;
+    out[0] = busy ? 1 : 0;
+    if (busy) {
+        for (; n < BUSY_NAME_MAX && name[n]; n++) {
+            uint8_t c = (uint8_t)name[n];
+            out[1 + n] = (c >= 0xFD || c < 0x20 || c == 0x7F) ? '?' : c;
+        }
+    }
+    return resp.set_command(C_1KO_VENDOR).set_subcommand(S_1KO_BUSY).append_data(out, 1 + n).get_packet();
+}
+
 std::string_view handle_1ko_vendor_x7e(const CivPacketView &request, CivTxPacker &resp) {
     std::string_view data = request.get_command_data();
+    if (data.size() >= 1 && request.get_subcommand() == S_1KO_BUSY) {
+        return handle_1ko_busy(request, resp);
+    }
     if (data.size() >= 1 && request.get_subcommand() == S_1KO_TXMETER) {
         return handle_1ko_txmeter(request, resp);
     }

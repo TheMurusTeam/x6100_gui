@@ -764,6 +764,7 @@ static void bl_destruct_cb(void)
 }
 
 static dialog_t bl_dialog = {
+    .name = "Broadcast",                /* 1KO125: CAT 7E 05 */
     .run = false,
     .construct_cb = bl_construct_cb,
     .destruct_cb = bl_destruct_cb,

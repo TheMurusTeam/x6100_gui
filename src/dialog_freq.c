@@ -29,6 +29,7 @@ static void construct_cb(lv_obj_t *parent);
 static void key_cb(lv_event_t * e);
 
 static dialog_t             dialog = {
+    .name = "Frequency",                /* 1KO125: CAT 7E 05 */
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = NULL,

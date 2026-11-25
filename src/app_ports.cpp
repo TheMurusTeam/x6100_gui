@@ -21,6 +21,7 @@ extern "C" {
 #include "audio.h"
 #include "radio.h"
 #include "tx_info.h"
+#include "radio_busy.h"
 }
 
 /* Radio */
@@ -161,6 +162,7 @@ static const radio_port_t radio_port = {
     .set_freq = &port_set_freq,
     .set_modem = &port_set_modem,
     .set_pwr = &port_set_pwr,
+    .busy_get = &radio_busy_get,        /* 1KO125 */
 };
 
 static const telemetry_port_t telemetry_port = {

@@ -55,6 +55,7 @@ static void destruct_cb();
 static void key_cb(lv_event_t * e);
 
 static dialog_t             dialog = {
+    .name = "Callsign",                /* 1KO125: CAT 7E 05 */
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = destruct_cb,

@@ -692,6 +692,42 @@ TEST_CASE("7E 04 with data is NG (read only)", "[cat]") {
     }));
 }
 
+// ---- 1KO125: 7E 05, radio busy ---------------------------------------------
+
+TEST_CASE("7E 05 with no busy_get in the port reads free", "[cat]") {
+    TestDbGuard db;
+    SettingsManager mgr;
+    init_band_5(db, mgr);
+    cfg_set_instance(&mgr);
+
+    auto raw = ci_v_frame(0x7E, {0x05});
+    CivPacketView req(raw.data(), raw.size());
+    uint8_t txBuf[256];
+    CivTxPacker packer(txBuf, 0xE0, LOCAL_ADDRESS);
+    auto sv = process_civ_message(req, packer);
+
+    REQUIRE(to_bytes(sv) == std::vector<uint8_t>({
+        0xFE, 0xFE, 0xE0, LOCAL_ADDRESS, 0x7E, 0x05, 0x00, 0xFD
+    }));
+}
+
+TEST_CASE("7E 05 with data is NG (read only)", "[cat]") {
+    TestDbGuard db;
+    SettingsManager mgr;
+    init_band_5(db, mgr);
+    cfg_set_instance(&mgr);
+
+    auto raw = ci_v_frame(0x7E, {0x05, 0x00});
+    CivPacketView req(raw.data(), raw.size());
+    uint8_t txBuf[256];
+    CivTxPacker packer(txBuf, 0xE0, LOCAL_ADDRESS);
+    auto sv = process_civ_message(req, packer);
+
+    REQUIRE(to_bytes(sv) == std::vector<uint8_t>({
+        0xFE, 0xFE, 0xE0, LOCAL_ADDRESS, CODE_NG, 0xFD
+    }));
+}
+
 // ---- C_SEND_SEL_FREQ (0x25) ------------------------------------------------
 
 TEST_CASE("C_SEND_SEL_FREQ main/sub freq read", "[cat]") {

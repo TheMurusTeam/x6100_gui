@@ -50,6 +50,7 @@
 #include "app_broadcast.h"
 #include "af_scope.h"
 #include "dialog_channels.h"
+#include "radio_busy.h"
 #include "broadcast_db.h"
 #include "broadcast_overlay.h"
 #include "dialog_gps.h"
@@ -1403,6 +1404,7 @@ lv_obj_t * main_screen(lv_obj_t *overlay_scr) {
 
     meter = meter_init(top_container);
     tx_info = tx_info_init(top_container);
+    radio_busy_init();                  /* 1KO125: CAT 7E 05 */
     freq_info_init(top_container);
     clock_init(top_container);
 

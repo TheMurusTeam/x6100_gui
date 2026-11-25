@@ -212,6 +212,7 @@ static buttons_page_t btn_page = {
 
 
 static dialog_t dialog = {
+    .name = "Channels",                /* 1KO125: CAT 7E 05 */
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = destruct_cb,

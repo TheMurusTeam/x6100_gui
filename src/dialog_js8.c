@@ -764,6 +764,7 @@ static button_data_t  btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_lab
 static buttons_page_t page_6        = {{&btn_p6, &btn_alerts, &btn_speed, &btn_hold, NULL}};
 
 static dialog_t dialog = {
+    .name = "JS8",                /* 1KO125: CAT 7E 05 */
     .run          = false,
     .construct_cb = construct_cb,
     .destruct_cb  = destruct_cb,
