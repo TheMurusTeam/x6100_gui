@@ -52,7 +52,6 @@ static lv_timer_t           *status_update_timer;
 static void                 *gps_sub;
 
 static dialog_t             dialog = {
-    .name = "GPS",                /* 1KO125: CAT 7E 05 */
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = destruct_cb,

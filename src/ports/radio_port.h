@@ -5,7 +5,6 @@
 // libraries never include the application's radio.h.
 
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
 typedef struct {
@@ -15,7 +14,7 @@ typedef struct {
     void (*set_freq)(int32_t freq);
     void (*set_modem)(bool on);
     void (*set_pwr)(float w);
-    // 1KO125: something other than the main screen is open (CAT 7E 05);
-    // name: what, terminated, "" when free.  May be NULL (never busy).
-    bool (*busy_get)(char *name, size_t size);
+    // 1KO125: an app is open on the radio (CAT 7E 05).  May be NULL
+    // (never busy).
+    bool (*is_busy)(void);
 } radio_port_t;

@@ -39,15 +39,11 @@ typedef struct {
     dialog_mic_step_cb_t    mic_step_cb;
     dialog_vm_toggle_cb_t   vm_toggle_cb;
     bool                    run;
-    /* 1KO125: short name of what is open, for CAT 7E 05 (radio busy) */
-    const char              *name;
 } dialog_t;
 
 
 void dialog_construct(dialog_t *dialog, lv_obj_t *parent);
 void dialog_destruct();
-/* 1KO125: the running dialog's name, "App" if unnamed, NULL if none; UI thread */
-const char *dialog_current_name(void);
 
 bool dialog_key(dialog_t *dialog, lv_event_t * e);
 void dialog_send(lv_event_code_t event_code, void *param);

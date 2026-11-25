@@ -126,7 +126,6 @@ buttons_group_t group_msg_cw = {
 };
 
 static dialog_t             dialog = {
-    .name = "CW Msg",                /* 1KO125: CAT 7E 05 */
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = destruct_cb,

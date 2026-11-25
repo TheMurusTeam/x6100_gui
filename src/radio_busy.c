@@ -8,59 +8,45 @@
  *  Why: an app open on the radio (FT8, WEFAX, SSTV...) sets mode, filter
  *  and frequency for itself and holds them, so a network client changing
  *  them fights it (WEFAX open: voice from the Mac went out in USB-D).  The
- *  user's rule: anything open other than the main screen, with its button
- *  pages, makes the radio busy, with no exceptions; the client pauses
- *  until the radio is free.  The firmware only says whether it is busy and
- *  by what.
+ *  user's rule: anything open other than the main screen makes the radio
+ *  busy, and the client pauses until it is free.  The firmware only says
+ *  whether it is busy.
  *
- *  Busy = a dialog running (every app, Settings, QTH, Callsign, the
- *  frequency entry, the Channels window opened on its own), Broadcast on,
- *  or the RTTY app on.  RTTY and Broadcast are apps of the APP menu that
- *  run on the main screen (a button page and a panel), not dialogs, so
- *  they are asked for themselves.  The Channels overlay opens only over a
- *  running app, and the text windows only inside an app (or RTTY), so the
- *  app counts.  Free: the main screen with its button pages, the short
- *  messages and the GENE info pop-up (broadcast_overlay.c).
+ *  Busy = a dialog running (every app of the APP menu, Settings, QTH,
+ *  Callsign, the frequency entry...: what MSG_DIALOG_START / STOP already
+ *  announce, as for the waterfall and the AF scopes), or the RTTY or the
+ *  Broadcast app on: those two run on the main screen instead of a dialog.
+ *  Windows opened inside an app (Channels over it, text windows) belong to
+ *  it.  Free: the main screen with its button pages, the short messages
+ *  and the GENE info pop-up.
  *
- *  The state is computed every BUSY_PERIOD_MS by an LVGL timer, in the UI
- *  thread, from dialog_current_name(), app_broadcast_is_on() and
- *  rtty_get_state(), and kept under a mutex for the
- *  CAT and LAN threads: they never touch the dialogs or LVGL objects.
+ *  Computed every BUSY_PERIOD_MS by an LVGL timer in the UI thread and kept
+ *  in an atomic for the CAT and LAN threads, which never touch the dialogs
+ *  or LVGL.
  */
 
 #include "radio_busy.h"
 
-#include <pthread.h>
-#include <string.h>
+#include <stdatomic.h>
 
 #include "lvgl/lvgl.h"
 
 #include "app_broadcast.h"
-#include "dialog.h"
+#include "pubsub_ids.h"
 #include "rtty.h"
 
 #define BUSY_PERIOD_MS 200
 
-static pthread_mutex_t busy_mutex = PTHREAD_MUTEX_INITIALIZER;
-static bool busy = false;
-static char busy_name[RADIO_BUSY_NAME_MAX + 1] = "";
+static bool dialog_on = false;          /* UI thread */
+static atomic_bool busy = false;
+
+static void dialog_start_cb(void *s, lv_msg_t *m) { (void)s; (void)m; dialog_on = true; }
+static void dialog_stop_cb(void *s, lv_msg_t *m)  { (void)s; (void)m; dialog_on = false; }
 
 static void busy_timer_cb(lv_timer_t *t)
 {
     (void)t;
-    const char *name = NULL;
-    if ((name = dialog_current_name()) != NULL) {
-        /* a dialog is running */
-    } else if (app_broadcast_is_on()) {
-        name = "Broadcast";
-    } else if (rtty_get_state() != RTTY_OFF) {
-        name = "RTTY";
-    }
-    pthread_mutex_lock(&busy_mutex);
-    busy = name != NULL;
-    strncpy(busy_name, name ? name : "", RADIO_BUSY_NAME_MAX);
-    busy_name[RADIO_BUSY_NAME_MAX] = '\0';
-    pthread_mutex_unlock(&busy_mutex);
+    atomic_store(&busy, dialog_on || app_broadcast_is_on() || rtty_get_state() != RTTY_OFF);
 }
 
 void radio_busy_init(void)
@@ -68,17 +54,12 @@ void radio_busy_init(void)
     static bool done = false;
     if (done) return;
     done = true;
+    lv_msg_subscribe(MSG_DIALOG_START, dialog_start_cb, NULL);
+    lv_msg_subscribe(MSG_DIALOG_STOP, dialog_stop_cb, NULL);
     lv_timer_create(busy_timer_cb, BUSY_PERIOD_MS, NULL);
 }
 
-bool radio_busy_get(char *name, size_t size)
+bool radio_busy_get(void)
 {
-    pthread_mutex_lock(&busy_mutex);
-    bool b = busy;
-    if (name && size > 0) {
-        strncpy(name, busy_name, size - 1);
-        name[size - 1] = '\0';
-    }
-    pthread_mutex_unlock(&busy_mutex);
-    return b;
+    return atomic_load(&busy);
 }

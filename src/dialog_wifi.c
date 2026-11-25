@@ -121,7 +121,6 @@ static wifi_ap_info_t cur_ap_info;
 static char          *cur_password = NULL;
 
 static dialog_t dialog = {
-    .name = "Wi-Fi",                /* 1KO125: CAT 7E 05 */
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = destruct_cb,
