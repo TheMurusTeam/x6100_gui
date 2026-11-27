@@ -973,6 +973,32 @@ std::string_view handle_rd_sqsm_x15(const CivPacketView &request, CivTxPacker &r
 // 0x16 — Function settings (AGC, NB, NR, etc.)
 // ============================================================================
 
+// 1KO125: 16 12, AGC.  Icom's codes are 01 FAST, 02 MID, 03 SLOW; the
+// X6100 has OFF, SLOW, FAST and AUTO, so 01 FAST and 03 SLOW keep their
+// Icom meaning (flrig, Hamlib), 02 is AUTO in place of MID and 00 is OFF
+// (an extension).  An explicit map: x6100_agc_t is not in Icom's order.
+// Why: the Mac app's AGC button and its channels (channels.json, which
+// hold the AGC) need to read and set it, and 16 12 was unsupported.
+static uint8_t agc_to_icom(int32_t agc) {
+    switch ((x6100_agc_t)agc) {
+        case x6100_agc_off:  return 0x00;
+        case x6100_agc_fast: return 0x01;
+        case x6100_agc_auto: return 0x02;
+        case x6100_agc_slow: return 0x03;
+        default:             return 0x02;
+    }
+}
+
+static bool icom_to_agc(uint8_t v, x6100_agc_t *agc) {
+    switch (v) {
+        case 0x00: *agc = x6100_agc_off;  return true;
+        case 0x01: *agc = x6100_agc_fast; return true;
+        case 0x02: *agc = x6100_agc_auto; return true;
+        case 0x03: *agc = x6100_agc_slow; return true;
+        default:   return false;
+    }
+}
+
 std::string_view handle_ctl_func_x16(const CivPacketView &request, CivTxPacker &resp) {
     size_t data_size = request.get_command_data().size();
     uint8_t subcmd = request.get_subcommand();
@@ -984,6 +1010,8 @@ std::string_view handle_ctl_func_x16(const CivPacketView &request, CivTxPacker &
         switch (subcmd) {
             case 0x02:
                 return after_cmd.append_byte(static_cast<uint8_t>(cfg.cur.pre()->get())).get_packet();
+            case 0x12: // 1KO125: AGC
+                return after_cmd.append_byte(agc_to_icom(cfg.cur.agc()->get())).get_packet();
             case 0x22:
                 return after_cmd.append_byte(static_cast<uint8_t>(cfg.dsp.nb()->get())).get_packet();
             case 0x40:
@@ -1006,6 +1034,14 @@ std::string_view handle_ctl_func_x16(const CivPacketView &request, CivTxPacker &
             case 0x02:
                 cfg.cur.pre()->set(new_val > 0);
                 break;
+            case 0x12: { // 1KO125: AGC of the current VFO and band, as the AGC key
+                x6100_agc_t agc;
+                if (!icom_to_agc(new_val, &agc)) {
+                    return resp.set_ng().get_packet();
+                }
+                cfg.cur.agc()->set((int32_t)agc);
+                break;
+            }
             case 0x22:
                 cfg.dsp.nb()->set(new_val);
                 break;

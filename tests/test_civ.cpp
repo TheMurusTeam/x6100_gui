@@ -692,6 +692,48 @@ TEST_CASE("7E 04 with data is NG (read only)", "[cat]") {
     }));
 }
 
+// ---- 1KO125: 16 12, AGC ---------------------------------------------------
+
+static std::vector<uint8_t> civ_run(const std::vector<uint8_t> &raw) {
+    CivPacketView req(raw.data(), raw.size());
+    static uint8_t txBuf[256];
+    CivTxPacker packer(txBuf, 0xE0, LOCAL_ADDRESS);
+    return to_bytes(process_civ_message(req, packer));
+}
+
+TEST_CASE("16 12 reads and sets the AGC with the 1KO125 codes", "[cat]") {
+    TestDbGuard db;
+    SettingsManager mgr;
+    init_band_5(db, mgr);
+    cfg_set_instance(&mgr);
+
+    const std::vector<uint8_t> ok = {0xFE, 0xFE, 0xE0, LOCAL_ADDRESS, CODE_OK, 0xFD};
+    const struct { uint8_t code; x6100_agc_t agc; } map[] = {
+        {0x00, x6100_agc_off}, {0x01, x6100_agc_fast},
+        {0x02, x6100_agc_auto}, {0x03, x6100_agc_slow},
+    };
+    for (const auto &m : map) {
+        REQUIRE(civ_run(ci_v_frame(0x16, {0x12, m.code})) == ok);
+        REQUIRE(mgr.cp_cur_agc.get() == (int32_t)m.agc);
+        REQUIRE(civ_run(ci_v_frame(0x16, {0x12})) == std::vector<uint8_t>({
+            0xFE, 0xFE, 0xE0, LOCAL_ADDRESS, 0x16, 0x12, m.code, 0xFD
+        }));
+    }
+}
+
+TEST_CASE("16 12 with an unknown code is NG and changes nothing", "[cat]") {
+    TestDbGuard db;
+    SettingsManager mgr;
+    init_band_5(db, mgr);
+    cfg_set_instance(&mgr);
+
+    int32_t before = mgr.cp_cur_agc.get();
+    const std::vector<uint8_t> ng = {0xFE, 0xFE, 0xE0, LOCAL_ADDRESS, CODE_NG, 0xFD};
+    REQUIRE(civ_run(ci_v_frame(0x16, {0x12, 0x04})) == ng);
+    REQUIRE(civ_run(ci_v_frame(0x16, {0x12, 0xFF})) == ng);
+    REQUIRE(mgr.cp_cur_agc.get() == before);
+}
+
 // ---- 1KO125: 7E 05, radio busy ---------------------------------------------
 
 TEST_CASE("7E 05 with no busy_get in the port reads free", "[cat]") {
