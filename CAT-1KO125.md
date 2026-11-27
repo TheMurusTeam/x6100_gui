@@ -21,9 +21,10 @@ noted.
 | 7 | Network PTT keys the modem: the client's audio goes on the air | `b3a115f` | `src/cat/lan/cat_lan.cpp` |
 | 8 | New vendor command `7E 04`: TX meter (read only) | `48ae540` | `src/cat/civ_processor.cpp`, `src/tx_info.c` |
 | 9 | New vendor command `7E 05`: radio busy (read only) | `6351034`, `991704a`, `fae6c0d` | `src/cat/civ_processor.cpp`, `src/radio_busy.c` |
+| 10 | Icom command `16 12` (AGC) read and write, with OFF and AUTO | `ea2c860` | `src/cat/civ_processor.cpp` |
 
-All nine are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
-have been tested on the radio; changes 6–9 are waiting for their test. None of them changes how an existing command behaves
+All ten are on the `1ko125` branch of TheMurusTeam/x6100_gui. Changes 1–5
+have been tested on the radio; changes 6–10 are waiting for their test. None of them changes how an existing command behaves
 for existing clients, except the two bug fixes (1 and 3), which make the
 radio answer as the serial CAT and the CI-V reference already said it
 should.
@@ -789,6 +790,79 @@ radio as always free.
 
 ---
 
+## 10. `16 12`: AGC, read and write
+
+**Commit:** `ea2c860` · **File:** `src/cat/civ_processor.cpp`,
+`handle_ctl_func_x16()`, with `agc_to_icom()` / `icom_to_agc()`
+
+### Why
+
+A client should show and set the AGC as the radio's AGC key does
+(x6100-mac: an AGC button, and channels in the radio's `channels.json`
+format, which hold the AGC). `16 12` was unsupported: reading and writing
+answered NG.
+
+The Icom command is used rather than a vendor one, so that flrig, Hamlib
+and other programs get FAST and SLOW too.
+
+### Codes
+
+Icom uses `01` FAST, `02` MID, `03` SLOW. The X6100 has OFF, SLOW, FAST and
+AUTO (`x6100_agc_t`), so:
+
+| Byte | X6100 AGC | Icom meaning |
+|---|---|---|
+| `00` | OFF | none (1KO125 extension) |
+| `01` | FAST | FAST |
+| `02` | AUTO | MID (AUTO takes its place) |
+| `03` | SLOW | SLOW |
+
+The map is explicit: `x6100_agc_t` is not in Icom's order.
+
+### Protocol
+
+```
+read:   FE FE A4 E0 16 12 FD     ->  FE FE E0 A4 16 12 VV FD
+write:  FE FE A4 E0 16 12 VV FD  ->  FB, or FA
+```
+
+- **Read:** `VV` is the current AGC (`cfg.cur.agc()`) as in the table.
+- **Write:** `VV` from `00` to `03` sets the AGC, answer `FB`. Any other
+  value answers **NG (`FA`)** and changes nothing.
+- A write changes the AGC of the **current VFO and band**, exactly as the
+  AGC key does (`keypad_agc()` in `main_screen.c`): through `cfg.cur.agc()`
+  to the band's `vfoa_agc` / `vfob_agc`, the BASE, and `update_agc_time()`
+  for the mode's AGC time. The AGC indicator on the radio's screen follows
+  (it subscribes delayed, so LVGL is updated in the UI thread, as for PRE,
+  NB and NR set from CAT).
+- No unsolicited notification: x6100-mac reads `16 12` once a second with
+  NB and NR, and when it connects, so it follows the AGC key too.
+
+### Compatibility
+
+Firmware without this change answers NG; a client then hides or disables
+its AGC control.
+
+### Tests
+
+1. Read with the radio in AUTO → `16 12 02`. Change the AGC with the
+   radio's key (OFF, SLOW, FAST, AUTO), reading each time → `00`, `03`,
+   `01`, `02`.
+2. Write `16 12 00` / `01` / `02` / `03` → `FB`; the radio shows OFF / FAST
+   / AUTO / SLOW, and the sound follows (FAST vs SLOW is easy to hear in
+   SSB).
+3. `16 12 04` and `16 12 FF` → `FA`, nothing changes.
+4. Per band and VFO: FAST on 40 m via CAT, go to 20 m (its own AGC) and
+   back to 40 m → FAST again, as with the key.
+5. Change the mode after a write: the AGC time follows the mode as with the
+   key.
+6. Same answers over the LAN and the serial/USB port.
+7. flrig or Hamlib: reading and setting FAST / SLOW work.
+8. `16 02`, `16 22`, `16 40`, `16 44`, `16 46` and `7E 01`–`7E 05`
+   unchanged.
+
+---
+
 ## Notes for client developers: commands used as they are
 
 Not changed by 1KO125, listed because x6100-mac relies on them and their
@@ -801,7 +875,7 @@ behaviour is easy to get wrong.
 | `14 02` / `14 03` | RF gain, squelch: 0–255 over CI-V; the radio stores `value × 100 / 255` rounded down. |
 | `15 02` | S-meter: `value = dBm × 0.75 + 96`, 3 BCD digits most significant first. |
 | `15 11` / `15 12` | Power and SWR: **broken, not fixed** (no data in the `15 11` answer, `uint8_t` overflow above ~8 W; `15 12` reads very high at SWR 1.0). Use `7E 04` (change 8). |
-| `16 02` / `16 22` / `16 40` | Preamp, NB, NR. |
+| `16 02` / `16 22` / `16 40` | Preamp, NB, NR. (`16 12`, AGC: see change 10.) |
 | `1A 03` | Filter width as an Icom code, read only. SSB/CW: code ≤ 9 → code × 50 + 50 Hz, otherwise code × 100 − 400; AM/FM: code × 200 + 200. |
 | `27 15 00` + 5 BCD (least significant first) | Scope span = half width in Hz; the radio sets zoom = round(50 kHz / span), kept to 1, 2, 4, 8 (per mode). The zoom in use can be read from the scope frames (span = 100 kHz / zoom). |
 | `1C 00` | PTT, see changes 5 and 7. Over the LAN it keys the modem (client audio); over the serial/USB port it keys the radio's microphone. |
@@ -810,9 +884,9 @@ behaviour is easy to get wrong.
 
 ## Status and upstream
 
-- On `1ko125`: all nine changes; 1–5 tested on the radio, 6–9 waiting for
+- On `1ko125`: all ten changes; 1–5 tested on the radio, 6–10 waiting for
   their test.
-- Pull request to OpenX6100: **not opened yet**. It will contain all nine
+- Pull request to OpenX6100: **not opened yet**. It will contain all ten
   changes; its description should give the reasons above: LAN/serial parity
   (only read commands unblocked), vendor commands so that no existing Icom
   command changes behaviour, the `14 09` bug that read and wrote the TX
@@ -820,8 +894,9 @@ behaviour is easy to get wrong.
   station identity read from the radio by the clients' macros, and the
   network PTT that put the radio's microphone on the air instead of the
   client's audio (also a bug for wfview with OpenX6100), a TX meter
-  because `15 11` and `15 12` cannot be used (left unfixed by choice), and
-  a "radio busy" state so that clients do not fight the radio's own apps.
+  because `15 11` and `15 12` cannot be used (left unfixed by choice), ,
+  a "radio busy" state so that clients do not fight the radio's own apps,
+  and the AGC over the Icom `16 12` with OFF and AUTO.
 - Open items: width of the notch (full or half, change 4); `from_bcd_be()`
   with an even number of digits in `scope_streamer.cpp` (change 2).
 
